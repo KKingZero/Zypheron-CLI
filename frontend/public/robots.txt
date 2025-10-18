@@ -1,0 +1,128 @@
+# Zypheron - Advanced AI Hacking & Cybersecurity Assistant
+# Robots.txt for Enhanced SEO & GEO Optimization
+# https://zypheron.dev
+
+User-agent: *
+Allow: /
+
+# High Priority Pages for AI Hacking & Cybersecurity Keywords
+Allow: /chat
+Allow: /pentest
+Allow: /recon-tools
+Allow: /blue-team-scanner
+Allow: /ioc-scanner
+Allow: /mobile-chat
+Allow: /free-trial
+
+# AI Hacking Tools by Category
+Allow: /tools/ai-hacking
+Allow: /tools/pentest-ai
+Allow: /tools/red-team-ai
+Allow: /tools/ai-cyber-security
+
+# Educational Content for SEO
+Allow: /guides/ai-hacking-tutorial
+Allow: /guides/pentest-ai-setup
+Allow: /guides/red-team-automation
+Allow: /guides/ai-cybersecurity-best-practices
+
+# Blog Content for Target Keywords
+Allow: /blog
+Allow: /blog/ai-hacking-revolution
+Allow: /blog/pentest-ai-future
+Allow: /blog/red-team-ai-automation
+Allow: /blog/ai-cyber-security-trends
+
+# Public Documentation
+Allow: /api-docs
+Allow: /contact
+Allow: /support
+
+# Legal Pages
+Allow: /privacy-policy
+Allow: /terms-of-service
+Allow: /terms-of-use
+
+# Protect Sensitive Areas
+Disallow: /admin/
+Disallow: /api/
+Disallow: /settings/
+Disallow: /billing/
+Disallow: /login/
+Disallow: /dashboard/
+Disallow: /.env
+Disallow: /config/
+Disallow: /temp/
+Disallow: /logs/
+Disallow: /backup/
+Disallow: /private/
+
+# Protect User-Specific Content
+Disallow: /user/
+Disallow: /profile/
+Disallow: /account/
+Disallow: /sessions/
+
+# Protect Development and Testing
+Disallow: /test/
+Disallow: /dev/
+Disallow: /debug/
+Disallow: /staging/
+
+# Allow CSS, JS, and Images for Better Indexing
+Allow: /assets/
+Allow: /images/
+Allow: /css/
+Allow: /js/
+Allow: /fonts/
+Allow: /*.css
+Allow: /*.js
+Allow: /*.png
+Allow: /*.jpg
+Allow: /*.jpeg
+Allow: /*.gif
+Allow: /*.svg
+Allow: /*.ico
+Allow: /*.webp
+
+# Crawl Delay for Different Bots
+User-agent: Googlebot
+Crawl-delay: 1
+
+User-agent: Bingbot
+Crawl-delay: 2
+
+User-agent: Slurp
+Crawl-delay: 3
+
+User-agent: DuckDuckBot
+Crawl-delay: 2
+
+User-agent: Baiduspider
+Crawl-delay: 5
+
+User-agent: YandexBot
+Crawl-delay: 3
+
+# Block Aggressive Crawlers
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: BLEXBot
+Disallow: /
+
+# Sitemap Location for Search Engines
+Sitemap: https://zypheron.dev/sitemap.xml
+
+# Additional Sitemap for International SEO (if needed)
+# Sitemap: https://zypheron.dev/sitemap-en.xml
+# Sitemap: https://zypheron.dev/sitemap-images.xml
+
+# Host Declaration for SEO
+Host: https://zypheron.dev 

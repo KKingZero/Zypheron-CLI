@@ -1,0 +1,54 @@
+services:
+  # Core COBRA AI Container (Frontend + Backend + OSINT)
+  cobra-ai-core:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple-all-in-one
+    ports:
+      - "80:80"           # Frontend
+      - "3001:3001"       # Backend API
+      - "8001:8001"       # OSINT Service
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql://cobraai:cobrapass@postgres:5432/cobraai
+      - JWT_SECRET=your-secret-key-here
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
+      - DEEPSEEK_API_URL=${DEEPSEEK_API_URL:-http://localhost:11434}
+      - NODE_ENV=production
+      # OSINT API Keys
+      - SHODAN_API_KEY=${SHODAN_API_KEY}
+      - CENSYS_API_ID=${CENSYS_API_ID}
+      - CENSYS_API_SECRET=${CENSYS_API_SECRET}
+      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY}
+      - HIBP_API_KEY=${HIBP_API_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=cobraai
+      - POSTGRES_PASSWORD=cobrapass
+      - POSTGRES_DB=cobraai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cobraai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data: 

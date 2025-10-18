@@ -1,0 +1,76 @@
+[build]
+  base = "frontend"
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
+  NODE_ENV = "production"
+  VITE_APP_NAME = "COBRA AI"
+  VITE_APP_SUBDOMAIN = "app"
+  # Build optimizations
+  NODE_OPTIONS = "--max_old_space_size=4096"
+
+# SPA fallback - handle client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Optimize caching
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.jpg"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+
+# Production environment
+[context.production]
+  environment = { VITE_API_URL = "https://app.cobraai.com/api" }
+
+# Preview/staging environment
+[context.deploy-preview]
+  environment = { VITE_API_URL = "https://staging.cobraai.com/api" }
+
+# Development environment
+[context.branch-deploy]
+  environment = { VITE_API_URL = "https://dev.cobraai.com/api" }
+
+# Functions configuration (if using Netlify Functions)
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# Note: Plugins removed to avoid build errors
+# Can be added later via Netlify UI if needed:
+# - @netlify/plugin-lighthouse (performance monitoring)
+# - netlify-plugin-cache (build caching) 

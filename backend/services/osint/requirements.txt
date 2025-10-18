@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+pydantic
+grpcio>=1.50.0
+grpcio-tools>=1.50.0
+aiohttp>=3.8.0
+requests>=2.25.1
+
+# Optional: Add these when you have API keys
+# shodan==1.31.0
+# censys==2.2.8
+# pyhibp==4.3.0 

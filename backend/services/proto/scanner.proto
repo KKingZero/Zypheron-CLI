@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package cobra.scanner;
+
+import "common.proto";
+
+option go_package = "github.com/cobra-ai/proto/scanner";
+
+service PortScanner {
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc ScanPorts(ScanRequest) returns (ScanResponse);
+  rpc StreamScanPorts(ScanRequest) returns (stream PortInfo);
+  rpc DetectServices(ServiceDetectionRequest) returns (ServiceDetectionResponse);
+  rpc PerformSynScan(SynScanRequest) returns (SynScanResponse);
+}
+
+// Scan request
+message ScanRequest {
+  string target = 1;
+  repeated int32 ports = 2;
+  int64 timeout_ms = 3;
+  int32 max_concurrent = 4;
+  ScanTechniques techniques = 5;
+}
+
+message ScanTechniques {
+  bool syn_scan = 1;
+  bool timing_evasion = 2;
+  bool fragmentation = 3;
+  bool decoy_ips = 4;
+  repeated string decoy_list = 5;
+}
+
+// Scan response
+message ScanResponse {
+  string target = 1;
+  string ip_address = 2;
+  repeated PortInfo open_ports = 3;
+  int64 scan_time_ms = 4;
+  string technique_used = 5;
+  ScanStatistics statistics = 6;
+}
+
+message PortInfo {
+  int32 port = 1;
+  string state = 2;
+  string service = 3;
+  string banner = 4;
+  string version = 5;
+  repeated string cpe = 6;  // Common Platform Enumeration
+  map<string, string> metadata = 7;
+}
+
+message ScanStatistics {
+  int32 total_ports_scanned = 1;
+  int32 open_ports = 2;
+  int32 closed_ports = 3;
+  int32 filtered_ports = 4;
+  int64 packets_sent = 5;
+  int64 packets_received = 6;
+}
+
+// Service detection
+message ServiceDetectionRequest {
+  string target = 1;
+  repeated int32 ports = 2;
+  bool aggressive = 3;
+}
+
+message ServiceDetectionResponse {
+  Status status = 1;
+  repeated ServiceInfo services = 2;
+}
+
+message ServiceInfo {
+  int32 port = 1;
+  string service_name = 2;
+  string version = 3;
+  string product = 4;
+  string os_type = 5;
+  repeated string cpe = 6;
+  map<string, string> extra_info = 7;
+}
+
+// SYN scan (requires privileges)
+message SynScanRequest {
+  string target = 1;
+  repeated int32 ports = 2;
+  SynScanOptions options = 3;
+}
+
+message SynScanOptions {
+  int32 max_retries = 1;
+  int64 timeout_ms = 2;
+  bool randomize_ports = 3;
+  int32 source_port = 4;
+  string interface = 5;
+}
+
+message SynScanResponse {
+  Status status = 1;
+  repeated SynScanResult results = 2;
+  string scan_id = 3;
+}
+
+message SynScanResult {
+  int32 port = 1;
+  string state = 2;  // open, closed, filtered
+  int64 response_time_ms = 3;
+  string tcp_flags = 4;
+  int32 ttl = 5;
+  int32 window_size = 6;
+} 

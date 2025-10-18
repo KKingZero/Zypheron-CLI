@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+package cobra.osint;
+
+import "common.proto";
+
+option go_package = "github.com/cobra-ai/proto/osint";
+
+service OSINTService {
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc GatherOSINT(OSINTRequest) returns (OSINTResponse);
+  rpc GetShodanData(ShodanRequest) returns (ShodanResponse);
+  rpc GetCensysData(CensysRequest) returns (CensysResponse);
+  rpc GetVirusTotalData(VirusTotalRequest) returns (VirusTotalResponse);
+  rpc GetWaybackData(WaybackRequest) returns (WaybackResponse);
+  rpc GetDNSHistory(DNSHistoryRequest) returns (DNSHistoryResponse);
+  rpc GetHIBPData(HIBPRequest) returns (HIBPResponse);
+}
+
+// Main OSINT request
+message OSINTRequest {
+  string target = 1;
+  OSINTTools tools = 2;
+  map<string, string> options = 3;
+}
+
+message OSINTTools {
+  bool shodan = 1;
+  bool censys = 2;
+  bool virustotal = 3;
+  bool wayback = 4;
+  bool dns_history = 5;
+  bool hibp = 6;
+}
+
+message OSINTResponse {
+  repeated string sources_checked = 1;
+  map<string, OSINTData> data_found = 2;
+  Timestamp timestamp = 3;
+}
+
+message OSINTData {
+  oneof data {
+    ShodanData shodan = 1;
+    CensysData censys = 2;
+    VirusTotalData virustotal = 3;
+    WaybackData wayback = 4;
+    DNSHistoryData dns_history = 5;
+    HIBPData hibp = 6;
+  }
+}
+
+// Shodan
+message ShodanRequest {
+  string target = 1;
+}
+
+message ShodanResponse {
+  Status status = 1;
+  ShodanData data = 2;
+}
+
+message ShodanData {
+  repeated int32 open_ports = 1;
+  repeated string services = 2;
+  repeated string vulnerabilities = 3;
+  string os = 4;
+  repeated string hostnames = 5;
+  string note = 6;
+}
+
+// Censys
+message CensysRequest {
+  string target = 1;
+}
+
+message CensysResponse {
+  Status status = 1;
+  CensysData data = 2;
+}
+
+message CensysData {
+  repeated string certificates = 1;
+  string asn = 2;
+  Location location = 3;
+  repeated string protocols = 4;
+  string note = 5;
+}
+
+message Location {
+  string country = 1;
+  string city = 2;
+  double latitude = 3;
+  double longitude = 4;
+}
+
+// VirusTotal
+message VirusTotalRequest {
+  string target = 1;
+}
+
+message VirusTotalResponse {
+  Status status = 1;
+  VirusTotalData data = 2;
+}
+
+message VirusTotalData {
+  int32 detections = 1;
+  string reputation = 2;
+  string last_analysis = 3;
+  map<string, string> categories = 4;
+  repeated string subdomains = 5;
+  string note = 6;
+}
+
+// Wayback Machine
+message WaybackRequest {
+  string target = 1;
+}
+
+message WaybackResponse {
+  Status status = 1;
+  WaybackData data = 2;
+}
+
+message WaybackData {
+  int32 snapshots = 1;
+  string first_seen = 2;
+  string last_seen = 3;
+  repeated string interesting_paths = 4;
+  string note = 5;
+}
+
+// DNS History
+message DNSHistoryRequest {
+  string target = 1;
+}
+
+message DNSHistoryResponse {
+  Status status = 1;
+  DNSHistoryData data = 2;
+}
+
+message DNSHistoryData {
+  repeated string historical_ips = 1;
+  string nameserver_changes = 2;
+  repeated string hosting_providers = 3;
+  repeated MXRecord mx_history = 4;
+  string note = 5;
+}
+
+message MXRecord {
+  string date = 1;
+  string mx = 2;
+}
+
+// Have I Been Pwned
+message HIBPRequest {
+  string target = 1;
+}
+
+message HIBPResponse {
+  Status status = 1;
+  HIBPData data = 2;
+}
+
+message HIBPData {
+  repeated string breaches = 1;
+  int32 paste_count = 2;
+  repeated string data_classes = 3;
+  repeated string breach_dates = 4;
+  string note = 5;
+} 

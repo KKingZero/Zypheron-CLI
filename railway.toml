@@ -1,0 +1,15 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "cd frontend && npm install && npm run build"
+
+[deploy]
+startCommand = "cd frontend && npm run preview"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+healthcheckPath = "/"
+healthcheckTimeout = 100
+
+[env]
+NODE_ENV = "production"
+VITE_APP_NAME = "COBRA AI"
+

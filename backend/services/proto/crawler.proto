@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package cobra.crawler;
+
+import "common.proto";
+
+option go_package = "github.com/cobra-ai/proto/crawler";
+
+service WebCrawler {
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc CrawlWebsite(CrawlRequest) returns (stream CrawlResult);
+  rpc ExtractData(ExtractRequest) returns (ExtractResponse);
+  rpc TakeScreenshot(ScreenshotRequest) returns (ScreenshotResponse);
+  rpc FindSubdomains(SubdomainRequest) returns (SubdomainResponse);
+  rpc CheckRobotsTxt(RobotsTxtRequest) returns (RobotsTxtResponse);
+}
+
+// Crawl request
+message CrawlRequest {
+  string url = 1;
+  CrawlOptions options = 2;
+}
+
+message CrawlOptions {
+  int32 max_depth = 1;
+  int32 max_pages = 2;
+  bool follow_external_links = 3;
+  bool respect_robots_txt = 4;
+  repeated string allowed_domains = 5;
+  repeated string excluded_paths = 6;
+  int32 concurrent_requests = 7;
+  int32 delay_ms = 8;
+  string user_agent = 9;
+  bool javascript_rendering = 10;
+  repeated string custom_headers = 11;
+}
+
+// Crawl result (streamed)
+message CrawlResult {
+  string url = 1;
+  int32 status_code = 2;
+  string content_type = 3;
+  int64 content_length = 4;
+  string title = 5;
+  repeated string links = 6;
+  repeated string images = 7;
+  repeated string scripts = 8;
+  repeated string forms = 9;
+  map<string, string> meta_tags = 10;
+  repeated string emails = 11;
+  repeated string phone_numbers = 12;
+  repeated string api_endpoints = 13;
+  map<string, string> headers = 14;
+  repeated Finding findings = 15;
+  Timestamp crawled_at = 16;
+}
+
+message Finding {
+  string type = 1;  // sensitive_data, vulnerability, misconfiguration
+  string severity = 2;  // low, medium, high, critical
+  string description = 3;
+  string location = 4;
+  map<string, string> details = 5;
+}
+
+// Extract data request
+message ExtractRequest {
+  string url = 1;
+  repeated Selector selectors = 2;
+  bool javascript_rendering = 3;
+}
+
+message Selector {
+  string name = 1;
+  string css_selector = 2;
+  string xpath = 3;
+  string attribute = 4;  // text, href, src, etc.
+  bool multiple = 5;
+}
+
+message ExtractResponse {
+  Status status = 1;
+  map<string, ExtractedData> data = 2;
+}
+
+message ExtractedData {
+  repeated string values = 1;
+}
+
+// Screenshot request
+message ScreenshotRequest {
+  string url = 1;
+  ScreenshotOptions options = 2;
+}
+
+message ScreenshotOptions {
+  int32 width = 1;
+  int32 height = 2;
+  bool full_page = 3;
+  int32 quality = 4;  // for JPEG
+  string format = 5;  // png, jpeg
+  int32 wait_ms = 6;
+  string wait_for_selector = 7;
+}
+
+message ScreenshotResponse {
+  Status status = 1;
+  bytes image_data = 2;
+  string format = 3;
+  int32 width = 4;
+  int32 height = 5;
+}
+
+// Subdomain discovery
+message SubdomainRequest {
+  string domain = 1;
+  repeated string sources = 2;  // crtsh, dnsdumpster, etc.
+}
+
+message SubdomainResponse {
+  Status status = 1;
+  repeated SubdomainInfo subdomains = 2;
+}
+
+message SubdomainInfo {
+  string subdomain = 1;
+  repeated string ip_addresses = 2;
+  string source = 3;
+  bool active = 4;
+}
+
+// Robots.txt check
+message RobotsTxtRequest {
+  string url = 1;
+  string user_agent = 2;
+}
+
+message RobotsTxtResponse {
+  Status status = 1;
+  bool exists = 2;
+  string content = 3;
+  repeated string disallowed_paths = 4;
+  repeated string allowed_paths = 5;
+  repeated string sitemaps = 6;
+  int32 crawl_delay = 7;
+} 
