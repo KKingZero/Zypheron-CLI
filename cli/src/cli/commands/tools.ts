@@ -131,7 +131,7 @@ async function listTools(options: any): Promise<void> {
     ],
     style: {
       head: [],
-      border: [chalk.hex(KaliTheme.border)],
+      border: [],
     },
   });
 
@@ -242,8 +242,180 @@ async function suggestTool(task: string): Promise<void> {
   } else {
     console.log(chalk.hex(KaliTheme.warning)(`${tool.name} is not installed`));
     console.log(chalk.hex(KaliTheme.info)('Install with:'));
-    console.log(`  ${chalk.hex(KaliTheme.accent)(tool.installCmd)}`));
+    console.log(`  ${chalk.hex(KaliTheme.accent)(tool.installCmd)}`);
   }
   console.log();
 }
 
+async function installTool(toolName: string, options: any): Promise<void> {
+  const toolManager = getToolManager();
+  await toolManager.detectTools();
+  
+  const tool = toolManager.getTool(toolName);
+  
+  if (!tool) {
+    showError(`Tool '${toolName}' not found`);
+    return;
+  }
+
+  if (tool.installed) {
+    showInfo(`${tool.name} is already installed (version ${tool.version})`);
+    
+    // Check compatibility
+    if (tool.compatible === false) {
+      showWarning(`Installed version ${tool.version} is below minimum required version ${tool.minVersion}`);
+      console.log(chalk.hex(KaliTheme.info)('Consider updating with:'));
+      console.log(`  ${chalk.hex(KaliTheme.accent)(tool.installCmd)}`);
+    }
+    
+    return;
+  }
+
+  console.log();
+  console.log(chalk.hex(KaliTheme.info)(`Installing ${chalk.hex(KaliTheme.accent).bold(tool.name)}...`));
+  console.log(chalk.hex(KaliTheme.foreground)(tool.description));
+  console.log();
+
+  if (!options.yes) {
+    const { confirm } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: `Install ${tool.name}?`,
+        default: true,
+      },
+    ]);
+
+    if (!confirm) {
+      console.log(chalk.hex(KaliTheme.warning)('Installation cancelled'));
+      return;
+    }
+  }
+
+  const spinner = ora({
+    text: `Installing ${tool.name}...`,
+    color: 'cyan',
+  }).start();
+
+  try {
+    await execAsync(tool.installCmd, { timeout: 300000 }); // 5 minute timeout
+    spinner.succeed(chalk.hex(KaliTheme.success)(`${tool.name} installed successfully`));
+    
+    // Verify installation
+    await toolManager.detectTools();
+    const updatedTool = toolManager.getTool(toolName);
+    
+    if (updatedTool?.installed) {
+      console.log(chalk.hex(KaliTheme.success)(`${Icons.success} Verified: ${updatedTool.name} v${updatedTool.version}`));
+    }
+  } catch (error: any) {
+    spinner.fail(chalk.hex(KaliTheme.danger)(`Failed to install ${tool.name}`));
+    console.log(chalk.hex(KaliTheme.danger)(error.message));
+    console.log();
+    console.log(chalk.hex(KaliTheme.info)('Try installing manually:'));
+    console.log(`  ${chalk.hex(KaliTheme.accent)(tool.installCmd)}`);
+  }
+  
+  console.log();
+}
+
+async function installAllTools(options: any): Promise<void> {
+  const toolManager = getToolManager();
+  const allTools = await toolManager.detectTools();
+  
+  // Filter tools based on options
+  let toolsToInstall = allTools.filter(t => !t.installed);
+  
+  if (options.criticalOnly) {
+    toolsToInstall = toolsToInstall.filter(t => t.priority === 'critical');
+  } else if (options.highPriority) {
+    toolsToInstall = toolsToInstall.filter(t => t.priority === 'critical' || t.priority === 'high');
+  }
+
+  if (toolsToInstall.length === 0) {
+    showSuccess('All tools are already installed!');
+    return;
+  }
+
+  console.log();
+  console.log(chalk.hex(KaliTheme.primary).bold('╔═══ TOOL INSTALLATION ═══════════════════════════════════════╗'));
+  console.log(chalk.hex(KaliTheme.primary).bold('╚' + '═'.repeat(65) + '╝'));
+  console.log();
+  console.log(chalk.hex(KaliTheme.info)(`Found ${chalk.hex(KaliTheme.accent).bold(toolsToInstall.length.toString())} tools to install:\n`));
+
+  // Show list of tools
+  toolsToInstall.forEach(tool => {
+    const priority = tool.priority === 'critical'
+      ? chalk.hex(KaliTheme.critical)('[CRITICAL]')
+      : tool.priority === 'high'
+      ? chalk.hex(KaliTheme.high)('[HIGH]')
+      : chalk.hex(KaliTheme.muted)(`[${tool.priority.toUpperCase()}]`);
+    
+    console.log(`  ${priority} ${chalk.hex(KaliTheme.accent)(tool.name)} - ${tool.description}`);
+  });
+  
+  console.log();
+
+  if (!options.yes) {
+    const { confirm } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: `Install ${toolsToInstall.length} tools?`,
+        default: true,
+      },
+    ]);
+
+    if (!confirm) {
+      console.log(chalk.hex(KaliTheme.warning)('Installation cancelled'));
+      return;
+    }
+  }
+
+  console.log();
+  let successCount = 0;
+  let failCount = 0;
+  const failed: string[] = [];
+
+  for (const tool of toolsToInstall) {
+    const spinner = ora({
+      text: `Installing ${tool.name}...`,
+      color: 'cyan',
+    }).start();
+
+    try {
+      await execAsync(tool.installCmd, { timeout: 300000 }); // 5 minute timeout per tool
+      spinner.succeed(chalk.hex(KaliTheme.success)(`${tool.name} installed`));
+      successCount++;
+    } catch (error: any) {
+      spinner.fail(chalk.hex(KaliTheme.danger)(`${tool.name} failed`));
+      failCount++;
+      failed.push(tool.name);
+    }
+  }
+
+  console.log();
+  console.log(chalk.hex(KaliTheme.primary).bold('═'.repeat(65)));
+  console.log(chalk.hex(KaliTheme.success)(`${Icons.success} Installed: ${successCount}`));
+  
+  if (failCount > 0) {
+    console.log(chalk.hex(KaliTheme.danger)(`${Icons.cross} Failed: ${failCount}`));
+    console.log();
+    console.log(chalk.hex(KaliTheme.warning)('Failed tools:'));
+    failed.forEach(name => {
+      const tool = toolManager.getTool(name);
+      if (tool) {
+        console.log(`  ${chalk.hex(KaliTheme.accent)(name)}: ${tool.installCmd}`);
+      }
+    });
+  }
+  
+  console.log(chalk.hex(KaliTheme.primary).bold('═'.repeat(65)));
+  console.log();
+
+  // Re-detect tools to update status
+  await toolManager.detectTools();
+  
+  showSuccess('Installation complete! Run "zypheron tools check" to verify.');
+  console.log();
+}

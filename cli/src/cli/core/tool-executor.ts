@@ -6,8 +6,10 @@
 import { spawn, ChildProcess } from 'child_process';
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
+import { XMLParser } from 'fast-xml-parser';
 import { KaliTheme, StatusIndicators } from '../ui/themes/kali';
 import { getToolManager, KaliTool } from './kali-tools';
+import { getDockerFallback } from './docker-fallback';
 
 export interface ExecutionOptions {
   tool: string;
@@ -257,18 +259,21 @@ export class ToolExecutor {
    */
   private async parseOutput(output: string, format: string, tool: KaliTool): Promise<any> {
     try {
-      switch (format) {
-        case 'json':
-          return JSON.parse(output);
-        
-        case 'xml':
-          // For nmap XML output
-          if (tool.name === 'nmap') {
-            return this.parseNmapXML(output);
-          }
-          return output;
-        
+      // Tool-specific parsers
+      switch (tool.name) {
+        case 'nmap':
+          return this.parseNmapOutput(output, format);
+        case 'nikto':
+          return this.parseNiktoOutput(output, format);
+        case 'nuclei':
+          return this.parseNucleiOutput(output);
         default:
+          // Generic parsing
+          if (format === 'json') {
+            return JSON.parse(output);
+          } else if (format === 'xml') {
+            return this.parseXML(output);
+          }
           return output;
       }
     } catch (error) {
@@ -278,46 +283,184 @@ export class ToolExecutor {
   }
 
   /**
-   * Parse nmap XML output
+   * Parse nmap output (XML or plain text)
    */
-  private parseNmapXML(xml: string): any {
-    // Simplified parser - in production, use fast-xml-parser
+  private parseNmapOutput(output: string, format: string): any {
+    if (format === 'xml' || output.includes('<?xml')) {
+      return this.parseNmapXML(output);
+    }
+    
+    // Parse plain text output
     const hosts: any[] = [];
-    const hostRegex = /<host[^>]*>(.*?)<\/host>/gs;
-    const matches = xml.matchAll(hostRegex);
+    const lines = output.split('\n');
+    let currentHost: any = null;
 
-    for (const match of matches) {
-      const hostXML = match[1];
-      
-      // Extract IP
-      const ipMatch = hostXML.match(/<address\s+addr="([^"]+)"/);
-      const ip = ipMatch ? ipMatch[1] : 'unknown';
-
-      // Extract ports
-      const ports: any[] = [];
-      const portRegex = /<port\s+protocol="([^"]+)"\s+portid="([^"]+)">(.*?)<\/port>/gs;
-      const portMatches = hostXML.matchAll(portRegex);
-
-      for (const portMatch of portMatches) {
-        const protocol = portMatch[1];
-        const portid = portMatch[2];
-        const portData = portMatch[3];
-
-        const stateMatch = portData.match(/<state\s+state="([^"]+)"/);
-        const serviceMatch = portData.match(/<service\s+name="([^"]+)"/);
-
-        ports.push({
-          protocol,
-          port: portid,
-          state: stateMatch ? stateMatch[1] : 'unknown',
-          service: serviceMatch ? serviceMatch[1] : 'unknown',
-        });
+    for (const line of lines) {
+      // Match host line: Nmap scan report for example.com (93.184.216.34)
+      const hostMatch = line.match(/Nmap scan report for ([\w\.\-]+)(\s+\(([\d\.]+)\))?/);
+      if (hostMatch) {
+        if (currentHost) hosts.push(currentHost);
+        currentHost = {
+          hostname: hostMatch[1],
+          ip: hostMatch[3] || hostMatch[1],
+          ports: [],
+        };
+        continue;
       }
 
-      hosts.push({ ip, ports });
+      // Match port line: 80/tcp open http nginx
+      const portMatch = line.match(/(\d+)\/(tcp|udp)\s+(open|closed|filtered)\s+([\w\-]+)?/);
+      if (portMatch && currentHost) {
+        currentHost.ports.push({
+          port: portMatch[1],
+          protocol: portMatch[2],
+          state: portMatch[3],
+          service: portMatch[4] || 'unknown',
+        });
+      }
+    }
+
+    if (currentHost) hosts.push(currentHost);
+    return { hosts };
+  }
+
+  /**
+   * Parse nmap XML output using fast-xml-parser
+   */
+  private parseNmapXML(xml: string): any {
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+    });
+
+    const result = parser.parse(xml);
+    const nmaprun = result.nmaprun || {};
+    const hosts: any[] = [];
+
+    // Handle single or multiple hosts
+    const hostData = Array.isArray(nmaprun.host) ? nmaprun.host : [nmaprun.host];
+
+    for (const host of hostData.filter(Boolean)) {
+      const addresses = Array.isArray(host.address) ? host.address : [host.address];
+      const ipv4 = addresses.find((a: any) => a?.['@_addrtype'] === 'ipv4');
+      
+      const ports: any[] = [];
+      if (host.ports?.port) {
+        const portData = Array.isArray(host.ports.port) ? host.ports.port : [host.ports.port];
+        
+        for (const port of portData) {
+          ports.push({
+            port: port['@_portid'],
+            protocol: port['@_protocol'],
+            state: port.state?.['@_state'] || 'unknown',
+            service: port.service?.['@_name'] || 'unknown',
+            version: port.service?.['@_version'] || undefined,
+          });
+        }
+      }
+
+      hosts.push({
+        ip: ipv4?.['@_addr'] || 'unknown',
+        hostname: host.hostnames?.hostname?.['@_name'] || undefined,
+        ports,
+      });
     }
 
     return { hosts };
+  }
+
+  /**
+   * Parse nikto output (JSON or text)
+   */
+  private parseNiktoOutput(output: string, format: string): any {
+    if (format === 'json' || output.trim().startsWith('{')) {
+      try {
+        return JSON.parse(output);
+      } catch {
+        // Fall through to text parsing
+      }
+    }
+
+    // Parse text output
+    const findings: any[] = [];
+    const lines = output.split('\n');
+    let target = '';
+
+    for (const line of lines) {
+      // Extract target
+      const targetMatch = line.match(/\+ Target IP:\s+([\d\.]+)/);
+      if (targetMatch) {
+        target = targetMatch[1];
+        continue;
+      }
+
+      // Extract findings (lines starting with +)
+      if (line.trim().startsWith('+') && !line.includes('Target IP')) {
+        const finding = line.substring(line.indexOf('+') + 1).trim();
+        
+        // Try to extract OSVDB ID
+        const osvdbMatch = finding.match(/OSVDB-(\d+)/);
+        
+        findings.push({
+          description: finding,
+          osvdb: osvdbMatch ? osvdbMatch[1] : undefined,
+          severity: this.categorizeSeverity(finding),
+        });
+      }
+    }
+
+    return { target, findings };
+  }
+
+  /**
+   * Parse nuclei JSON output
+   */
+  private parseNucleiOutput(output: string): any {
+    // Nuclei outputs JSONL (one JSON object per line)
+    const findings: any[] = [];
+    const lines = output.split('\n').filter(line => line.trim());
+
+    for (const line of lines) {
+      try {
+        const finding = JSON.parse(line);
+        findings.push({
+          template: finding['template-id'],
+          name: finding.info?.name,
+          severity: finding.info?.severity,
+          host: finding.host,
+          matchedAt: finding['matched-at'],
+          extractedResults: finding['extracted-results'],
+          type: finding.type,
+        });
+      } catch {
+        // Skip non-JSON lines
+      }
+    }
+
+    return { findings };
+  }
+
+  /**
+   * Generic XML parser
+   */
+  private parseXML(xml: string): any {
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+    });
+    return parser.parse(xml);
+  }
+
+  /**
+   * Categorize severity based on keywords
+   */
+  private categorizeSeverity(text: string): string {
+    const lower = text.toLowerCase();
+    if (lower.includes('critical') || lower.includes('exploit')) return 'critical';
+    if (lower.includes('high') || lower.includes('vulnerable')) return 'high';
+    if (lower.includes('medium') || lower.includes('warning')) return 'medium';
+    if (lower.includes('low') || lower.includes('info')) return 'low';
+    return 'info';
   }
 
   /**

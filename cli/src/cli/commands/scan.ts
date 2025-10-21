@@ -11,6 +11,9 @@ import { KaliTheme, StatusIndicators } from '../ui/themes/kali';
 import { showInfo, showSuccess, showError, showTarget } from '../ui/components/banner';
 import { getToolManager } from '../core/kali-tools';
 import { getToolExecutor, ToolResult } from '../core/tool-executor';
+import { getApiClient } from '../core/api-client';
+import { getSessionManager } from '../core/session-manager';
+import { getWebSocketClient, disconnectWebSocket } from '../core/websocket-client';
 
 export function scanCommand(program: Command): void {
   const scan = program
@@ -25,6 +28,8 @@ export function scanCommand(program: Command): void {
     .option('--fast', 'Quick scan (masscan + basic checks)')
     .option('--ai-guided', 'AI-guided scanning with recommendations')
     .option('--ai-analysis', 'Include AI analysis of findings')
+    .option('--backend', 'Use backend agent framework for execution')
+    .option('--agent-mode', 'Enable agent mode (intelligent automation)')
     .option('-o, --output <file>', 'Output file for results')
     .option('--format <format>', 'Output format (text, json, xml)', 'text')
     .option('--nmap-args <args>', 'Additional nmap arguments')
@@ -39,6 +44,12 @@ async function runScan(target: string | undefined, options: any): Promise<void> 
   console.log(chalk.hex(KaliTheme.primary).bold('\n╔═══════════════════════════════════════╗'));
   console.log(chalk.hex(KaliTheme.primary).bold('║  ZYPHERON SECURITY SCANNER           ║'));
   console.log(chalk.hex(KaliTheme.primary).bold('╚═══════════════════════════════════════╝\n'));
+
+  // Route to backend if requested
+  if (options.backend || options.agentMode) {
+    await runBackendScan(target, options);
+    return;
+  }
 
   const toolManager = getToolManager();
   const toolExecutor = getToolExecutor();
@@ -391,5 +402,142 @@ function resultsToXML(results: ToolResult[]): string {
   
   xml += '</zypheron-scan>\n';
   return xml;
+}
+
+/**
+ * Run scan using backend agent framework
+ */
+async function runBackendScan(target: string | undefined, options: any): Promise<void> {
+  const apiClient = getApiClient();
+  const sessionManager = await getSessionManager();
+
+  // Interactive target selection if not provided
+  if (!target) {
+    const answer = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'target',
+        message: 'Enter target (URL, IP, or hostname):',
+        validate: (input) => input && input.trim().length > 0 ? true : 'Target is required',
+      },
+    ]);
+    target = answer.target;
+  }
+
+  console.log(chalk.hex(KaliTheme.accent).bold(`🌐 Target: ${chalk.hex(KaliTheme.success)(target!)}`));
+  console.log(chalk.hex(KaliTheme.info)(`${StatusIndicators.INFO} Using backend agent framework\n`));
+
+  const spinner = ora({
+    text: 'Connecting to backend...',
+    color: 'cyan',
+  }).start();
+
+  try {
+    // Check backend health
+    const health = await apiClient.checkAgentHealth();
+    if (!health.success) {
+      spinner.fail(chalk.hex(KaliTheme.danger)('Backend unavailable'));
+      showError('Make sure the backend is running on the configured URL');
+      return;
+    }
+    spinner.succeed(chalk.hex(KaliTheme.success)('Connected to backend'));
+
+    // Get AI tool recommendations if agent mode
+    if (options.agentMode || options.aiGuided) {
+      spinner.start('AI analyzing target and recommending tools...');
+      const recommendation = await apiClient.recommendTools(
+        target!,
+        options.web ? 'web-scan' : 'scan',
+        true
+      );
+
+      if (recommendation.success && recommendation.data?.tools) {
+        spinner.succeed(chalk.hex(KaliTheme.success)('AI recommendations received'));
+        console.log(chalk.hex(KaliTheme.accent).bold('\nRecommended Tools:'));
+        recommendation.data.tools.forEach((tool: string, index: number) => {
+          console.log(`  ${index + 1}. ${chalk.hex(KaliTheme.success)(tool)}`);
+        });
+        console.log();
+      } else {
+        spinner.warn(chalk.hex(KaliTheme.warning)('Could not get AI recommendations'));
+      }
+    }
+
+    // Execute scan via backend
+    spinner.start(`Executing scan on ${target}...`);
+    
+    const scanResult = await apiClient.executeTool(
+      options.tool || 'nmap_scan',
+      {
+        target: target!,
+        ports: options.ports,
+        web: options.web,
+        full: options.full,
+        timeout: parseInt(options.timeout),
+      },
+      options.agentMode || false
+    );
+
+    if (!scanResult.success) {
+      spinner.fail(chalk.hex(KaliTheme.danger)('Scan failed'));
+      showError(scanResult.error || 'Unknown error');
+      return;
+    }
+
+    spinner.succeed(chalk.hex(KaliTheme.success)('Scan completed'));
+
+    // Display results
+    console.log();
+    console.log(chalk.hex(KaliTheme.secondary).bold('╔═══════════════════════════════════════╗'));
+    console.log(chalk.hex(KaliTheme.secondary).bold('║  SCAN RESULTS                        ║'));
+    console.log(chalk.hex(KaliTheme.secondary).bold('╚═══════════════════════════════════════╝\n'));
+
+    const data = scanResult.data;
+
+    // Display parsed results
+    if (data?.result) {
+      console.log(chalk.hex(KaliTheme.foreground)(JSON.stringify(data.result, null, 2)));
+    }
+
+    // Display AI analysis if available
+    if (data?.aiAnalysis) {
+      console.log();
+      console.log(chalk.hex(KaliTheme.accent).bold('🤖 AI Analysis:'));
+      console.log(chalk.hex(KaliTheme.foreground)('─'.repeat(60)));
+      
+      if (data.aiAnalysis.recommendations) {
+        console.log(chalk.hex(KaliTheme.info).bold('\nRecommendations:'));
+        data.aiAnalysis.recommendations.forEach((rec: string, index: number) => {
+          console.log(`  ${index + 1}. ${rec}`);
+        });
+      }
+
+      if (data.aiAnalysis.relatedTools) {
+        console.log(chalk.hex(KaliTheme.info).bold('\nRelated Tools:'));
+        data.aiAnalysis.relatedTools.forEach((tool: string) => {
+          console.log(`  • ${chalk.hex(KaliTheme.accent)(tool)}`);
+        });
+      }
+    }
+
+    // Save to session history
+    await sessionManager.addScan({
+      id: `scan-${Date.now()}`,
+      tool: options.tool || 'backend-scan',
+      target: target!,
+      timestamp: Date.now(),
+      success: true,
+      result: data,
+      duration: data?.executionTime,
+      aiInsights: data?.aiAnalysis ? JSON.stringify(data.aiAnalysis) : undefined,
+    });
+
+    showSuccess(`\nScan saved to history. View with: ${chalk.hex(KaliTheme.accent)('zypheron config history')}`);
+    console.log();
+
+  } catch (error: any) {
+    spinner.fail(chalk.hex(KaliTheme.danger)('Scan failed'));
+    showError(error.message || 'Unknown error occurred');
+  }
 }
 

@@ -16,11 +16,13 @@ export interface KaliTool {
   aliases: string[];
   installed: boolean;
   version?: string;
+  minVersion?: string; // Minimum required version
   requiredFor: string[];
   installCmd: string;
   category: ToolCategory;
   priority: 'critical' | 'high' | 'medium' | 'low';
   description: string;
+  compatible?: boolean; // Version compatibility flag
 }
 
 export enum ToolCategory {
@@ -63,6 +65,7 @@ export class KaliToolManager {
         command: 'nmap',
         aliases: ['zenmap'],
         installed: false,
+        minVersion: '7.80',
         requiredFor: ['scan', 'recon'],
         installCmd: 'sudo apt install nmap',
         category: ToolCategory.SCANNER,
@@ -74,6 +77,7 @@ export class KaliToolManager {
         command: 'masscan',
         aliases: [],
         installed: false,
+        minVersion: '1.3',
         requiredFor: ['scan'],
         installCmd: 'sudo apt install masscan',
         category: ToolCategory.SCANNER,
@@ -85,6 +89,7 @@ export class KaliToolManager {
         command: 'nuclei',
         aliases: [],
         installed: false,
+        minVersion: '2.9',
         requiredFor: ['scan'],
         installCmd: 'go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest',
         category: ToolCategory.SCANNER,
@@ -311,6 +316,7 @@ export class KaliToolManager {
       
       if (isInstalled) {
         tool.version = await this.getToolVersion(tool.command, tool.name);
+        tool.compatible = this.checkVersionCompatibility(tool);
       }
       
       return tool;
@@ -366,6 +372,36 @@ export class KaliToolManager {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Compare two semantic versions
+   * Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+   */
+  private compareVersions(v1: string, v2: string): number {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+      const part1 = parts1[i] || 0;
+      const part2 = parts2[i] || 0;
+      
+      if (part1 > part2) return 1;
+      if (part1 < part2) return -1;
+    }
+    
+    return 0;
+  }
+
+  /**
+   * Check if tool version meets minimum requirements
+   */
+  private checkVersionCompatibility(tool: KaliTool): boolean {
+    if (!tool.minVersion || !tool.version) {
+      return true; // No version requirement or version unknown
+    }
+    
+    return this.compareVersions(tool.version, tool.minVersion) >= 0;
   }
 
   /**
@@ -505,24 +541,54 @@ export class KaliToolManager {
     // Filter by task
     candidates = candidates.filter(t => t.requiredFor.includes(task));
     
-    // Prefer installed tools
-    const installed = candidates.filter(t => t.installed);
-    if (installed.length > 0) {
+    // Prefer installed AND compatible tools
+    const installedCompatible = candidates.filter(t => t.installed && t.compatible !== false);
+    if (installedCompatible.length > 0) {
       // Sort by priority
-      installed.sort((a, b) => {
+      installedCompatible.sort((a, b) => {
         const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
         return priorityOrder[a.priority] - priorityOrder[b.priority];
       });
-      return installed[0];
+      return installedCompatible[0];
     }
     
-    // If none installed, return highest priority
+    // If none installed and compatible, return highest priority
     candidates.sort((a, b) => {
       const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
       return priorityOrder[a.priority] - priorityOrder[b.priority];
     });
     
     return candidates[0] || null;
+  }
+
+  /**
+   * Get alternative tools for a task if primary tool is unavailable
+   */
+  getAlternativeTools(primaryTool: string, task: string): KaliTool[] {
+    const primary = this.tools.get(primaryTool);
+    if (!primary) {
+      return [];
+    }
+
+    // Get all tools for the same task and category
+    const alternatives = Array.from(this.tools.values()).filter(tool => 
+      tool.name !== primaryTool &&
+      tool.category === primary.category &&
+      tool.requiredFor.includes(task)
+    );
+
+    // Sort by: installed & compatible > installed > priority
+    alternatives.sort((a, b) => {
+      if (a.installed && a.compatible !== false && (!b.installed || b.compatible === false)) return -1;
+      if (b.installed && b.compatible !== false && (!a.installed || a.compatible === false)) return 1;
+      if (a.installed && !b.installed) return -1;
+      if (b.installed && !a.installed) return 1;
+      
+      const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    });
+
+    return alternatives;
   }
 }
 

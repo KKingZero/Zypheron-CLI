@@ -26,6 +26,7 @@ import { dashboardCommand } from './cli/commands/dashboard';
 import { toolsCommand } from './cli/commands/tools';
 import { configCommand } from './cli/commands/config';
 import { setupCommand } from './cli/commands/setup';
+import { kaliCommand } from './cli/commands/kali';
 
 // Check for updates
 const notifier = updateNotifier({ pkg: packageJson });
@@ -73,6 +74,7 @@ dashboardCommand(program);
 toolsCommand(program);
 configCommand(program);
 setupCommand(program);
+kaliCommand(program);
 
 // Global error handler
 process.on('uncaughtException', (error) => {
