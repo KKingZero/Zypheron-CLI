@@ -21,7 +21,8 @@ cd zypheron-go
 
 # Install dependencies
 make deps
-
+# in case you had any errros  run this
+go mod tidy
 # Build
 make build
 
