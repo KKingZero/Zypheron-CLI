@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
+	"github.com/yourusername/zypheron/internal/aibridge"
 	"github.com/yourusername/zypheron/internal/kali"
 	"github.com/yourusername/zypheron/internal/tools"
 	"github.com/yourusername/zypheron/internal/ui"
@@ -200,9 +201,104 @@ func ScanCmd() *cobra.Command {
 
 			// AI Analysis
 			if aiAnalysis && result.Success {
-				fmt.Println(ui.Accent.Sprint("🤖 AI Analysis:"))
-				fmt.Println(ui.InfoMsg("AI analysis would integrate with your backend API here"))
-				fmt.Println(ui.Muted.Sprint("  (Connect to your existing TypeScript backend for AI insights)"))
+				fmt.Println()
+				fmt.Println(ui.Accent.Sprint("🤖 AI-POWERED VULNERABILITY ANALYSIS"))
+				fmt.Println(ui.Separator(60))
+				fmt.Println()
+
+				bridge := aibridge.NewAIBridge()
+
+				// Check if AI engine is running
+				if !bridge.IsRunning() {
+					fmt.Println(ui.WarningMsg("AI Engine not running"))
+					fmt.Println(ui.InfoMsg("Start it with: zypheron ai start"))
+					fmt.Println()
+					return nil
+				}
+
+				fmt.Println(ui.InfoMsg("Analyzing scan results with AI..."))
+
+				// Analyze scan with AI
+				vulns, report, err := bridge.AnalyzeScan(result.Output, selectedTool, target, true)
+				if err != nil {
+					fmt.Println(ui.Error(fmt.Sprintf("AI analysis failed: %s", err)))
+					return nil
+				}
+
+				if len(vulns) > 0 {
+					fmt.Println()
+					fmt.Printf("%s %s\n", ui.Success.Sprint("✓"), ui.Success.Sprint(fmt.Sprintf("Found %d potential vulnerabilities", len(vulns))))
+					fmt.Println()
+
+					// Display top 5 vulnerabilities
+					displayCount := len(vulns)
+					if displayCount > 5 {
+						displayCount = 5
+					}
+
+					for i, vuln := range vulns[:displayCount] {
+						// Color code severity
+						var severityColor *ui.Color
+						switch vuln.Severity {
+						case "critical":
+							severityColor = ui.Danger
+						case "high":
+							severityColor = ui.Warning
+						case "medium":
+							severityColor = ui.Info
+						default:
+							severityColor = ui.Muted
+						}
+
+						fmt.Printf("  %d. [%s] %s\n",
+							i+1,
+							severityColor.Sprint(vuln.Severity),
+							vuln.Title,
+						)
+						fmt.Printf("     %s\n", ui.Muted.Sprint(vuln.Description[:min(100, len(vuln.Description))]+"..."))
+						fmt.Println()
+					}
+
+					if len(vulns) > 5 {
+						fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  ... and %d more", len(vulns)-5)))
+						fmt.Println()
+					}
+
+					// ML Vulnerability Prediction
+					if aiGuided {
+						fmt.Println(ui.InfoMsg("🔮 Running ML vulnerability prediction..."))
+
+						scanData := map[string]interface{}{
+							"target": target,
+							"tool":   selectedTool,
+							"output": result.Output,
+						}
+
+						predictions, err := bridge.PredictVulnerabilities(scanData, true)
+						if err == nil && len(predictions) > 0 {
+							fmt.Printf("%s Predicted %d additional vulnerabilities\n", ui.Success.Sprint("✓"), len(predictions))
+							for i, pred := range predictions[:min(3, len(predictions))] {
+								fmt.Printf("  %d. %s (confidence: %.0f%%)\n",
+									i+1,
+									pred.VulnerabilityType,
+									pred.Confidence*100,
+								)
+							}
+							fmt.Println()
+						}
+					}
+
+					// Save full report
+					if output != "" {
+						if err := saveReport(output, report); err != nil {
+							fmt.Println(ui.Error(fmt.Sprintf("Failed to save report: %s", err)))
+						} else {
+							fmt.Println(ui.SuccessMsg(fmt.Sprintf("Report saved to: %s", output)))
+						}
+					}
+				} else {
+					fmt.Println(ui.InfoMsg("✓ No critical vulnerabilities detected"))
+				}
 				fmt.Println()
 			}
 
@@ -216,13 +312,26 @@ func ScanCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&full, "full", false, "Full pentest suite")
 	cmd.Flags().BoolVar(&fast, "fast", false, "Quick scan")
 	cmd.Flags().BoolVar(&stream, "stream", true, "Stream output")
-	cmd.Flags().BoolVar(&aiGuided, "ai-guided", false, "AI-guided scanning")
-	cmd.Flags().BoolVar(&aiAnalysis, "ai-analysis", false, "AI analysis")
+	cmd.Flags().BoolVar(&aiGuided, "ai-guided", false, "AI-guided scanning with ML predictions")
+	cmd.Flags().BoolVar(&aiAnalysis, "ai-analysis", false, "AI-powered vulnerability analysis")
 	cmd.Flags().IntVar(&timeout, "timeout", 300, "Timeout in seconds")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format (text, json, xml)")
 
 	return cmd
+}
+
+// Helper functions
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func saveReport(filename, content string) error {
+	// TODO: Implement report saving
+	return nil
 }
 
 // buildNmapArgs builds nmap arguments

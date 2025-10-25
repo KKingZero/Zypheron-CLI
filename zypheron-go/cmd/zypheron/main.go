@@ -45,6 +45,7 @@ func main() {
 	rootCmd.AddCommand(commands.ToolsCmd())
 	rootCmd.AddCommand(commands.ConfigCmd())
 	rootCmd.AddCommand(commands.ChatCmd())
+	rootCmd.AddCommand(commands.AICmd())
 	rootCmd.AddCommand(commands.SetupCmd())
 	rootCmd.AddCommand(commands.ReconCmd())
 	rootCmd.AddCommand(commands.BruteforceCmd())
