@@ -3,9 +3,11 @@ package commands
 import (
 	"fmt"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/yourusername/zypheron/internal/ui"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 )
 
 // ConfigCmd returns the config management command
@@ -20,6 +22,8 @@ func ConfigCmd() *cobra.Command {
 	cmd.AddCommand(configSetCmd())
 	cmd.AddCommand(configPathCmd())
 	cmd.AddCommand(configWizardCmd())
+	cmd.AddCommand(configSetKeyCmd())
+	cmd.AddCommand(configGetProvidersCmd())
 
 	return cmd
 }
@@ -136,3 +140,101 @@ func initConfig() {
 	viper.ReadInConfig()
 }
 
+// configSetKeyCmd securely stores an API key
+func configSetKeyCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "set-key <provider> [api-key]",
+		Short: "Securely store an API key in system keyring",
+		Long: `Store an API key securely in the system keyring.
+		
+Supported providers:
+  • anthropic  - Claude API
+  • openai     - GPT-4 API
+  • google     - Gemini API
+  • kimi       - Kimi/Moonshot API
+  • deepseek   - DeepSeek API
+  • grok       - Grok/xAI API
+  • nvd        - NVD API for CVE data
+
+Example:
+  zypheron config set-key anthropic
+  zypheron config set-key anthropic sk-ant-your-key-here`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			provider := args[0]
+			var apiKey string
+
+			// Get API key from args or prompt securely
+			if len(args) >= 2 {
+				apiKey = args[1]
+			} else {
+				prompt := &survey.Password{
+					Message: fmt.Sprintf("Enter API key for %s:", provider),
+				}
+				if err := survey.AskOne(prompt, &apiKey, survey.WithValidator(survey.Required)); err != nil {
+					return err
+				}
+			}
+
+			// Send to AI engine to store in keyring
+			bridge := aibridge.NewAIBridge()
+			if !bridge.IsRunning() {
+				return fmt.Errorf("AI engine not running. Start it with: zypheron ai start")
+			}
+
+			params := map[string]interface{}{
+				"provider": provider,
+				"api_key":  apiKey,
+			}
+
+			resp, err := bridge.StoreAPIKey(params)
+			if err != nil {
+				return fmt.Errorf("failed to store API key: %w", err)
+			}
+
+			if resp["success"].(bool) {
+				fmt.Println(ui.SuccessMsg(fmt.Sprintf("API key for '%s' stored securely in keyring", provider)))
+			} else {
+				return fmt.Errorf("failed to store API key")
+			}
+
+			return nil
+		},
+	}
+}
+
+// configGetProvidersCmd lists configured API providers
+func configGetProvidersCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "get-providers",
+		Short: "List configured AI providers",
+		Long:  "Show which AI providers have API keys configured in the system keyring",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			bridge := aibridge.NewAIBridge()
+			if !bridge.IsRunning() {
+				return fmt.Errorf("AI engine not running. Start it with: zypheron ai start")
+			}
+
+			resp, err := bridge.GetConfiguredProviders()
+			if err != nil {
+				return fmt.Errorf("failed to get providers: %w", err)
+			}
+
+			providers := resp["providers"].([]interface{})
+
+			fmt.Printf("\n%s\n\n", ui.Primary.Sprint("Configured AI Providers:"))
+			if len(providers) == 0 {
+				fmt.Println(ui.Muted.Sprint("  No providers configured yet"))
+				fmt.Println()
+				fmt.Println(ui.InfoMsg("Configure a provider with: zypheron config set-key <provider>"))
+			} else {
+				for _, p := range providers {
+					fmt.Printf("  %s %s\n", ui.Success.Sprint("✓"), p)
+				}
+			}
+			fmt.Println()
+
+			return nil
+		},
+	}
+}

@@ -14,9 +14,14 @@ zypheron-go/release/
 
 # Output of the go coverage tool
 *.out
+coverage.out
+coverage.html
 
 # Go workspace file
 go.work
+
+# Test cache
+go.sum
 
 # IDE
 .vscode/

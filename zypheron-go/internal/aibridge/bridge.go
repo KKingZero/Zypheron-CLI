@@ -3,12 +3,15 @@ package aibridge
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/yourusername/zypheron/internal/ui"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 )
 
 const (
@@ -23,12 +26,14 @@ type AIBridge struct {
 	socketPath    string
 	pythonProcess *exec.Cmd
 	connected     bool
+	authToken     string
 }
 
 // Request represents an IPC request
 type Request struct {
-	Method string                 `json:"method"`
-	Params map[string]interface{} `json:"params"`
+	Method    string                 `json:"method"`
+	Params    map[string]interface{} `json:"params"`
+	AuthToken string                 `json:"auth_token"`
 }
 
 // Response represents an IPC response
@@ -61,19 +66,37 @@ type Vulnerability struct {
 
 // VulnerabilityPrediction represents an ML vulnerability prediction
 type VulnerabilityPrediction struct {
-	VulnerabilityType   string   `json:"vulnerability_type"`
-	Confidence          float64  `json:"confidence"`
-	Severity            string   `json:"severity"`
-	Reasoning           string   `json:"reasoning"`
-	AffectedComponents  []string `json:"affected_components"`
-	RecommendedTests    []string `json:"recommended_tests"`
+	VulnerabilityType  string   `json:"vulnerability_type"`
+	Confidence         float64  `json:"confidence"`
+	Severity           string   `json:"severity"`
+	Reasoning          string   `json:"reasoning"`
+	AffectedComponents []string `json:"affected_components"`
+	RecommendedTests   []string `json:"recommended_tests"`
+}
+
+// loadAuthToken loads the authentication token from file
+func loadAuthToken() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	tokenFile := filepath.Join(homeDir, ".zypheron", "ipc.token")
+	data, err := ioutil.ReadFile(tokenFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read auth token: %w (start AI engine first)", err)
+	}
+
+	return strings.TrimSpace(string(data)), nil
 }
 
 // NewAIBridge creates a new AI bridge instance
 func NewAIBridge() *AIBridge {
+	token, _ := loadAuthToken()
 	return &AIBridge{
 		socketPath: DefaultSocketPath,
 		connected:  false,
+		authToken:  token,
 	}
 }
 
@@ -102,6 +125,14 @@ func (b *AIBridge) Start() error {
 		time.Sleep(RetryDelay)
 		if b.IsRunning() {
 			b.connected = true
+
+			// Load auth token
+			token, err := loadAuthToken()
+			if err != nil {
+				return fmt.Errorf("failed to load auth token: %w", err)
+			}
+			b.authToken = token
+
 			ui.Success.Println("AI Engine started successfully")
 			return nil
 		}
@@ -155,8 +186,9 @@ func (b *AIBridge) sendRequest(method string, params map[string]interface{}) (*R
 
 	// Prepare request
 	req := Request{
-		Method: method,
-		Params: params,
+		Method:    method,
+		Params:    params,
+		AuthToken: b.authToken,
 	}
 
 	// Send request
@@ -215,18 +247,33 @@ func (b *AIBridge) AnalyzeScan(scanOutput, tool, target string, useAI bool) ([]V
 		return nil, "", err
 	}
 
-	// Parse vulnerabilities
+	// Parse vulnerabilities with safe type assertions
 	var vulns []Vulnerability
 	vulnsData, ok := resp.Result["vulnerabilities"].([]interface{})
 	if ok {
 		for _, v := range vulnsData {
-			vMap := v.(map[string]interface{})
-			vuln := Vulnerability{
-				ID:          vMap["id"].(string),
-				Title:       vMap["title"].(string),
-				Description: vMap["description"].(string),
-				Severity:    vMap["severity"].(string),
+			vMap, ok := v.(map[string]interface{})
+			if !ok {
+				// Skip invalid vulnerability entries
+				continue
 			}
+
+			vuln := Vulnerability{}
+
+			// Safe type assertions with zero-value fallbacks
+			if id, ok := vMap["id"].(string); ok {
+				vuln.ID = id
+			}
+			if title, ok := vMap["title"].(string); ok {
+				vuln.Title = title
+			}
+			if desc, ok := vMap["description"].(string); ok {
+				vuln.Description = desc
+			}
+			if severity, ok := vMap["severity"].(string); ok {
+				vuln.Severity = severity
+			}
+
 			vulns = append(vulns, vuln)
 		}
 	}
@@ -248,18 +295,33 @@ func (b *AIBridge) PredictVulnerabilities(scanData map[string]interface{}, useAI
 		return nil, err
 	}
 
-	// Parse predictions
+	// Parse predictions with safe type assertions
 	var predictions []VulnerabilityPrediction
 	predsData, ok := resp.Result["predictions"].([]interface{})
 	if ok {
 		for _, p := range predsData {
-			pMap := p.(map[string]interface{})
-			pred := VulnerabilityPrediction{
-				VulnerabilityType: pMap["vulnerability_type"].(string),
-				Confidence:        pMap["confidence"].(float64),
-				Severity:          pMap["severity"].(string),
-				Reasoning:         pMap["reasoning"].(string),
+			pMap, ok := p.(map[string]interface{})
+			if !ok {
+				// Skip invalid prediction entries
+				continue
 			}
+
+			pred := VulnerabilityPrediction{}
+
+			// Safe type assertions with zero-value fallbacks
+			if vulnType, ok := pMap["vulnerability_type"].(string); ok {
+				pred.VulnerabilityType = vulnType
+			}
+			if confidence, ok := pMap["confidence"].(float64); ok {
+				pred.Confidence = confidence
+			}
+			if severity, ok := pMap["severity"].(string); ok {
+				pred.Severity = severity
+			}
+			if reasoning, ok := pMap["reasoning"].(string); ok {
+				pred.Reasoning = reasoning
+			}
+
 			predictions = append(predictions, pred)
 		}
 	}
@@ -331,3 +393,22 @@ func (b *AIBridge) Health() (map[string]interface{}, error) {
 	return resp.Result, nil
 }
 
+// StoreAPIKey stores an API key in the system keyring
+func (b *AIBridge) StoreAPIKey(params map[string]interface{}) (map[string]interface{}, error) {
+	resp, err := b.sendRequest("store_api_key", params)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Result, nil
+}
+
+// GetConfiguredProviders lists configured AI providers
+func (b *AIBridge) GetConfiguredProviders() (map[string]interface{}, error) {
+	resp, err := b.sendRequest("get_configured_providers", map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Result, nil
+}

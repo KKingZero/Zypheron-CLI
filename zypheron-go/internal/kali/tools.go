@@ -36,11 +36,11 @@ func NewToolManager() *ToolManager {
 func (tm *ToolManager) DetectTools() error {
 	for i := range tm.tools {
 		tool := &tm.tools[i]
-		
+
 		// Check if command exists
 		_, err := exec.LookPath(tool.Command)
 		tool.Installed = err == nil
-		
+
 		if tool.Installed {
 			// Get version
 			tool.Version = getToolVersion(tool.Command)
@@ -53,7 +53,7 @@ func (tm *ToolManager) DetectTools() error {
 func (tm *ToolManager) GetStats() Stats {
 	stats := Stats{}
 	stats.Total = len(tm.tools)
-	
+
 	for _, tool := range tm.tools {
 		if tool.Installed {
 			stats.Installed++
@@ -66,7 +66,7 @@ func (tm *ToolManager) GetStats() Stats {
 			}
 		}
 	}
-	
+
 	return stats
 }
 
@@ -115,6 +115,38 @@ func (tm *ToolManager) GetInstallCommand(name string) string {
 	return fmt.Sprintf("sudo apt-get install -y %s", name)
 }
 
+// getInstallCommand returns safe install command for a tool
+func getInstallCommand(toolName string) (string, []string, error) {
+	// Hardcoded install commands - never use user input
+	installCommands := map[string]struct {
+		cmd  string
+		args []string
+	}{
+		"nmap":         {"apt-get", []string{"install", "-y", "nmap"}},
+		"nikto":        {"apt-get", []string{"install", "-y", "nikto"}},
+		"nuclei":       {"apt-get", []string{"install", "-y", "nuclei"}},
+		"masscan":      {"apt-get", []string{"install", "-y", "masscan"}},
+		"sqlmap":       {"apt-get", []string{"install", "-y", "sqlmap"}},
+		"hydra":        {"apt-get", []string{"install", "-y", "hydra"}},
+		"metasploit":   {"apt-get", []string{"install", "-y", "metasploit-framework"}},
+		"gobuster":     {"apt-get", []string{"install", "-y", "gobuster"}},
+		"ffuf":         {"apt-get", []string{"install", "-y", "ffuf"}},
+		"subfinder":    {"apt-get", []string{"install", "-y", "subfinder"}},
+		"amass":        {"apt-get", []string{"install", "-y", "amass"}},
+		"theharvester": {"apt-get", []string{"install", "-y", "theharvester"}},
+		"aircrack-ng":  {"apt-get", []string{"install", "-y", "aircrack-ng"}},
+		"john":         {"apt-get", []string{"install", "-y", "john"}},
+		"hashcat":      {"apt-get", []string{"install", "-y", "hashcat"}},
+	}
+
+	cmdInfo, exists := installCommands[strings.ToLower(toolName)]
+	if !exists {
+		return "", nil, fmt.Errorf("no install command defined for tool: %s", toolName)
+	}
+
+	return cmdInfo.cmd, cmdInfo.args, nil
+}
+
 // Install installs a tool
 func (tm *ToolManager) Install(name string) error {
 	tool := tm.GetTool(name)
@@ -123,8 +155,15 @@ func (tm *ToolManager) Install(name string) error {
 	}
 
 	fmt.Printf("Installing %s...\n", tool.Name)
-	
-	cmd := exec.Command("sh", "-c", tool.InstallCmd)
+
+	// Get safe install command
+	cmdName, args, err := getInstallCommand(tool.Name)
+	if err != nil {
+		return err
+	}
+
+	// Execute with direct command (no shell interpretation)
+	cmd := exec.Command(cmdName, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("installation failed: %s\n%s", err, string(output))
@@ -132,7 +171,7 @@ func (tm *ToolManager) Install(name string) error {
 
 	// Re-detect tools
 	tm.DetectTools()
-	
+
 	return nil
 }
 
@@ -341,4 +380,3 @@ func getDefaultTools() []Tool {
 		},
 	}
 }
-

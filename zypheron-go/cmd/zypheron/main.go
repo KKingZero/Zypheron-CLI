@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yourusername/zypheron/internal/commands"
-	"github.com/yourusername/zypheron/internal/ui"
 	"github.com/spf13/cobra"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/commands"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 )
 
 var (
@@ -47,6 +47,7 @@ func main() {
 	rootCmd.AddCommand(commands.ChatCmd())
 	rootCmd.AddCommand(commands.AICmd())
 	rootCmd.AddCommand(commands.SetupCmd())
+	rootCmd.AddCommand(commands.HistoryCmd())
 	rootCmd.AddCommand(commands.ReconCmd())
 	rootCmd.AddCommand(commands.BruteforceCmd())
 	rootCmd.AddCommand(commands.ExploitCmd())
@@ -66,4 +67,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-

@@ -6,8 +6,8 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
-	"github.com/yourusername/zypheron/internal/kali"
-	"github.com/yourusername/zypheron/internal/ui"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/kali"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 	"os"
 )
 

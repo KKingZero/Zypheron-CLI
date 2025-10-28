@@ -5,18 +5,56 @@ Zypheron AI Engine - Configuration
 import os
 from typing import Optional
 from pydantic import BaseSettings, Field
+from loguru import logger
+
+try:
+    from .secure_config import get_api_key, migrate_from_env, check_keyring_available
+    KEYRING_AVAILABLE = check_keyring_available()
+except ImportError:
+    KEYRING_AVAILABLE = False
+    logger.warning("Keyring not available, using environment variables only")
+
+
+def get_secure_api_key(provider: str, env_var: str) -> Optional[str]:
+    """
+    Get API key from keyring first, fallback to environment variable
+    
+    Args:
+        provider: Provider name for keyring lookup
+        env_var: Environment variable name for fallback
+        
+    Returns:
+        API key if found, None otherwise
+    """
+    # Try keyring first
+    if KEYRING_AVAILABLE:
+        api_key = get_api_key(provider)
+        if api_key:
+            return api_key
+        
+        # Check if env var exists and migrate it
+        env_value = os.getenv(env_var)
+        if env_value:
+            logger.warning(
+                f"⚠️  {env_var} found in environment. "
+                f"Consider migrating to keyring: zypheron config set-key {provider}"
+            )
+            return env_value
+    
+    # Fallback to environment variable
+    return os.getenv(env_var)
 
 
 class AIConfig(BaseSettings):
     """AI Provider Configuration"""
     
-    # API Keys
-    ANTHROPIC_API_KEY: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
-    OPENAI_API_KEY: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
-    GOOGLE_API_KEY: Optional[str] = Field(default=None, env="GOOGLE_API_KEY")
-    KIMI_API_KEY: Optional[str] = Field(default=None, env="KIMI_API_KEY")
-    DEEPSEEK_API_KEY: Optional[str] = Field(default=None, env="DEEPSEEK_API_KEY")
-    GROK_API_KEY: Optional[str] = Field(default=None, env="GROK_API_KEY")
+    # API Keys - these will try keyring first, then environment variables
+    ANTHROPIC_API_KEY: Optional[str] = Field(default=None)
+    OPENAI_API_KEY: Optional[str] = Field(default=None)
+    GOOGLE_API_KEY: Optional[str] = Field(default=None)
+    KIMI_API_KEY: Optional[str] = Field(default=None)
+    DEEPSEEK_API_KEY: Optional[str] = Field(default=None)
+    GROK_API_KEY: Optional[str] = Field(default=None)
     
     # Ollama Configuration
     OLLAMA_HOST: str = Field(default="http://localhost:11434", env="OLLAMA_HOST")
@@ -57,6 +95,19 @@ class AIConfig(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+    
+    def __init__(self, **kwargs):
+        """Initialize config with keyring-first API key loading"""
+        super().__init__(**kwargs)
+        
+        # Load API keys from keyring with fallback to env vars
+        self.ANTHROPIC_API_KEY = self.ANTHROPIC_API_KEY or get_secure_api_key("anthropic", "ANTHROPIC_API_KEY")
+        self.OPENAI_API_KEY = self.OPENAI_API_KEY or get_secure_api_key("openai", "OPENAI_API_KEY")
+        self.GOOGLE_API_KEY = self.GOOGLE_API_KEY or get_secure_api_key("google", "GOOGLE_API_KEY")
+        self.KIMI_API_KEY = self.KIMI_API_KEY or get_secure_api_key("kimi", "KIMI_API_KEY")
+        self.DEEPSEEK_API_KEY = self.DEEPSEEK_API_KEY or get_secure_api_key("deepseek", "DEEPSEEK_API_KEY")
+        self.GROK_API_KEY = self.GROK_API_KEY or get_secure_api_key("grok", "GROK_API_KEY")
+        self.NVD_API_KEY = self.NVD_API_KEY or get_secure_api_key("nvd", "NVD_API_KEY")
 
 
 # Global config instance

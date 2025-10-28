@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
-	"github.com/yourusername/zypheron/internal/ui"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/validation"
 )
 
 // ExecutionOptions represents options for executing a tool
@@ -36,6 +37,18 @@ type ToolResult struct {
 // Execute executes a tool with the given options
 func Execute(ctx context.Context, opts ExecutionOptions) (*ToolResult, error) {
 	start := time.Now()
+
+	// Validate tool name
+	if err := validation.ValidateToolName(opts.Tool); err != nil {
+		return nil, fmt.Errorf("invalid tool name: %w", err)
+	}
+
+	// Validate target if provided
+	if opts.Target != "" {
+		if err := validation.ValidateTarget(opts.Target); err != nil {
+			return nil, fmt.Errorf("invalid target: %w", err)
+		}
+	}
 
 	// Create command with context for timeout
 	if opts.Timeout > 0 {
@@ -189,10 +202,10 @@ func ParseNmapOutput(output string) interface{} {
 	// Simple parser for demonstration
 	// In production, use a proper XML parser for nmap's -oX output
 	hosts := []map[string]interface{}{}
-	
+
 	lines := strings.Split(output, "\n")
 	var currentHost map[string]interface{}
-	
+
 	for _, line := range lines {
 		// Match host line: Nmap scan report for example.com (93.184.216.34)
 		if strings.Contains(line, "Nmap scan report for") {
@@ -202,14 +215,14 @@ func ParseNmapOutput(output string) interface{} {
 			currentHost = map[string]interface{}{
 				"ports": []map[string]string{},
 			}
-			
+
 			// Extract hostname/IP
 			parts := strings.Split(line, "for ")
 			if len(parts) > 1 {
 				currentHost["target"] = strings.TrimSpace(parts[1])
 			}
 		}
-		
+
 		// Match port line: 80/tcp open http
 		if strings.Contains(line, "/tcp") || strings.Contains(line, "/udp") {
 			fields := strings.Fields(line)
@@ -226,13 +239,12 @@ func ParseNmapOutput(output string) interface{} {
 			}
 		}
 	}
-	
+
 	if currentHost != nil {
 		hosts = append(hosts, currentHost)
 	}
-	
+
 	return map[string]interface{}{
 		"hosts": hosts,
 	}
 }
-

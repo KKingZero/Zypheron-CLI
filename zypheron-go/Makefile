@@ -59,8 +59,17 @@ deps:
 
 .PHONY: test
 test:
-	@echo "Running tests..."
-	$(GO) test -v ./...
+	@echo "Running tests with coverage..."
+	$(GO) test -v -cover -coverprofile=coverage.out ./...
+	$(GO) tool cover -func=coverage.out
+	@echo ""
+	@echo "Generate HTML coverage report with: make coverage-html"
+
+.PHONY: coverage-html
+coverage-html: test
+	@echo "Generating HTML coverage report..."
+	$(GO) tool cover -html=coverage.out -o coverage.html
+	@echo "✓ Coverage report: coverage.html"
 
 .PHONY: clean
 clean:

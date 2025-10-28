@@ -6,11 +6,14 @@ import (
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/kali"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/storage"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tools"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/validation"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/pkg/types"
 	"github.com/spf13/cobra"
-	"github.com/yourusername/zypheron/internal/aibridge"
-	"github.com/yourusername/zypheron/internal/kali"
-	"github.com/yourusername/zypheron/internal/tools"
-	"github.com/yourusername/zypheron/internal/ui"
 )
 
 // ScanCmd returns the scan command
@@ -46,6 +49,30 @@ func ScanCmd() *cobra.Command {
 				}
 				if err := survey.AskOne(prompt, &target, survey.WithValidator(survey.Required)); err != nil {
 					return err
+				}
+			}
+
+			// Validate target
+			if err := validation.ValidateTarget(target); err != nil {
+				return fmt.Errorf("invalid target: %w", err)
+			}
+
+			// Validate ports
+			if err := validation.ValidatePorts(ports); err != nil {
+				return fmt.Errorf("invalid ports: %w", err)
+			}
+
+			// Validate tool name if provided
+			if tool != "" {
+				if err := validation.ValidateToolName(tool); err != nil {
+					return fmt.Errorf("invalid tool: %w", err)
+				}
+			}
+
+			// Validate output file path if provided
+			if output != "" {
+				if err := validation.ValidateFilePath(output); err != nil {
+					return fmt.Errorf("invalid output path: %w", err)
 				}
 			}
 
@@ -179,6 +206,7 @@ func ScanCmd() *cobra.Command {
 			fmt.Printf("\n%s\n", top)
 
 			ctx := context.Background()
+			scanStartTime := time.Now()
 			result, err := tools.Execute(ctx, opts)
 			if err != nil {
 				fmt.Printf("\n%s\n", bottom)
@@ -187,7 +215,7 @@ func ScanCmd() *cobra.Command {
 
 			if result.Success {
 				fmt.Printf("\n%s\n", ui.SuccessMsg(fmt.Sprintf("%s scan completed in %.2fs", selectedTool, result.Duration.Seconds())))
-				
+
 				// Parse and display structured results for nmap
 				if selectedTool == "nmap" {
 					parsed := tools.ParseNmapOutput(result.Output)
@@ -198,6 +226,31 @@ func ScanCmd() *cobra.Command {
 			}
 
 			fmt.Printf("%s\n\n", bottom)
+
+			// Initialize scan storage
+			scanStore, err := storage.NewScanStorage()
+			if err != nil {
+				fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to initialize scan storage: %s", err)))
+			}
+
+			// Prepare scan result for storage
+			scanID := storage.GenerateScanID(target, selectedTool)
+			scanResult := &types.ScanResult{
+				ID:           scanID,
+				Timestamp:    scanStartTime,
+				Target:       target,
+				Tool:         selectedTool,
+				Ports:        ports,
+				Output:       result.Output,
+				Duration:     result.Duration.Seconds(),
+				Success:      result.Success,
+				ErrorMessage: result.Error,
+				Metadata: map[string]string{
+					"fast": fmt.Sprintf("%t", fast),
+					"web":  fmt.Sprintf("%t", web),
+					"full": fmt.Sprintf("%t", full),
+				},
+			}
 
 			// AI Analysis
 			if aiAnalysis && result.Success {
@@ -224,6 +277,19 @@ func ScanCmd() *cobra.Command {
 					fmt.Println(ui.Error(fmt.Sprintf("AI analysis failed: %s", err)))
 					return nil
 				}
+
+				// Convert aibridge.Vulnerability to types.Vulnerability
+				for _, v := range vulns {
+					scanResult.Vulnerabilities = append(scanResult.Vulnerabilities, types.Vulnerability{
+						ID:          v.ID,
+						Title:       v.Title,
+						Description: v.Description,
+						Severity:    v.Severity,
+					})
+				}
+
+				// Store AI analysis report
+				scanResult.AIAnalysis = report
 
 				if len(vulns) > 0 {
 					fmt.Println()
@@ -302,6 +368,15 @@ func ScanCmd() *cobra.Command {
 				fmt.Println()
 			}
 
+			// Save scan to storage
+			if scanStore != nil {
+				if err := scanStore.SaveScan(scanResult); err != nil {
+					fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save scan: %s", err)))
+				} else {
+					fmt.Println(ui.Muted.Sprint(fmt.Sprintf("Scan saved: %s", scanID)))
+				}
+			}
+
 			return nil
 		},
 	}
@@ -322,14 +397,9 @@ func ScanCmd() *cobra.Command {
 }
 
 // Helper functions
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+// Note: Go 1.21+ has built-in min function
 
-func saveReport(filename, content string) error {
+func saveReport(_ /* filename */, _ /* content */ string) error {
 	// TODO: Implement report saving
 	return nil
 }
@@ -384,4 +454,3 @@ func displayParsedResults(parsed interface{}) {
 		}
 	}
 }
-

@@ -5,14 +5,13 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 	"github.com/spf13/cobra"
-	"github.com/yourusername/zypheron/internal/aibridge"
-	"github.com/yourusername/zypheron/internal/ui"
 )
 
 var (
 	aiProvider string
-	aiList     bool
 )
 
 // AICmd manages the AI engine
@@ -231,11 +230,10 @@ func runAITest(cmd *cobra.Command, args []string) error {
 	fmt.Print("\r" + ui.Success.Sprint("✓ Response received    ") + "\n")
 	fmt.Println()
 
-	fmt.Printf("%s %s\n", ui.ClaudeAccent.Sprint("🤖 AI:"), response)
+	fmt.Printf("%s %s\n", ui.Accent.Sprint("🤖 AI:"), response)
 	fmt.Println()
 
 	ui.Success.Println("✓ AI Engine test successful!")
 
 	return nil
 }
-

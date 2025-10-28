@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 	"github.com/spf13/cobra"
-	"github.com/yourusername/zypheron/internal/aibridge"
-	"github.com/yourusername/zypheron/internal/ui"
 )
 
 var (
@@ -129,7 +129,7 @@ always emphasize ethical hacking practices and legal boundaries.`,
 
 		// Get AI response
 		fmt.Println()
-		fmt.Print(ui.ClaudeAccent.Sprint("🤖 AI: "))
+		fmt.Print(ui.Accent.Sprint("🤖 AI: "))
 
 		response, err := bridge.Chat(conversationHistory, chatProvider, chatTemperature, 2048)
 		if err != nil {
@@ -177,7 +177,7 @@ Provide clear, actionable security advice.`,
 
 	fmt.Print("\r" + ui.Success.Sprint("✓ Response received") + "\n")
 	fmt.Println()
-	fmt.Printf("%s %s\n", ui.ClaudeAccent.Sprint("🤖 AI:"), response)
+	fmt.Printf("%s %s\n", ui.Accent.Sprint("🤖 AI:"), response)
 	fmt.Println()
 
 	return nil

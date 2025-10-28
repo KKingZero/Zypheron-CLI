@@ -23,8 +23,6 @@ var (
 	IndicatorInfo    string
 	IndicatorWarning string
 	IndicatorError   string
-	
-	colorsEnabled = true
 )
 
 func init() {
@@ -50,22 +48,53 @@ func initColors() {
 // DisableColors turns off color output
 func DisableColors() {
 	color.NoColor = true
-	colorsEnabled = false
 }
 
 // Banner returns the Zypheron ASCII banner
 func Banner() string {
-	return Primary.Sprint(`
+	header := Primary.Sprint(`
 ╔═══════════════════════════════════════════════════════════╗
-║  ███████╗██╗   ██╗██████╗ ██╗  ██╗███████╗██████╗  ██████╗║
-║  ╚══███╔╝╚██╗ ██╔╝██╔══██╗██║  ██║██╔════╝██╔══██╗██╔═══██╗
-║    ███╔╝  ╚████╔╝ ██████╔╝███████║█████╗  ██████╔╝██║   ██║║
-║   ███╔╝    ╚██╔╝  ██╔═══╝ ██╔══██║██╔══╝  ██╔══██╗██║   ██║║
-║  ███████╗   ██║   ██║     ██║  ██║███████╗██║  ██║╚██████╔╝║
-║  ╚══════╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ║
+║  ███████╗██╗   ██╗██╗   ██╗██████╗ ███████╗██████╗  █████╗║
+║  ╚══███╔╝╚██╗ ██╔╝██║   ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗║
+║    ███╔╝  ╚████╔╝ ██║   ██║██████╔╝█████╗  ██████╔╝███████║║
+║   ███╔╝    ╚██╔╝  ██║   ██║██╔══██╗██╔══╝  ██╔══██╗██╔══██║║
+║  ███████╗   ██║   ╚██████╔╝██║  ██║███████╗██║  ██║██║  ██║║
+║  ╚══════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝║
+║      ███████╗                                           ║
 ╚═══════════════════════════════════════════════════════════╝
     AI-Powered Penetration Testing Platform
 `)
+
+	cat := Accent.Sprint(`
+             /^\\/^\\
+           _|__|  O|
+  \\/     /~     \\_/ \\
+   \\____|__________/  \\
+          \\_______      \\
+                   \     \\                 \\
+                    |     |                  \\
+                   /      /                    \\
+                  /     /                       \\\\
+                /      /                         \\ \\
+               /     /                            \\  \\
+             /     /             _----_            \\   \\
+            /     /           _-~      ~-_         |   |
+           (      (        _-~    _--_    ~-_     _/   |
+            \\      ~-____-~    _-~    ~-_    ~-_-~    /
+              ~-_           _-~          ~-_       _-~   
+                 ~--______-~                ~-___-~
+`)
+
+	snake := Danger.Sprint(`
+                     /\\
+                    //\\\\
+                   V  \\\\
+                      \\\\    (snake)
+                       \\\\
+                        \\\\
+`)
+
+	return header + "\n" + cat + "\n" + snake
 }
 
 // Success formats a success message
@@ -106,19 +135,18 @@ func Separator(length int) string {
 func Box(title string) (string, string) {
 	titleLen := len(title)
 	padding := 60 - titleLen - 6
-	
+
 	top := Primary.Sprint("╔═══ ") + Primary.Sprint(title) + Primary.Sprint(" ")
 	for i := 0; i < padding; i++ {
 		top += Primary.Sprint("═")
 	}
 	top += Primary.Sprint("╗")
-	
+
 	bottom := Primary.Sprint("╚")
 	for i := 0; i < 58; i++ {
 		bottom += Primary.Sprint("═")
 	}
 	bottom += Primary.Sprint("╝")
-	
+
 	return top, bottom
 }
-

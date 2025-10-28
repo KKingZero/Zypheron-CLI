@@ -1,0 +1,93 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop, Zypheron-CLI ]
+  pull_request:
+    branches: [ main, develop, Zypheron-CLI ]
+  schedule:
+    # Run security scan weekly on Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+
+jobs:
+  gosec:
+    name: Go Security Scan (Gosec)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: '-fmt sarif -out gosec-results.sarif ./zypheron-go/...'
+      
+      - name: Upload Gosec results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: gosec-results.sarif
+
+  bandit:
+    name: Python Security Scan (Bandit)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
+      - name: Install Bandit
+        run: pip install bandit[toml]
+      
+      - name: Run Bandit Security Scanner
+        run: |
+          cd zypheron-ai
+          bandit -r . -f json -o bandit-results.json || true
+      
+      - name: Display Bandit results
+        if: always()
+        run: |
+          cd zypheron-ai
+          bandit -r . -f screen || true
+
+  dependency-check:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
+      - name: Check Python dependencies for vulnerabilities
+        run: |
+          cd zypheron-ai
+          pip install safety
+          safety check --json --file requirements.txt || true
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Check Go dependencies for vulnerabilities
+        run: |
+          cd zypheron-go
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || true
+

@@ -1,5 +1,13 @@
 # ⚡ Zypheron - AI-Powered Penetration Testing CLI
 
+[![Go Tests](https://github.com/KKingZero/Cobra-AI/actions/workflows/go-tests.yml/badge.svg)](https://github.com/KKingZero/Cobra-AI/actions/workflows/go-tests.yml)
+[![Python Tests](https://github.com/KKingZero/Cobra-AI/actions/workflows/python-tests.yml/badge.svg)](https://github.com/KKingZero/Cobra-AI/actions/workflows/python-tests.yml)
+[![Security Scan](https://github.com/KKingZero/Cobra-AI/actions/workflows/security.yml/badge.svg)](https://github.com/KKingZero/Cobra-AI/actions/workflows/security.yml)
+[![codecov](https://codecov.io/gh/KKingZero/Cobra-AI/branch/main/graph/badge.svg)](https://codecov.io/gh/KKingZero/Cobra-AI)
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://go.dev/)
+[![Python Version](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > High-performance, OPSEC-focused penetration testing command-line tool written in Go
 
 ```
@@ -217,9 +225,12 @@ Traditional pentesting CLIs are slow, bloated, and leave traces. Zypheron is:
 - **Smart** - Optional AI assistance
 - **Professional** - Built for security pros
 
-## 📞 Support
+## 📞 Support & Documentation
 
-- **Documentation**: See `zypheron-go/README.md`
+- **Main Documentation**: See `zypheron-go/README.md`
+- **Security Policy**: [SECURITY.md](SECURITY.md)
+- **Testing Guide**: [TESTING.md](TESTING.md)
+- **Quick Start**: [zypheron-go/QUICK_START.md](zypheron-go/QUICK_START.md)
 - **Issues**: GitHub Issues
 - **Security**: Report vulnerabilities responsibly
 
@@ -233,9 +244,44 @@ Zypheron is intended **exclusively for authorized security testing and education
 
 Unauthorized access to computer systems is illegal and unethical.
 
+## 🛡️ Security Features
+
+Zypheron implements comprehensive security measures:
+
+### Input Validation & Injection Prevention
+- ✅ **Command injection protection** - All user inputs validated against allowlists
+- ✅ **Target validation** - Strict validation of IPs, domains, and CIDR ranges
+- ✅ **Port validation** - Range checking (1-65535)
+- ✅ **Path sanitization** - Prevents directory traversal attacks
+
+### Secure IPC Communication
+- 🔐 **Authentication tokens** - 256-bit token for Go ↔ Python communication
+- 🔐 **Socket permissions** - Unix socket restricted to owner (0600)
+- 🔐 **Token persistence** - Secure storage in `~/.zypheron/ipc.token`
+
+### API Key Storage
+- 🔑 **System keyring integration** - Uses OS credential manager
+- 🔑 **No plain text storage** - API keys never stored in .env files
+- 🔑 **Cross-platform** - Keychain (macOS), Secret Service (Linux), Credential Manager (Windows)
+
+```bash
+# Securely store API keys
+zypheron config set-key anthropic
+zypheron config get-providers
+```
+
+### Scan Data Protection
+- 💾 **Encrypted storage** - Scan results stored with 0600 permissions
+- 💾 **Audit logging** - All scans logged with timestamps
+- 💾 **Data isolation** - User-specific storage directories
+
+**For more details, see [SECURITY.md](SECURITY.md)**
+
 ## 🛡️ Security Notice
 
 This tool is designed for professional penetration testers, security researchers, and system administrators. Misuse of this software may violate laws in your jurisdiction. The authors assume no liability for any misuse or damage caused by this software.
+
+**Report security vulnerabilities responsibly** - see [SECURITY.md](SECURITY.md) for our security policy.
 
 ---
 

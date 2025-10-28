@@ -6,6 +6,8 @@ Uses Unix domain sockets for fast, efficient communication
 import asyncio
 import json
 import os
+import secrets
+from pathlib import Path
 from typing import Dict, Any, Optional
 from loguru import logger
 
@@ -26,6 +28,38 @@ class IPCServer:
         self.ml_predictor = MLVulnerabilityPredictor()
         self.agent_orchestrator = AgentOrchestrator()
         self.server = None
+        
+        # Generate or load authentication token
+        self.auth_token = self._init_auth_token()
+    
+    def _init_auth_token(self) -> str:
+        """Initialize or load authentication token"""
+        token_dir = Path.home() / ".zypheron"
+        token_file = token_dir / "ipc.token"
+        
+        # Create directory if it doesn't exist
+        token_dir.mkdir(mode=0o700, exist_ok=True)
+        
+        # Load existing token or generate new one
+        if token_file.exists():
+            try:
+                token = token_file.read_text().strip()
+                logger.debug("Loaded existing auth token")
+                return token
+            except Exception as e:
+                logger.warning(f"Failed to load token, generating new one: {e}")
+        
+        # Generate new token
+        token = secrets.token_hex(32)
+        try:
+            token_file.write_text(token)
+            token_file.chmod(0o600)  # Only owner can read/write
+            logger.info(f"Generated new auth token: {token_file}")
+        except Exception as e:
+            logger.error(f"Failed to save auth token: {e}")
+            raise
+        
+        return token
     
     async def start(self):
         """Start the IPC server"""
@@ -39,8 +73,8 @@ class IPCServer:
             path=self.socket_path
         )
         
-        # Set socket permissions
-        os.chmod(self.socket_path, 0o666)
+        # Set socket permissions - only owner can read/write
+        os.chmod(self.socket_path, 0o600)
         
         logger.info(f"🚀 Zypheron AI Engine started on {self.socket_path}")
         logger.info(f"   Available AI providers: {', '.join(ai_manager.list_available_providers())}")
@@ -58,6 +92,18 @@ class IPCServer:
             
             request = json.loads(data.decode('utf-8'))
             logger.debug(f"Received request: {request.get('method', 'unknown')}")
+            
+            # Verify authentication token
+            provided_token = request.get('auth_token')
+            if provided_token != self.auth_token:
+                logger.warning("Authentication failed: invalid token")
+                error_response = {
+                    'success': False,
+                    'error': 'Authentication failed: invalid token'
+                }
+                writer.write(json.dumps(error_response).encode('utf-8'))
+                await writer.drain()
+                return
             
             # Route request to appropriate handler
             response = await self.handle_request(request)
@@ -94,6 +140,8 @@ class IPCServer:
             'list_providers': self.handle_list_providers,
             'health': self.handle_health,
             'stream_chat': self.handle_stream_chat,
+            'store_api_key': self.handle_store_api_key,
+            'get_configured_providers': self.handle_get_configured_providers,
         }
         
         handler = handlers.get(method)
@@ -272,6 +320,33 @@ class IPCServer:
             'version': '1.0.0',
             'providers': ai_manager.list_available_providers(),
             'socket': self.socket_path,
+        }
+    
+    async def handle_store_api_key(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle API key storage request"""
+        from core.secure_config import store_api_key
+        
+        provider = params.get('provider', '')
+        api_key = params.get('api_key', '')
+        
+        if not provider or not api_key:
+            raise ValueError("Both provider and api_key are required")
+        
+        success = store_api_key(provider, api_key)
+        
+        return {
+            'success': success,
+            'provider': provider,
+        }
+    
+    async def handle_get_configured_providers(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle get configured providers request"""
+        from core.secure_config import list_configured_providers
+        
+        providers = list_configured_providers()
+        
+        return {
+            'providers': providers,
         }
 
 

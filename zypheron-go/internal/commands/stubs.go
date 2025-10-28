@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/yourusername/zypheron/internal/ui"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 )
 
 // SetupCmd returns the setup command
