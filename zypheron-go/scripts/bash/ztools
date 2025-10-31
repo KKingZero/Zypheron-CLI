@@ -1,0 +1,77 @@
+#!/bin/bash
+# Zypheron Quick Tool Check
+# Fast tool status without Go overhead
+
+# Color codes
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+GRAY='\033[0;90m'
+NC='\033[0m'
+
+TOOLS=(
+    "nmap:Network scanner"
+    "nikto:Web scanner"
+    "nuclei:Vuln scanner"
+    "masscan:Fast port scanner"
+    "sqlmap:SQL injection"
+    "hydra:Bruteforce"
+    "john:Password cracker"
+    "hashcat:Password recovery"
+    "metasploit:Exploit framework"
+    "gobuster:Directory buster"
+    "ffuf:Web fuzzer"
+    "subfinder:Subdomain finder"
+    "amass:DNS enumeration"
+    "theharvester:OSINT tool"
+    "aircrack-ng:WiFi tools"
+)
+
+echo ""
+echo -e "${CYAN}╔═══ KALI TOOLS STATUS ═══════════════════════════════╗${NC}"
+echo ""
+
+INSTALLED=0
+MISSING=0
+
+for tool_info in "${TOOLS[@]}"; do
+    IFS=':' read -r tool desc <<< "$tool_info"
+    
+    if command -v "$tool" &> /dev/null; then
+        # Try to get version
+        version=""
+        case "$tool" in
+            metasploit)
+                tool_cmd="msfconsole"
+                ;;
+            *)
+                tool_cmd="$tool"
+                ;;
+        esac
+        
+        if command -v "$tool_cmd" &> /dev/null; then
+            version=$($tool_cmd --version 2>&1 | head -n1 || echo "")
+        fi
+        
+        printf "  ${GREEN}✓${NC} %-20s ${GRAY}%s${NC}\n" "$tool" "$desc"
+        ((INSTALLED++))
+    else
+        printf "  ${RED}✗${NC} %-20s ${GRAY}%s${NC}\n" "$tool" "$desc"
+        ((MISSING++))
+    fi
+done
+
+echo ""
+echo -e "${CYAN}╚═════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "  Total:     $((INSTALLED + MISSING))"
+echo -e "  Installed: ${GREEN}${INSTALLED}${NC}"
+echo -e "  Missing:   ${RED}${MISSING}${NC}"
+echo ""
+
+if [ $MISSING -gt 0 ]; then
+    echo -e "${CYAN}[*] Install missing tools:${NC}"
+    echo "    zypheron tools install-all"
+    echo ""
+fi
+
