@@ -1,4 +1,7 @@
-# 🚀 Zypheron CLI (Go) - Quick Start Guide
+# 🚀 Zypheron CLI (Go) - Quick Start Guide (FREE VERSION)
+
+> **⚠️ FREE VERSION**: This guide covers Zypheron FREE.
+> Automated exploit execution is not available in this version.
 
 ## Prerequisites
 
@@ -162,12 +165,14 @@ zypheron scan example.com --full
 # 2. Web testing
 zypheron scan https://example.com --web --ai-analysis
 
-# 3. Exploit search
-zypheron exploit --search "apache 2.4"
+# 3. Vulnerability analysis
+zypheron chat "Analyze the vulnerabilities found in the last scan"
 
 # 4. Bruteforce
 zypheron bruteforce ssh 192.168.1.1
 ```
+
+**Note**: Exploit search and automated exploit execution are not available in FREE version.
 
 ### Tool Management
 

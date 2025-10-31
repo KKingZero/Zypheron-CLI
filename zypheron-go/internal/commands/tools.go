@@ -3,12 +3,13 @@ package commands
 import (
 	"fmt"
 
+	"os"
+
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/olekukonko/tablewriter"
-	"github.com/spf13/cobra"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/kali"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
-	"os"
+	"github.com/olekukonko/tablewriter"
+	"github.com/spf13/cobra"
 )
 
 // ToolsCmd returns the tools management command
@@ -259,7 +260,8 @@ func toolsSuggestCmd() *cobra.Command {
 			tool := toolManager.SuggestTool(task)
 			if tool == nil {
 				fmt.Println(ui.WarningMsg(fmt.Sprintf("No tool found for task: %s", task)))
-				fmt.Println(ui.InfoMsg("Available tasks: scan, exploit, bruteforce, recon, web, osint, wireless"))
+				fmt.Println(ui.InfoMsg("Available tasks: scan, bruteforce, recon, web, osint, wireless"))
+				fmt.Println(ui.Muted.Sprint("Note: exploit tasks are not available in the FREE version"))
 				return nil
 			}
 
@@ -453,4 +455,3 @@ func getPriorityColor(priority string) *ui.Color {
 		return ui.Muted
 	}
 }
-

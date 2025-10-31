@@ -178,12 +178,12 @@ func (tm *ToolManager) Install(name string) error {
 // SuggestTool suggests the best tool for a task
 func (tm *ToolManager) SuggestTool(task string) *Tool {
 	taskMap := map[string]string{
-		"scan":       "nmap",
-		"portscan":   "nmap",
-		"web":        "nikto",
-		"webscan":    "nikto",
-		"vuln":       "nuclei",
-		"exploit":    "metasploit",
+		"scan":     "nmap",
+		"portscan": "nmap",
+		"web":      "nikto",
+		"webscan":  "nikto",
+		"vuln":     "nuclei",
+		// "exploit" removed in FREE version
 		"bruteforce": "hydra",
 		"password":   "john",
 		"recon":      "nmap",
@@ -311,11 +311,11 @@ func getDefaultTools() []Tool {
 		{
 			Name:        "metasploit",
 			Command:     "msfconsole",
-			Description: "Penetration testing framework",
+			Description: "Penetration testing framework (Pro version only)",
 			Category:    "exploit",
-			Priority:    "critical",
-			InstallCmd:  "sudo apt-get install -y metasploit-framework",
-			RequiredFor: []string{"exploit"},
+			Priority:    "low", // Downgraded from critical in FREE version
+			InstallCmd:  "echo 'Metasploit integration is not available in FREE version'",
+			RequiredFor: []string{}, // Removed from FREE version
 			Aliases:     []string{"msf", "msfconsole"},
 		},
 		{

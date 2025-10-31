@@ -1,4 +1,7 @@
-# Changelog - Zypheron CLI
+# Changelog - Zypheron CLI (FREE VERSION)
+
+> **Note**: This changelog covers the FREE version of Zypheron.
+> Automated exploit execution features are available in Zypheron Pro.
 
 ## [2.0.0] - 2025-10-24 - COMPLETE REWRITE
 
@@ -45,7 +48,6 @@ All commands from v1.x maintained with full feature parity:
 - `config` - Configuration management
 - `recon` - Reconnaissance
 - `bruteforce` - Credential attacks
-- `exploit` - Exploitation framework
 - `fuzz` - Web fuzzing
 - `osint` - OSINT operations
 - `threat` - Threat intelligence
@@ -53,6 +55,8 @@ All commands from v1.x maintained with full feature parity:
 - `dashboard` - Real-time monitoring
 - `setup` - Initial setup
 - `kali` - Kali-specific operations
+
+**Note**: `exploit` command is not available in FREE version.
 
 ### 📊 Performance Improvements
 

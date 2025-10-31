@@ -1,8 +1,11 @@
-# ⚡ Zypheron CLI - Go Edition
+# ⚡ Zypheron CLI - Go Edition (FREE VERSION)
 
 > AI-Powered Penetration Testing Platform with Native Kali Linux Tool Integration
 
 **Rewritten in Go for maximum performance, security, and OPSEC.**
+
+> **⚠️ FREE VERSION**: This version focuses on vulnerability discovery, scanning, and analysis.
+> Automated exploit execution is available in Zypheron Pro.
 
 ```
 ╔═══════════════════════════════════════════════════════════╗

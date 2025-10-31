@@ -3,8 +3,8 @@ package commands
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
+	"github.com/spf13/cobra"
 )
 
 // SetupCmd returns the setup command
@@ -54,14 +54,15 @@ func BruteforceCmd() *cobra.Command {
 	}
 }
 
-// ExploitCmd returns the exploit command
+// ExploitCmd returns the exploit command (disabled in FREE version)
 func ExploitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "exploit",
-		Short: "Exploitation framework",
+		Short: "Exploitation framework (Pro version only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println(ui.InfoMsg("Exploit command"))
-			fmt.Println(ui.Muted.Sprint("  Metasploit integration and exploit execution"))
+			fmt.Println(ui.Error("⚠️  Exploit command is not available in the FREE version"))
+			fmt.Println(ui.Muted.Sprint("  This feature is available in Zypheron Pro"))
+			fmt.Println(ui.Muted.Sprint("  Upgrade to access automated exploit execution and Metasploit integration"))
 			fmt.Println()
 			return nil
 		},
@@ -154,4 +155,3 @@ func KaliCmd() *cobra.Command {
 		},
 	}
 }
-

@@ -1,4 +1,4 @@
-# ⚡ Zypheron - AI-Powered Penetration Testing CLI
+# ⚡ Zypheron - AI-Powered Penetration Testing CLI (FREE VERSION)
 
 [![Go Tests](https://github.com/KKingZero/Cobra-AI/actions/workflows/go-tests.yml/badge.svg)](https://github.com/KKingZero/Cobra-AI/actions/workflows/go-tests.yml)
 [![Python Tests](https://github.com/KKingZero/Cobra-AI/actions/workflows/python-tests.yml/badge.svg)](https://github.com/KKingZero/Cobra-AI/actions/workflows/python-tests.yml)
@@ -9,6 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > High-performance, OPSEC-focused penetration testing command-line tool written in Go
+> 
+> **⚠️ FREE VERSION**: This is the free version of Zypheron. Automated exploit execution is not included.
+> Zypheron FREE focuses on vulnerability discovery, analysis, and reporting.
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
@@ -112,13 +115,14 @@ zypheron scan example.com --ai-guided
 - **nikto** - Web server scanning
 - **nuclei** - Vulnerability scanning
 - **masscan** - Fast port scanning
-- **sqlmap** - SQL injection
+- **sqlmap** - SQL injection testing
 - **hydra** - Bruteforce attacks
-- **metasploit** - Exploitation framework
 - **gobuster** - Directory busting
 - **ffuf** - Web fuzzing
 - **subfinder** - Subdomain enumeration
 - And 10+ more...
+
+**Note**: Metasploit and automated exploit execution are not available in the FREE version.
 
 ## 🎓 Examples
 
@@ -160,7 +164,6 @@ For **instant execution**, use the bash wrappers:
 - `config` - Configuration
 - `recon` - Reconnaissance
 - `bruteforce` - Credential attacks
-- `exploit` - Exploitation
 - `fuzz` - Web fuzzing
 - `osint` - OSINT operations
 - `threat` - Threat intelligence
@@ -168,6 +171,8 @@ For **instant execution**, use the bash wrappers:
 - `dashboard` - Real-time monitoring
 - `setup` - Initial setup
 - `kali` - Kali-specific operations
+
+**Note**: `exploit` command is not available in the FREE version. Upgrade to Zypheron Pro for automated exploit execution.
 
 ## 🏗️ Architecture
 

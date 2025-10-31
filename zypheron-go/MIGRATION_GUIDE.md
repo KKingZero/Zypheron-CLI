@@ -1,4 +1,7 @@
-# 📘 Migration Guide: TypeScript CLI → Go CLI
+# 📘 Migration Guide: TypeScript CLI → Go CLI (FREE VERSION)
+
+> **⚠️ FREE VERSION**: The Go CLI is the free version of Zypheron.
+> Automated exploit execution is not available in this version.
 
 ## Overview
 
@@ -151,9 +154,11 @@ rm -rf cli/node_modules
 - Session management
 
 ✅ **All Other Commands**
-- setup, recon, bruteforce, exploit
+- setup, recon, bruteforce
 - fuzz, osint, threat
 - report, dashboard, kali
+
+**Note**: exploit command removed in FREE version.
 
 ## API Integration
 

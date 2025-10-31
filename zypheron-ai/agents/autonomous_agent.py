@@ -29,7 +29,7 @@ class AgentState(str, Enum):
 @dataclass
 class AgentAction:
     """Represents an action the agent can take"""
-    action_type: str  # scan, exploit, analyze, report
+    action_type: str  # scan, analyze, report (exploit removed in FREE version)
     tool: str  # nmap, sqlmap, etc.
     parameters: Dict[str, Any]
     reasoning: str
@@ -63,14 +63,17 @@ class AgentMemory:
 
 class AutonomousAgent:
     """
-    Autonomous AI Pentesting Agent
+    Autonomous AI Pentesting Agent (FREE VERSION)
     
     Can independently:
     - Plan attack strategies
-    - Execute security tests
+    - Execute security scans
     - Analyze results
     - Adapt based on findings
     - Report vulnerabilities
+    
+    Note: Automated exploit execution is disabled in the free version.
+    This agent focuses on vulnerability discovery and analysis only.
     """
     
     def __init__(
@@ -168,6 +171,8 @@ Create a comprehensive, methodical plan that:
 5. Prioritizes high-impact findings
 
 Available tools: nmap, nikto, sqlmap, dirb, gobuster, wpscan, sslscan, whatweb
+NOTE: This is the FREE version - focus on scanning and vulnerability discovery only.
+Do NOT plan or execute exploit actions.
 
 Output format:
 ACTION: <tool>

@@ -1,7 +1,10 @@
-# Zypheron Hybrid AI Engine
+# Zypheron Hybrid AI Engine (FREE VERSION)
 
 > **World-Class AI-Powered Pentesting Platform**  
 > Go + Python Hybrid Architecture for Maximum Performance & Intelligence
+> 
+> **⚠️ FREE VERSION**: This version focuses on vulnerability discovery and analysis.
+> Automated exploit execution is not included in the free version.
 
 ---
 
@@ -28,10 +31,12 @@ Zypheron combines the **speed of Go** with the **AI/ML power of Python** to crea
 │  │   Python AI Engine (Background)      │  │
 │  │  - CVE analysis (CVSS libs)          │  │
 │  │  - ML predictions (TensorFlow)       │  │
-│  │  - Exploit generation (Metasploit)   │  │
+│  │  - Vulnerability analysis            │  │
 │  │  - NLP parsing (transformers)        │  │
 │  │  - Graph analysis (NetworkX)         │  │
 │  └──────────────────────────────────────┘  │
+│                                             │
+│  Note: Exploit generation removed in FREE  │
 └─────────────────────────────────────────────┘
 ```
 

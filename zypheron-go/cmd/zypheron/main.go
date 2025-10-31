@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/commands"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -50,7 +50,7 @@ func main() {
 	rootCmd.AddCommand(commands.HistoryCmd())
 	rootCmd.AddCommand(commands.ReconCmd())
 	rootCmd.AddCommand(commands.BruteforceCmd())
-	rootCmd.AddCommand(commands.ExploitCmd())
+	// Exploit command removed in FREE version
 	rootCmd.AddCommand(commands.FuzzCmd())
 	rootCmd.AddCommand(commands.OsintCmd())
 	rootCmd.AddCommand(commands.ThreatCmd())
