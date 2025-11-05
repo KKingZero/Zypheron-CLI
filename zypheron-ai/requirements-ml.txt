@@ -1,0 +1,10 @@
+# Optional machine learning helpers for Zypheron AI Engine
+# Install with: pip install -r requirements-ml.txt
+
+# Data science stack
+pandas>=2.2.0
+scikit-learn>=1.5.0
+
+# Deep learning / embeddings
+torch>=2.2.0
+transformers>=4.40.0

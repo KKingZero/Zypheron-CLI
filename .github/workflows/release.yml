@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Run Full Test Suite
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
+      - name: Run Go tests
+        run: |
+          cd zypheron-go
+          make deps
+          make test
+      
+      - name: Run Python tests
+        run: |
+          cd zypheron-ai
+          pip install -r requirements.txt
+          pip install -e ".[test]"
+          pytest
+
+  build:
+    name: Build Multi-Platform Binaries
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            output: zypheron-linux-amd64
+          - goos: linux
+            goarch: arm64
+            output: zypheron-linux-arm64
+          - goos: darwin
+            goarch: amd64
+            output: zypheron-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output: zypheron-darwin-arm64
+          - goos: windows
+            goarch: amd64
+            output: zypheron-windows-amd64.exe
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          cd zypheron-go
+          make deps
+          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+            -o ../build/${{ matrix.output }} cmd/zypheron/main.go
+      
+      - name: Create archive
+        run: |
+          cd build
+          if [[ "${{ matrix.output }}" == *.exe ]]; then
+            zip ${{ matrix.output }}.zip ${{ matrix.output }}
+          else
+            tar -czf ${{ matrix.output }}.tar.gz ${{ matrix.output }}
+          fi
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.output }}
+          path: build/${{ matrix.output }}.*
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          echo "## What's Changed" > CHANGELOG.txt
+          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> CHANGELOG.txt
+          echo "" >> CHANGELOG.txt
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 HEAD^)...${{ github.ref_name }}" >> CHANGELOG.txt
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: false
+          prerelease: false
+          body_path: CHANGELOG.txt
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

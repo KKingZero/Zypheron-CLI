@@ -1,0 +1,54 @@
+#!/bin/bash
+# Zypheron Quick Scan Wrapper
+# Ultra-fast scanning without overhead
+
+set -e
+
+TARGET="$1"
+TOOL="${2:-nmap}"
+
+if [ -z "$TARGET" ]; then
+    echo "Usage: zscan <target> [tool]"
+    echo ""
+    echo "Tools: nmap, nikto, masscan, nuclei"
+    echo ""
+    echo "Examples:"
+    echo "  zscan example.com"
+    echo "  zscan example.com nikto"
+    echo "  zscan 192.168.1.1 masscan"
+    exit 1
+fi
+
+# Color codes
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+echo -e "${CYAN}[*] Quick scan: ${GREEN}${TARGET}${NC} with ${GREEN}${TOOL}${NC}"
+echo ""
+
+# Direct execution - no overhead
+case "$TOOL" in
+    nmap)
+        nmap -sV -sC -p1-1000 "$TARGET"
+        ;;
+    nikto)
+        nikto -h "$TARGET"
+        ;;
+    masscan)
+        sudo masscan "$TARGET" -p1-65535 --rate 1000
+        ;;
+    nuclei)
+        nuclei -u "$TARGET"
+        ;;
+    *)
+        echo -e "${RED}[-] Unknown tool: $TOOL${NC}"
+        echo "Available: nmap, nikto, masscan, nuclei"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo -e "${GREEN}[+] Scan complete!${NC}"
+

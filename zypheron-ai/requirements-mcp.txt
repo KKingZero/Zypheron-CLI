@@ -1,0 +1,29 @@
+# Zypheron AI MCP Integration Dependencies
+#
+# Install with: pip install -r requirements-mcp.txt
+#
+# These dependencies enable Model Context Protocol (MCP) integration,
+# allowing AI agents like Claude Desktop, Cursor, and VS Code Copilot
+# to directly access Zypheron's security tools.
+
+# ============================================================================
+# MCP CORE DEPENDENCIES
+# ============================================================================
+fastmcp>=0.2.0,<1.0.0           # MCP framework for AI agent communication
+requests>=2.31.0,<3.0.0         # HTTP client for backend communication
+psutil>=5.9.0,<6.0.0            # System and process utilities
+
+# ============================================================================
+# LOGGING AND MONITORING
+# ============================================================================
+loguru>=0.7.0,<1.0.0            # Enhanced logging with colors
+
+# ============================================================================
+# OPTIONAL DEPENDENCIES (if not already installed)
+# ============================================================================
+# These are likely already installed via main requirements.txt
+# Uncomment if needed:
+#
+# flask>=2.3.0,<4.0.0           # Web framework (for backend server)
+# aiohttp>=3.8.0,<4.0.0         # Async HTTP (for advanced features)
+

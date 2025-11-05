@@ -1,0 +1,33 @@
+# Zypheron AI Engine - Core Runtime Dependencies
+#
+# This list covers the packages required for the default local AI engine.
+# Optional capability packs live in sibling requirement files.
+
+# AI providers & transport
+anthropic>=0.34.0
+openai>=1.42.0
+google-generativeai>=0.5.3
+requests>=2.32.3
+aiohttp>=3.9.5
+
+# Configuration & runtime utilities
+numpy>=1.26.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.1
+pyzmq>=26.0.0
+loguru>=0.7.2
+tenacity>=8.3.0
+
+# Secrets & secure storage
+keyring>=25.0.0
+cryptography>=42.0.0
+
+# HTML parsing helpers
+beautifulsoup4>=4.12.3
+
+# Optional packs (install on demand)
+#   pip install -r requirements-ml.txt         # ML predictors / transformers
+#   pip install -r requirements-security.txt  # Dependency & secrets tooling
+#   pip install -r requirements-web.txt       # Web UI & browser automation
+

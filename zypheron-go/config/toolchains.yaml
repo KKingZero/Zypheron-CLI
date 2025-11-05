@@ -1,0 +1,209 @@
+# Zypheron Tool Chains Configuration
+# This file defines tool chains with priority and parameters for different security testing scenarios
+
+network_discovery:
+  - tool: arp-scan
+    priority: 1
+    params:
+      local_network: true
+  - tool: rustscan
+    priority: 2
+    params:
+      ulimit: 5000
+      scripts: true
+  - tool: nmap
+    priority: 3
+    params:
+      scan_type: "-sS"
+      os_detection: true
+      version_detection: true
+  - tool: masscan
+    priority: 4
+    params:
+      rate: 1000
+      ports: "1-65535"
+      banners: true
+  - tool: enum4linux-ng
+    priority: 5
+    params:
+      shares: true
+      users: true
+      groups: true
+  - tool: nbtscan
+    priority: 6
+    params:
+      verbose: true
+  - tool: smbmap
+    priority: 7
+    params:
+      recursive: true
+  - tool: rpcclient
+    priority: 8
+    params:
+      commands: "enumdomusers;enumdomgroups;querydominfo"
+
+vulnerability_assessment:
+  - tool: nuclei
+    priority: 1
+    params:
+      severity: "critical,high,medium"
+      update: true
+  - tool: jaeles
+    priority: 2
+    params:
+      threads: 20
+      timeout: 20
+  - tool: dalfox
+    priority: 3
+    params:
+      mining_dom: true
+      mining_dict: true
+  - tool: nikto
+    priority: 4
+    params:
+      comprehensive: true
+  - tool: sqlmap
+    priority: 5
+    params:
+      crawl: 2
+      batch: true
+
+comprehensive_network_pentest:
+  - tool: autorecon
+    priority: 1
+    params:
+      port_scans: "top-1000-ports"
+      service_scans: "default"
+  - tool: rustscan
+    priority: 2
+    params:
+      ulimit: 5000
+      scripts: true
+  - tool: nmap
+    priority: 3
+    params:
+      aggressive: true
+      nse_scripts: "vuln,exploit"
+  - tool: enum4linux-ng
+    priority: 4
+    params:
+      shares: true
+      users: true
+      groups: true
+      policy: true
+  - tool: responder
+    priority: 5
+    params:
+      wpad: true
+      duration: 180
+
+reverse_engineering:
+  - tool: file
+    priority: 1
+    params:
+      detailed: true
+  - tool: strings
+    priority: 2
+    params:
+      min_length: 4
+  - tool: objdump
+    priority: 3
+    params:
+      disassemble: true
+      headers: true
+  - tool: readelf
+    priority: 4
+    params:
+      headers: true
+      sections: true
+  - tool: radare2
+    priority: 5
+    params:
+      analysis: true
+      auto: true
+  - tool: ghidra
+    priority: 6
+    params:
+      headless: true
+      analysis: true
+
+pwn:
+  - tool: checksec
+    priority: 1
+    params:
+      file: true
+  - tool: strings
+    priority: 2
+    params:
+      min_length: 4
+  - tool: gdb
+    priority: 3
+    params:
+      batch: true
+      ex: "commands"
+  - tool: pwntools
+    priority: 4
+    params:
+      context: true
+      gdb: true
+  - tool: ropper
+    priority: 5
+    params:
+      all: true
+  - tool: one_gadget
+    priority: 6
+    params:
+      raw: true
+
+forensics:
+  - tool: file
+    priority: 1
+    params:
+      detailed: true
+  - tool: strings
+    priority: 2
+    params:
+      min_length: 4
+      all: true
+  - tool: binwalk
+    priority: 3
+    params:
+      extract: true
+      entropy: true
+  - tool: foremost
+    priority: 4
+    params:
+      recover: true
+  - tool: volatility
+    priority: 5
+    params:
+      profile: "auto"
+      plugins: true
+  - tool: sleuthkit
+    priority: 6
+    params:
+      analysis: true
+
+api_pentest:
+  - tool: nmap
+    priority: 1
+    params:
+      ports: "443,8443"
+      ssl: true
+  - tool: nikto
+    priority: 2
+    params:
+      ssl: true
+  - tool: nuclei
+    priority: 3
+    params:
+      severity: "critical,high"
+      tags: "api"
+
+dorking:
+  - tool: browser-agent
+    priority: 1
+    params:
+      engine: "google"
+      ai_guided: true
+
