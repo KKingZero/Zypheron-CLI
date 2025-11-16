@@ -3,7 +3,6 @@ package aibridge
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -193,7 +192,7 @@ func loadAuthToken() (string, error) {
 	}
 
 	tokenFile := filepath.Join(homeDir, ".zypheron", "ipc.token")
-	data, err := ioutil.ReadFile(tokenFile)
+	data, err := os.ReadFile(tokenFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to read auth token: %w (start AI engine first)", err)
 	}
@@ -203,7 +202,13 @@ func loadAuthToken() (string, error) {
 
 // NewAIBridge creates a new AI bridge instance with connection pooling
 func NewAIBridge() *AIBridge {
-	token, _ := loadAuthToken()
+	// Load auth token with proper error handling
+	token, err := loadAuthToken()
+	if err != nil {
+		// Token will be loaded later when AI engine is started or on first request
+		fmt.Println(ui.Muted.Sprint("Auth token not loaded yet (AI engine may not be running)"))
+		token = ""
+	}
 
 	// Try to find running socket
 	socketPath, err := getSecureSocketPath()
@@ -596,12 +601,19 @@ func (b *AIBridge) ListProviders() ([]string, string, error) {
 		return nil, "", err
 	}
 
-	providersData, _ := resp.Result["providers"].([]interface{})
+	// Safe type assertion with check
 	var providers []string
-	for _, p := range providersData {
-		providers = append(providers, p.(string))
+	if providersData, ok := resp.Result["providers"].([]interface{}); ok {
+		for _, p := range providersData {
+			if provider, ok := p.(string); ok {
+				providers = append(providers, provider)
+			} else {
+				fmt.Println(ui.WarningMsg(fmt.Sprintf("Skipping invalid provider type: %T", p)))
+			}
+		}
 	}
 
+	// Safe type assertion for default provider
 	defaultProvider, _ := resp.Result["default"].(string)
 
 	return providers, defaultProvider, nil
@@ -635,4 +647,40 @@ func (b *AIBridge) GetConfiguredProviders() (map[string]interface{}, error) {
 	}
 
 	return resp.Result, nil
+}
+
+// ParseIntent parses natural language query to extract intent
+func (b *AIBridge) ParseIntent(query string) (map[string]interface{}, error) {
+	params := map[string]interface{}{
+		"query": query,
+	}
+
+	resp, err := b.SendRequest("parse_intent", params)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Result, nil
+}
+
+// AnalyzeMultiToolResults analyzes aggregated results from multiple tools
+func (b *AIBridge) AnalyzeMultiToolResults(aggregatedData map[string]interface{}, analysisType, userQuery string, provider string) (string, error) {
+	params := map[string]interface{}{
+		"aggregated_data": aggregatedData,
+		"analysis_type":   analysisType,
+		"user_query":      userQuery,
+		"provider":        provider,
+	}
+
+	resp, err := b.SendRequest("analyze_multi_tool_results", params)
+	if err != nil {
+		return "", err
+	}
+
+	summary, ok := resp.Result["summary"].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid response format: missing summary")
+	}
+
+	return summary, nil
 }

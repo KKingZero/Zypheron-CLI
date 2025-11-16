@@ -120,7 +120,26 @@ func DorkCmd() *cobra.Command {
 			}
 
 			// Create browser agent
-			agent := browser.NewGeminiBrowserAgent()
+			agent, err := browser.NewGeminiBrowserAgent()
+			if err != nil {
+				// Check if Chromium is installed and provide detailed instructions
+				installed, _, instructions := browser.CheckChromiumInstalled()
+				if !installed {
+					fmt.Println(ui.ErrorWithRecovery(
+						"Chromium is not installed",
+						instructions...,
+					))
+				} else {
+					fmt.Println(ui.ErrorWithRecovery(
+						"Failed to initialize browser",
+						"Chromium was found but failed to start",
+						"Try running: chromium --version",
+						"Ensure Chromium is properly installed",
+						"Check system logs for browser errors",
+					))
+				}
+				return fmt.Errorf("browser initialization failed: %w", err)
+			}
 			defer agent.Close()
 
 			// Create dorker

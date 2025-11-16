@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 )
@@ -53,6 +54,6 @@ func CancelGlobalContext() {
 
 // WithTimeout creates a context with timeout from global context
 func WithTimeout(timeout int) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(GetGlobalContext(), timeout)
+	return context.WithTimeout(GetGlobalContext(), time.Duration(timeout)*time.Second)
 }
 

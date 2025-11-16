@@ -3,6 +3,8 @@ package validation
 import (
 	"fmt"
 	"net"
+	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -48,6 +50,11 @@ func ValidateTarget(target string) error {
 		return fmt.Errorf("target cannot be empty")
 	}
 
+	// Enforce maximum length to prevent DoS
+	if len(target) > 512 {
+		return fmt.Errorf("target too long (max 512 characters)")
+	}
+
 	target = strings.TrimSpace(target)
 
 	// Check for shell metacharacters
@@ -81,6 +88,11 @@ func ValidateTarget(target string) error {
 func ValidatePorts(ports string) error {
 	if ports == "" {
 		return fmt.Errorf("ports cannot be empty")
+	}
+
+	// Enforce maximum length to prevent DoS
+	if len(ports) > 256 {
+		return fmt.Errorf("ports specification too long (max 256 characters)")
 	}
 
 	ports = strings.TrimSpace(ports)
@@ -143,7 +155,12 @@ func SanitizeInput(input string) string {
 
 // containsShellMetachars checks for dangerous shell metacharacters
 func containsShellMetachars(input string) bool {
-	dangerous := []string{";", "&", "|", "`", "$", "(", ")", "\n", "\r", "\\", "!", "~"}
+	// Comprehensive list of dangerous shell metacharacters
+	dangerous := []string{
+		";", "&", "|", "`", "$", "(", ")", "<", ">",
+		"\n", "\r", "\t", "\\", "!", "~", "{", "}",
+		"[", "]", "*", "?", "#", "%", "^",
+	}
 
 	for _, char := range dangerous {
 		if strings.Contains(input, char) {
@@ -185,14 +202,41 @@ func ValidateFilePath(path string) error {
 		return fmt.Errorf("file path cannot be empty")
 	}
 
-	// Check for path traversal attempts
-	if strings.Contains(path, "..") {
+	// Enforce maximum length to prevent DoS
+	if len(path) > 4096 {
+		return fmt.Errorf("file path too long (max 4096 characters)")
+	}
+
+	// Decode URL encoding to catch obfuscated traversal attempts
+	decodedPath, err := url.PathUnescape(path)
+	if err != nil {
+		return fmt.Errorf("invalid path encoding: %w", err)
+	}
+
+	// Check for path traversal in both original and decoded paths
+	if strings.Contains(path, "..") || strings.Contains(decodedPath, "..") {
 		return fmt.Errorf("path traversal not allowed")
 	}
 
-	// Check for null bytes
+	// Check for null bytes (can truncate paths in some C implementations)
 	if strings.Contains(path, "\x00") {
 		return fmt.Errorf("null bytes not allowed in file path")
+	}
+
+	// Resolve to absolute path and ensure it doesn't escape
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	// Additional security: prevent absolute paths that might escape to sensitive directories
+	// This is a basic check - adjust based on your security requirements
+	sensitivePatterns := []string{"/etc/", "/proc/", "/sys/", "/dev/"}
+	absPathLower := strings.ToLower(absPath)
+	for _, pattern := range sensitivePatterns {
+		if strings.HasPrefix(absPathLower, pattern) {
+			return fmt.Errorf("access to sensitive directory not allowed: %s", pattern)
+		}
 	}
 
 	return nil
