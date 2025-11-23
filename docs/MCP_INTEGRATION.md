@@ -160,16 +160,18 @@ In your AI client, try:
        "zypheron-ai": {
          "command": "python3",
          "args": [
-           "/path/to/Cobra-AI-Zypheron-CLI/zypheron-ai/mcp/server.py",
+           "/path/to/Zypheron-CLI/zypheron-ai/mcp/server.py",
            "--server",
            "http://localhost:8080"
          ],
-         "description": "Zypheron AI - AI-Powered Penetration Testing Platform",
+         "description": "Zypheron - AI-Powered Penetration Testing Platform",
          "timeout": 300
        }
      }
    }
    ```
+
+   **Note:** Replace `/path/to/Zypheron-CLI` with your actual installation path.
 
 4. Restart Claude Desktop
 
@@ -191,7 +193,7 @@ In your AI client, try:
        "zypheron-ai": {
          "command": "python3",
          "args": [
-           "/path/to/Cobra-AI-Zypheron-CLI/zypheron-ai/mcp/server.py",
+           "/path/to/Zypheron-CLI/zypheron-ai/mcp/server.py",
            "--server",
            "http://localhost:8080"
          ]
@@ -199,6 +201,8 @@ In your AI client, try:
      }
    }
    ```
+
+   **Note:** Replace `/path/to/Zypheron-CLI` with your actual installation path.
 
 4. Restart Cursor
 
@@ -217,7 +221,7 @@ In your AI client, try:
            "zypheron-ai": {
              "command": "python3",
              "args": [
-               "/path/to/Cobra-AI-Zypheron-CLI/zypheron-ai/mcp/server.py",
+               "/path/to/Zypheron-CLI/zypheron-ai/mcp/server.py",
                "--server",
                "http://localhost:8080"
              ]
@@ -227,6 +231,8 @@ In your AI client, try:
      }
    }
    ```
+
+   **Note:** Replace `/path/to/Zypheron-CLI` with your actual installation path.
 
 3. Reload VS Code
 
@@ -507,9 +513,10 @@ You can configure multiple AI clients to use the same MCP server:
 
 For issues, questions, or contributions:
 
+- **Troubleshooting**: [HELP.md](../HELP.md) - Installation and API issues
 - **Documentation**: [docs/](.)
-- **GitHub Issues**: [Issues](https://github.com/KKingZero/Cobra-AI/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/KKingZero/Cobra-AI/discussions)
+- **GitHub Issues**: [Issues](https://github.com/KKingZero/Zypheron-CLI/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/KKingZero/Zypheron-CLI/discussions)
 
 ## What's Next?
 

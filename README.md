@@ -69,8 +69,8 @@ Full-featured penetration testing platform:
 
 ```bash
 # Clone repository
-git clone https://github.com/KKingZero/Cobra-AI.git
-cd Cobra-AI-Zypheron-CLI
+git clone https://github.com/KKingZero/Zypheron-CLI.git
+cd Zypheron-CLI
 
 # Build CLI
 cd zypheron-go
@@ -227,12 +227,11 @@ zypheron tools install-all          # Install all tools
 | Document | Description |
 |----------|-------------|
 | **[SETUP.md](docs/SETUP.md)** | Installation and configuration guide |
+| **[HELP.md](HELP.md)** | **Troubleshooting guide for installation and API issues** |
 | **[MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md)** | MCP integration for AI agents (Claude, Cursor, Copilot) |
-| **[DEV_STATUS.md](docs/DEV_STATUS.md)** | Current development status |
 | **[CLI_GUIDE.md](docs/CLI_GUIDE.md)** | Complete CLI command reference |
-| **[API_GUIDE.md](docs/API_GUIDE.md)** | API testing guide |
-| **[AI_INTEGRATION.md](docs/AI_INTEGRATION.md)** | AI features and configuration |
 | **[TOOL_CHAINS.md](docs/TOOL_CHAINS.md)** | Tool chain configuration |
+| **[DEV_STATUS.md](docs/DEV_STATUS.md)** | Current development status |
 | **[SECURITY.md](SECURITY.md)** | Security policy |
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history |
 
@@ -255,8 +254,8 @@ Zypheron integrates with 30+ security tools. See [SETUP.md](docs/SETUP.md) for i
 
 ```bash
 # Clone repository
-git clone https://github.com/KKingZero/Cobra-AI.git
-cd Cobra-AI-Zypheron-CLI
+git clone https://github.com/KKingZero/Zypheron-CLI.git
+cd Zypheron-CLI
 
 # Build Go CLI
 cd zypheron-go
@@ -267,10 +266,12 @@ make test
 
 # Install Python dependencies (for AI features)
 cd ../zypheron-ai
+python3 -m venv venv
+source venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
 
 # Start development
-./zypheron --help
+../zypheron-go/zypheron --help
 ```
 
 ## 🤝 Contributing
@@ -302,9 +303,10 @@ This tool is designed for security professionals conducting authorized penetrati
 
 ## 📞 Support
 
+- **Troubleshooting**: [HELP.md](HELP.md) - Installation and API issues
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/KKingZero/Cobra-AI/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/KKingZero/Cobra-AI/discussions)
+- **Issues**: [GitHub Issues](https://github.com/KKingZero/Zypheron-CLI/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/KKingZero/Zypheron-CLI/discussions)
 
 ---
 
