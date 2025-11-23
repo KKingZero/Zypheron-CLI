@@ -28,17 +28,12 @@ Complete installation and configuration guide for Zypheron.
 
 ## 🚀 Quick Installation
 
-### One-Line Install (Linux/macOS)
-```bash
-curl -fsSL https://raw.githubusercontent.com/KKingZero/Cobra-AI/main/install.sh | bash
-```
-
 ### Manual Installation
 
 #### 1. Clone Repository
 ```bash
-git clone https://github.com/KKingZero/Cobra-AI.git
-cd Cobra-AI-Zypheron-CLI
+git clone https://github.com/KKingZero/Zypheron-CLI.git
+cd Zypheron-CLI
 ```
 
 #### 2. Build Go CLI
@@ -474,19 +469,21 @@ wsl --shutdown
 
 If you encounter issues not covered here:
 
-1. Check existing issues: https://github.com/KKingZero/Cobra-AI/issues
-2. Enable debug mode: `zypheron --debug scan example.com`
-3. Check logs: `cat zypheron-ai/zypheron-ai.log`
-4. Ask for help: https://github.com/KKingZero/Cobra-AI/discussions
+1. **Check troubleshooting guide**: [HELP.md](../HELP.md) - Comprehensive troubleshooting for installation and API issues
+2. Check existing issues: https://github.com/KKingZero/Zypheron-CLI/issues
+3. Enable debug mode: `zypheron --debug scan example.com`
+4. Check logs: `cat zypheron-ai/zypheron-ai.log`
+5. Ask for help: https://github.com/KKingZero/Zypheron-CLI/discussions
 
 ## 📚 Next Steps
 
 After setup, check out:
 
 - [CLI_GUIDE.md](CLI_GUIDE.md) - Complete command reference
+- [MCP_INTEGRATION.md](MCP_INTEGRATION.md) - MCP integration for AI agents
 - [DEV_STATUS.md](DEV_STATUS.md) - Current features and roadmap
-- [AI_INTEGRATION.md](AI_INTEGRATION.md) - Advanced AI features
 - [TOOL_CHAINS.md](TOOL_CHAINS.md) - Tool chain configuration
+- [HELP.md](../HELP.md) - Troubleshooting guide
 
 ## 🎯 Quick Test
 
@@ -509,5 +506,5 @@ zypheron reverse-eng test.txt --tool file
 
 ---
 
-**Need help?** Open an issue on [GitHub](https://github.com/KKingZero/Cobra-AI/issues)
+**Need help?** Check [HELP.md](../HELP.md) or open an issue on [GitHub](https://github.com/KKingZero/Zypheron-CLI/issues)
 

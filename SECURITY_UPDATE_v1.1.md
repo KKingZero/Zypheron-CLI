@@ -281,8 +281,8 @@ zypheron-free scan --help
 
 ```bash
 # Clone free edition
-git clone -b clean-main https://github.com/KKingZero/Cobra-AI.git
-cd Cobra-AI
+git clone https://github.com/KKingZero/Zypheron-CLI.git
+cd Zypheron-CLI
 
 # Build and install
 cd zypheron-go
@@ -322,7 +322,7 @@ These security improvements were developed for the Professional Edition and back
 
 ## 📞 Support
 
-- **Issues:** [GitHub Issues](https://github.com/KKingZero/Cobra-AI/issues)
+- **Issues:** [GitHub Issues](https://github.com/KKingZero/Zypheron-CLI/issues)
 - **Security:** security@zypheron.com
 - **Documentation:** [docs/](docs/)
 
