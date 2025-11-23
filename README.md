@@ -61,7 +61,7 @@ Full-featured penetration testing platform:
 | Autopent Engine | ❌ | ✅ |
 | Post-Exploitation | ❌ | ✅ |
 
-[🚀 Upgrade to Pro →](https://zypheron.com/upgrade)
+[🚀 Upgrade to Pro →](https://zypheron.net/cli)
 
 ## 🚀 Quick Start
 
