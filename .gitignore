@@ -49,3 +49,16 @@ dist/
 
 # Compressed binaries
 zypheron-go/build/*-upx
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+.pytest_cache/
+*.egg-info/

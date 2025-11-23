@@ -49,6 +49,7 @@ func main() {
 				"forensics":          true,
 				"api-pentest":        true,
 				"dork":               true,
+				"install-deps":       true,
 			// Tools subcommands
 			"install":     true,
 			"install-all": true,
@@ -89,6 +90,7 @@ func main() {
 	rootCmd.AddCommand(commands.ChatCmd())
 	rootCmd.AddCommand(commands.AICmd())
 	rootCmd.AddCommand(commands.SetupCmd())
+	rootCmd.AddCommand(commands.InstallDepsCmd())
 	rootCmd.AddCommand(commands.HistoryCmd())
 	rootCmd.AddCommand(commands.ReconCmd())
 	rootCmd.AddCommand(commands.BruteforceCmd())
