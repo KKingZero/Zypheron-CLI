@@ -193,9 +193,13 @@ class IPCServer:
         }
     
     async def handle_stream_chat(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle streaming chat request (note: real streaming needs different protocol)"""
-        # For now, return full response
-        # In production, implement WebSocket or SSE for true streaming
+        """
+        Handle streaming chat request.
+        
+        NOTE: True streaming requires a different protocol (e.g., SSE/WebSockets or NDJSON over this socket).
+        For now, this falls back to standard request/response to prevent client errors.
+        """
+        logger.debug("Stream chat requested - falling back to standard chat (streaming protocol not implemented)")
         return await self.handle_chat(params)
     
     async def handle_analyze_scan(self, params: Dict[str, Any]) -> Dict[str, Any]:

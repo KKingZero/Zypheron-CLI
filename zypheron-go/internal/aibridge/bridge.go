@@ -16,7 +16,6 @@ import (
 
 const (
 	DefaultSocketPath = "/tmp/zypheron-ai.sock"
-	PythonEnginePath  = "../zypheron-ai/core/server.py"
 	MaxRetries        = 5
 	RetryDelay        = 2 * time.Second
 )
@@ -74,6 +73,37 @@ type VulnerabilityPrediction struct {
 	RecommendedTests   []string `json:"recommended_tests"`
 }
 
+// findPythonEngine attempts to locate the Python server script
+func findPythonEngine() (string, error) {
+	// 1. Check environment variable
+	if envPath := os.Getenv("ZYPHERON_AI_PATH"); envPath != "" {
+		if _, err := os.Stat(envPath); err == nil {
+			return envPath, nil
+		}
+	}
+
+	// 2. Check relative path (Development)
+	devPath := "../zypheron-ai/core/server.py"
+	if _, err := os.Stat(devPath); err == nil {
+		return devPath, nil
+	}
+
+	// 3. Check standard install paths
+	commonPaths := []string{
+		"/usr/local/share/zypheron/zypheron-ai/core/server.py",
+		"/opt/zypheron/zypheron-ai/core/server.py",
+		filepath.Join(os.Getenv("HOME"), ".local/share/zypheron/zypheron-ai/core/server.py"),
+	}
+
+	for _, p := range commonPaths {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find zypheron-ai/core/server.py. Please set ZYPHERON_AI_PATH env var")
+}
+
 // loadAuthToken loads the authentication token from file
 func loadAuthToken() (string, error) {
 	homeDir, err := os.UserHomeDir()
@@ -109,10 +139,15 @@ func (b *AIBridge) Start() error {
 		return nil
 	}
 
-	fmt.Println(ui.InfoMsg("Starting AI Engine..."))
+	enginePath, err := findPythonEngine()
+	if err != nil {
+		return fmt.Errorf("failed to locate AI engine: %w", err)
+	}
+
+	fmt.Println(ui.InfoMsg(fmt.Sprintf("Starting AI Engine (%s)...", enginePath)))
 
 	// Start Python server
-	b.pythonProcess = exec.Command("python3", PythonEnginePath)
+	b.pythonProcess = exec.Command("python3", enginePath)
 	b.pythonProcess.Stdout = os.Stdout
 	b.pythonProcess.Stderr = os.Stderr
 
