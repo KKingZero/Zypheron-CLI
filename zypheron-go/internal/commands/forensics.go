@@ -193,11 +193,10 @@ func ForensicsCmd() *cobra.Command {
 
 			// Build execution options
 			opts := tools.ExecutionOptions{
-				Tool:     selectedTool,
-				Target:   targetFile,
-				Stream:   stream,
-				Timeout:  time.Duration(timeout) * time.Second,
-				AssumeYes: assumeYes,
+				Tool:    selectedTool,
+				Target:  targetFile,
+				Stream:  stream,
+				Timeout: time.Duration(timeout) * time.Second,
 			}
 
 			// Add tool-specific args

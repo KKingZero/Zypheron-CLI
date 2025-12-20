@@ -2,7 +2,9 @@ package kali
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -34,12 +36,24 @@ func NewToolManager() *ToolManager {
 
 // DetectTools detects which tools are installed
 func (tm *ToolManager) DetectTools() error {
+	// Get user's home directory for Go binaries
+	homeDir, _ := os.UserHomeDir()
+	goBinPath := filepath.Join(homeDir, "go", "bin")
+
 	for i := range tm.tools {
 		tool := &tm.tools[i]
 
-		// Check if command exists
+		// Check if command exists in PATH
 		_, err := exec.LookPath(tool.Command)
 		tool.Installed = err == nil
+
+		// If not found and Go bin path exists, check there too
+		if !tool.Installed && goBinPath != "" {
+			goToolPath := filepath.Join(goBinPath, tool.Command)
+			if _, err := os.Stat(goToolPath); err == nil {
+				tool.Installed = true
+			}
+		}
 
 		if tool.Installed {
 			// Get version
@@ -68,6 +82,17 @@ func (tm *ToolManager) GetStats() Stats {
 	}
 
 	return stats
+}
+
+// GetMissingTools returns a list of tools that are not installed
+func (tm *ToolManager) GetMissingTools() []Tool {
+	var missing []Tool
+	for _, tool := range tm.tools {
+		if !tool.Installed {
+			missing = append(missing, tool)
+		}
+	}
+	return missing
 }
 
 // Stats represents tool statistics
@@ -122,21 +147,50 @@ func getInstallCommand(toolName string) (string, []string, error) {
 		cmd  string
 		args []string
 	}{
-		"nmap":         {"apt-get", []string{"install", "-y", "nmap"}},
-		"nikto":        {"apt-get", []string{"install", "-y", "nikto"}},
-		"nuclei":       {"apt-get", []string{"install", "-y", "nuclei"}},
-		"masscan":      {"apt-get", []string{"install", "-y", "masscan"}},
-		"sqlmap":       {"apt-get", []string{"install", "-y", "sqlmap"}},
-		"hydra":        {"apt-get", []string{"install", "-y", "hydra"}},
-		"metasploit":   {"apt-get", []string{"install", "-y", "metasploit-framework"}},
-		"gobuster":     {"apt-get", []string{"install", "-y", "gobuster"}},
-		"ffuf":         {"apt-get", []string{"install", "-y", "ffuf"}},
-		"subfinder":    {"apt-get", []string{"install", "-y", "subfinder"}},
-		"amass":        {"apt-get", []string{"install", "-y", "amass"}},
-		"theharvester": {"apt-get", []string{"install", "-y", "theharvester"}},
-		"aircrack-ng":  {"apt-get", []string{"install", "-y", "aircrack-ng"}},
-		"john":         {"apt-get", []string{"install", "-y", "john"}},
-		"hashcat":      {"apt-get", []string{"install", "-y", "hashcat"}},
+		// Network/Web scanners
+		"nmap":         {"sudo", []string{"apt-get", "install", "-y", "nmap"}},
+		"nikto":        {"sudo", []string{"apt-get", "install", "-y", "nikto"}},
+		"masscan":      {"sudo", []string{"apt-get", "install", "-y", "masscan"}},
+		"sqlmap":       {"sudo", []string{"apt-get", "install", "-y", "sqlmap"}},
+		"hydra":        {"sudo", []string{"apt-get", "install", "-y", "hydra"}},
+		"metasploit":   {"sudo", []string{"apt-get", "install", "-y", "metasploit-framework"}},
+		"gobuster":     {"sudo", []string{"apt-get", "install", "-y", "gobuster"}},
+		"ffuf":         {"sudo", []string{"apt-get", "install", "-y", "ffuf"}},
+		"aircrack-ng":  {"sudo", []string{"apt-get", "install", "-y", "aircrack-ng"}},
+		"john":         {"sudo", []string{"apt-get", "install", "-y", "john"}},
+		"hashcat":      {"sudo", []string{"apt-get", "install", "-y", "hashcat"}},
+
+		// Go-based tools - require Go to be installed first
+		"nuclei":    {"bash", []string{"-c", "command -v go >/dev/null 2>&1 && go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest || (sudo apt-get update && sudo apt-get install -y golang-go && go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest)"}},
+		"subfinder": {"bash", []string{"-c", "command -v go >/dev/null 2>&1 && go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest || (sudo apt-get update && sudo apt-get install -y golang-go && go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest)"}},
+		"amass":     {"bash", []string{"-c", "command -v go >/dev/null 2>&1 && go install -v github.com/owasp-amass/amass/v4/...@master || (sudo apt-get update && sudo apt-get install -y golang-go && go install -v github.com/owasp-amass/amass/v4/...@master)"}},
+
+		// Python-based tools
+		"theharvester": {"sudo", []string{"apt-get", "install", "-y", "theHarvester"}},
+		"ropper":       {"bash", []string{"-c", "command -v pip3 >/dev/null 2>&1 && sudo pip3 install ropper || (sudo apt-get install -y python3-pip && sudo pip3 install ropper)"}},
+		"volatility":   {"sudo", []string{"apt-get", "install", "-y", "volatility3"}},
+		"pwntools":     {"bash", []string{"-c", "command -v pip3 >/dev/null 2>&1 && sudo pip3 install pwntools || (sudo apt-get install -y python3-pip && sudo pip3 install pwntools)"}},
+
+		// Ruby-based tools
+		"one_gadget": {"bash", []string{"-c", "command -v gem >/dev/null 2>&1 && sudo gem install one_gadget || (sudo apt-get install -y ruby-full && sudo gem install one_gadget)"}},
+
+		// Reverse Engineering
+		"ghidra":  {"bash", []string{"-c", "wget -q https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.2_build/ghidra_11.2_PUBLIC_20241105.zip -O /tmp/ghidra.zip && sudo unzip -q /tmp/ghidra.zip -d /opt/ && sudo ln -sf /opt/ghidra_*/ghidraRun /usr/local/bin/ghidra && rm /tmp/ghidra.zip"}},
+		"radare2": {"sudo", []string{"apt-get", "install", "-y", "radare2"}},
+		"gdb":     {"sudo", []string{"apt-get", "install", "-y", "gdb"}},
+		"strings": {"sudo", []string{"apt-get", "install", "-y", "binutils"}},
+		"objdump": {"sudo", []string{"apt-get", "install", "-y", "binutils"}},
+		"readelf": {"sudo", []string{"apt-get", "install", "-y", "binutils"}},
+		"file":    {"sudo", []string{"apt-get", "install", "-y", "file"}},
+
+		// Pwn tools
+		"checksec": {"sudo", []string{"apt-get", "install", "-y", "checksec"}},
+
+		// Forensics
+		"autopsy":   {"sudo", []string{"apt-get", "install", "-y", "autopsy"}},
+		"sleuthkit": {"sudo", []string{"apt-get", "install", "-y", "sleuthkit"}},
+		"binwalk":   {"sudo", []string{"apt-get", "install", "-y", "binwalk"}},
+		"foremost":  {"sudo", []string{"apt-get", "install", "-y", "foremost"}},
 	}
 
 	cmdInfo, exists := installCommands[strings.ToLower(toolName)]
@@ -178,18 +232,20 @@ func (tm *ToolManager) Install(name string) error {
 // SuggestTool suggests the best tool for a task
 func (tm *ToolManager) SuggestTool(task string) *Tool {
 	taskMap := map[string]string{
-		"scan":     "nmap",
-		"portscan": "nmap",
-		"web":      "nikto",
-		"webscan":  "nikto",
-		"vuln":     "nuclei",
-		// "exploit" removed in FREE version
-		"bruteforce": "hydra",
-		"password":   "john",
-		"recon":      "nmap",
-		"osint":      "theharvester",
-		"wireless":   "aircrack-ng",
-		"fuzz":       "ffuf",
+		"scan":        "nmap",
+		"portscan":    "nmap",
+		"web":         "nikto",
+		"webscan":     "nikto",
+		"vuln":        "nuclei",
+		"bruteforce":  "hydra",
+		"password":    "john",
+		"recon":       "nmap",
+		"osint":       "theharvester",
+		"wireless":    "aircrack-ng",
+		"fuzz":        "ffuf",
+		"reverse-eng": "radare2",
+		"pwn":         "pwntools",
+		"forensics":   "volatility",
 	}
 
 	toolName, exists := taskMap[strings.ToLower(task)]
@@ -311,11 +367,11 @@ func getDefaultTools() []Tool {
 		{
 			Name:        "metasploit",
 			Command:     "msfconsole",
-			Description: "Penetration testing framework (Pro version only)",
+			Description: "Penetration testing framework",
 			Category:    "exploit",
-			Priority:    "low", // Downgraded from critical in FREE version
-			InstallCmd:  "echo 'Metasploit integration is not available in FREE version'",
-			RequiredFor: []string{}, // Removed from FREE version
+			Priority:    "critical",
+			InstallCmd:  "sudo apt-get install -y metasploit-framework",
+			RequiredFor: []string{"exploit"},
 			Aliases:     []string{"msf", "msfconsole"},
 		},
 		{
@@ -376,6 +432,169 @@ func getDefaultTools() []Tool {
 			Priority:    "low",
 			InstallCmd:  "sudo apt-get install -y aircrack-ng",
 			RequiredFor: []string{"wireless"},
+			Aliases:     []string{},
+		},
+		// Reverse Engineering Tools
+		{
+			Name:        "ghidra",
+			Command:     "ghidra",
+			Description: "Software reverse engineering framework",
+			Category:    "reverse-engineering",
+			Priority:    "high",
+			InstallCmd:  "sudo apt-get install -y ghidra",
+			RequiredFor: []string{"reverse-eng"},
+			Aliases:     []string{},
+		},
+		{
+			Name:        "radare2",
+			Command:     "r2",
+			Description: "Command-line reverse engineering framework",
+			Category:    "reverse-engineering",
+			Priority:    "high",
+			InstallCmd:  "sudo apt-get install -y radare2",
+			RequiredFor: []string{"reverse-eng"},
+			Aliases:     []string{"r2", "radare2"},
+		},
+		{
+			Name:        "gdb",
+			Command:     "gdb",
+			Description: "GNU debugger",
+			Category:    "reverse-engineering",
+			Priority:    "critical",
+			InstallCmd:  "sudo apt-get install -y gdb",
+			RequiredFor: []string{"reverse-eng", "pwn"},
+			Aliases:     []string{"gdb"},
+		},
+		{
+			Name:        "pwntools",
+			Command:     "python3",
+			Description: "CTF framework and exploit development library",
+			Category:    "pwn",
+			Priority:    "high",
+			InstallCmd:  "pip3 install pwntools",
+			RequiredFor: []string{"pwn", "reverse-eng"},
+			Aliases:     []string{"pwn", "pwntools"},
+		},
+		{
+			Name:        "strings",
+			Command:     "strings",
+			Description: "Print sequences of printable characters",
+			Category:    "reverse-engineering",
+			Priority:    "medium",
+			InstallCmd:  "sudo apt-get install -y binutils",
+			RequiredFor: []string{"reverse-eng", "forensics"},
+			Aliases:     []string{},
+		},
+		{
+			Name:        "objdump",
+			Command:     "objdump",
+			Description: "Display information from object files",
+			Category:    "reverse-engineering",
+			Priority:    "medium",
+			InstallCmd:  "sudo apt-get install -y binutils",
+			RequiredFor: []string{"reverse-eng"},
+			Aliases:     []string{},
+		},
+		{
+			Name:        "readelf",
+			Command:     "readelf",
+			Description: "Display information about ELF files",
+			Category:    "reverse-engineering",
+			Priority:    "medium",
+			InstallCmd:  "sudo apt-get install -y binutils",
+			RequiredFor: []string{"reverse-eng"},
+			Aliases:     []string{},
+		},
+		{
+			Name:        "file",
+			Command:     "file",
+			Description: "Determine file type",
+			Category:    "reverse-engineering",
+			Priority:    "medium",
+			InstallCmd:  "sudo apt-get install -y file",
+			RequiredFor: []string{"reverse-eng", "forensics"},
+			Aliases:     []string{},
+		},
+		// Pwn Tools
+		{
+			Name:        "checksec",
+			Command:     "checksec",
+			Description: "Check security properties of executables",
+			Category:    "pwn",
+			Priority:    "high",
+			InstallCmd:  "sudo apt-get install -y checksec",
+			RequiredFor: []string{"pwn"},
+			Aliases:     []string{},
+		},
+		{
+			Name:        "ropper",
+			Command:     "ropper",
+			Description: "ROP gadget finder and binary information tool",
+			Category:    "pwn",
+			Priority:    "medium",
+			InstallCmd:  "pip3 install ropper",
+			RequiredFor: []string{"pwn"},
+			Aliases:     []string{},
+		},
+		{
+			Name:        "one_gadget",
+			Command:     "one_gadget",
+			Description: "Find one-gadget RCE in libc",
+			Category:    "pwn",
+			Priority:    "medium",
+			InstallCmd:  "gem install one_gadget",
+			RequiredFor: []string{"pwn"},
+			Aliases:     []string{"one-gadget"},
+		},
+		// Forensics Tools
+		{
+			Name:        "volatility",
+			Command:     "volatility",
+			Description: "Memory forensics framework",
+			Category:    "forensics",
+			Priority:    "high",
+			InstallCmd:  "sudo apt-get install -y volatility",
+			RequiredFor: []string{"forensics"},
+			Aliases:     []string{"vol"},
+		},
+		{
+			Name:        "autopsy",
+			Command:     "autopsy",
+			Description: "Digital forensics platform",
+			Category:    "forensics",
+			Priority:    "medium",
+			InstallCmd:  "sudo apt-get install -y autopsy",
+			RequiredFor: []string{"forensics"},
+			Aliases:     []string{},
+		},
+		{
+			Name:        "sleuthkit",
+			Command:     "tsk_loaddb",
+			Description: "Command-line forensics tools",
+			Category:    "forensics",
+			Priority:    "high",
+			InstallCmd:  "sudo apt-get install -y sleuthkit",
+			RequiredFor: []string{"forensics"},
+			Aliases:     []string{"tsk", "sleuthkit"},
+		},
+		{
+			Name:        "binwalk",
+			Command:     "binwalk",
+			Description: "Firmware analysis tool",
+			Category:    "forensics",
+			Priority:    "medium",
+			InstallCmd:  "sudo apt-get install -y binwalk",
+			RequiredFor: []string{"forensics"},
+			Aliases:     []string{},
+		},
+		{
+			Name:        "foremost",
+			Command:     "foremost",
+			Description: "File carving and recovery tool",
+			Category:    "forensics",
+			Priority:    "medium",
+			InstallCmd:  "sudo apt-get install -y foremost",
+			RequiredFor: []string{"forensics"},
 			Aliases:     []string{},
 		},
 	}

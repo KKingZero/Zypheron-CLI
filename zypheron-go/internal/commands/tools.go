@@ -2,8 +2,8 @@ package commands
 
 import (
 	"fmt"
-
 	"os"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/kali"
@@ -17,7 +17,21 @@ func ToolsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "tools",
 		Short: "Manage and check Kali security tools",
-		Long:  "Check, list, install, and manage Kali Linux security tools",
+		Long: `Check, list, install, and manage Kali Linux security tools.
+
+Zypheron integrates with 30+ security tools including nmap, nikto, nuclei,
+masscan, and more. Use these commands to check installation status and
+install missing tools.
+
+Examples:
+  zypheron tools check                    # Check all installed tools
+  zypheron tools check --category web     # Check tools in specific category
+  zypheron tools list                     # List all available tools
+  zypheron tools list --missing           # Show only missing tools
+  zypheron tools install nmap             # Install a specific tool
+  zypheron tools install-all              # Install all missing tools
+  zypheron tools info nmap                # Get detailed info about a tool
+  zypheron tools suggest "port scan"      # Get tool recommendation`,
 	}
 
 	cmd.AddCommand(toolsCheckCmd())
@@ -37,6 +51,15 @@ func toolsCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Check installed tools",
+		Long: `Check which security tools are installed on your system.
+
+Shows installation status for all tools or filters by category.
+Displays statistics including total, installed, and missing tools.
+
+Examples:
+  zypheron tools check                    # Check all tools
+  zypheron tools check --category web     # Check only web tools
+  zypheron tools check --category network # Check only network tools`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Println(ui.InfoMsg("Checking installed security tools...\n"))
 
@@ -83,6 +106,66 @@ func toolsCheckCmd() *cobra.Command {
 			}
 			if stats.High > 0 {
 				fmt.Printf("  High Priority Missing: %s\n", ui.Warning.Sprint(stats.High))
+			}
+
+			// Show missing tools list with details
+			if stats.Missing > 0 {
+				missingTools := toolManager.GetMissingTools()
+				fmt.Printf("\n%s\n\n", ui.WarningMsg("Missing Tools:"))
+
+				// Group by priority
+				var criticalMissing, highMissing, otherMissing []kali.Tool
+				for _, tool := range missingTools {
+					switch tool.Priority {
+					case "critical":
+						criticalMissing = append(criticalMissing, tool)
+					case "high":
+						highMissing = append(highMissing, tool)
+					default:
+						otherMissing = append(otherMissing, tool)
+					}
+				}
+
+				// Show critical missing tools first
+				if len(criticalMissing) > 0 {
+					fmt.Printf("  %s\n", ui.Danger.Sprint("CRITICAL (blocking core features):"))
+					for _, tool := range criticalMissing {
+						fmt.Printf("    %s %s - %s\n",
+							ui.Danger.Sprint("•"),
+							ui.Accent.Sprint(tool.Name),
+							ui.Muted.Sprint(tool.Description))
+					}
+					fmt.Println()
+				}
+
+				// Show high priority missing
+				if len(highMissing) > 0 {
+					fmt.Printf("  %s\n", ui.Warning.Sprint("HIGH PRIORITY:"))
+					for _, tool := range highMissing {
+						fmt.Printf("    %s %s - %s\n",
+							ui.Warning.Sprint("•"),
+							ui.Accent.Sprint(tool.Name),
+							ui.Muted.Sprint(tool.Description))
+					}
+					fmt.Println()
+				}
+
+				// Show other missing
+				if len(otherMissing) > 0 {
+					fmt.Printf("  %s\n", ui.Muted.Sprint("OTHER:"))
+					var otherNames []string
+					for _, tool := range otherMissing {
+						otherNames = append(otherNames, tool.Name)
+					}
+					fmt.Printf("    %s\n", ui.Muted.Sprint(strings.Join(otherNames, ", ")))
+					fmt.Println()
+				}
+
+				// Installation suggestions
+				fmt.Printf("%s\n", ui.InfoMsg("Quick Install Options:"))
+				fmt.Printf("  %s  Install all missing tools\n", ui.Accent.Sprint("zypheron tools install-all"))
+				fmt.Printf("  %s  Install critical only\n", ui.Accent.Sprint("zypheron tools install-all --critical-only"))
+				fmt.Printf("  %s   Install a specific tool\n", ui.Accent.Sprint("zypheron tools install <name>"))
 			}
 
 			fmt.Println()

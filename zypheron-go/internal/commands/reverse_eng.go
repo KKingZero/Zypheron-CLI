@@ -194,7 +194,6 @@ func ReverseEngCmd() *cobra.Command {
 				Target:  targetBinary,
 				Stream:  stream,
 				Timeout: time.Duration(timeout) * time.Second,
-				AssumeYes: assumeYes,
 			}
 
 			// Add tool-specific args

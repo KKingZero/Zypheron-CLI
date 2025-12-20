@@ -49,3 +49,6 @@ dist/
 
 # Compressed binaries
 zypheron-go/build/*-upx
+
+# Archived documentation (outdated/internal)
+docs/archive/

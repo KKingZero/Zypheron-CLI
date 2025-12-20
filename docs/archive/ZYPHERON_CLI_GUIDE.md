@@ -1,4 +1,7 @@
-# Zypheron CLI User Guide
+# Zypheron CLI User Guide (FREE VERSION)
+
+> **⚠️ FREE VERSION**: This guide covers Zypheron FREE, which focuses on vulnerability discovery and analysis.
+> Automated exploit execution features are not available in this version.
 
 ## 📚 Table of Contents
 - [Introduction](#introduction)
@@ -16,13 +19,15 @@
 
 **Zypheron** is an AI-powered penetration testing platform that integrates with Kali Linux security tools. It combines the power of multiple AI providers (Claude, OpenAI, Gemini, DeepSeek, Grok, Ollama) with industry-standard security tools to provide intelligent, automated security assessments.
 
-### Key Features
+### Key Features (FREE VERSION)
 - 🤖 **Multi-AI Provider Support** - Leverage multiple AI engines for enhanced analysis
-- 🛠️ **Kali Tools Integration** - Seamless integration with nmap, nikto, metasploit, and more
+- 🛠️ **Kali Tools Integration** - Seamless integration with nmap, nikto, sqlmap, and more
 - 🔍 **Intelligent Scanning** - AI-powered vulnerability detection and analysis
 - 📊 **Real-time Monitoring** - Live dashboard for scan progress and results
-- 🎯 **Autonomous Agents** - Self-directed penetration testing capabilities
+- 🎯 **Autonomous Agents** - Self-directed vulnerability discovery (scanning only)
 - 📝 **Advanced Reporting** - Comprehensive reports with AI-enriched findings
+
+**Note**: Metasploit integration and automated exploit execution are available in Zypheron Pro.
 
 ---
 
@@ -38,10 +43,14 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/zypheron.git
-cd zypheron/zypheron-go
+git clone https://github.com/KKingZero/Cobra-AI.git
+cd Cobra-AI
+
+# Switch to Zypheron-CLI branch
+git checkout Zypheron-CLI
 
 # Build the CLI
+cd zypheron-go
 make build
 
 # Install system-wide (optional)
@@ -173,37 +182,6 @@ zypheron tools install-all --critical-only
 
 # Install all high-priority tools
 zypheron tools install-all --high-priority
-```
-
-### Tool Integrations
-
-#### Burp Suite Professional
-
-```bash
-# Start a Burp scan and import findings
-zypheron integrate burp \
-  --target https://example.com \
-  --host 127.0.0.1 \
-  --port 1337 \
-  --api-key $BURP_API_KEY \
-  --spider \
-  --active-scan \
-  --import \
-  --output burp-results.json
-```
-
-#### OWASP ZAP
-
-```bash
-# Run a ZAP scan and save results
-zypheron integrate zap \
-  --target https://example.com \
-  --host 127.0.0.1 \
-  --port 8080 \
-  --spider \
-  --ajax-spider \
-  --active-scan \
-  --output zap-results.json
 ```
 
 ### AI Chat Interface
@@ -498,18 +476,20 @@ zypheron scan TARGET --tool nikto --input nmap.json --output nikto.json
 zypheron scan TARGET --tool nuclei --input nikto.json --output final.json
 ```
 
-### 3. AI-Powered Exploitation
+### 3. AI-Powered Analysis
 
 ```bash
-# Start autonomous agent
-zypheron exploit auto --target TARGET --safe-mode
+# AI analysis of scan results
+zypheron chat "Analyze the vulnerabilities found in scan ID: abc123"
 
-# Guided exploitation with AI
-zypheron exploit guided --target TARGET --vulnerability CVE-2023-1234
+# Get AI recommendations
+zypheron chat "What are the most critical findings and how should I prioritize them?"
 
-# AI-suggested exploitation paths
-zypheron chat "What exploitation paths exist for findings in scan ID: abc123?"
+# Ask for remediation guidance
+zypheron chat "How do I fix the SQL injection vulnerability found in the web app?"
 ```
+
+**Note**: Automated exploit execution is not available in the FREE version of Zypheron.
 
 ### 4. Multi-Target Campaigns
 
@@ -596,7 +576,7 @@ zypheron config set api-key NEW_KEY
 #### 1. Command Not Found
 ```bash
 # If 'zypheron' is not found, use full path
-$(pwd)/zypheron-go/build/zypheron
+/home/zero/Downloads/Cobra-AI-Zypheron-CLI/zypheron-go/build/zypheron
 
 # Or create an alias
 alias zypheron='/path/to/zypheron'
@@ -690,7 +670,7 @@ zypheron config validate
 ## 📚 Additional Resources
 
 ### Official Documentation
-- [GitHub Repository](https://github.com/yourusername/zypheron)
+- [GitHub Repository](https://github.com/KKingZero/Cobra-AI)
 - [Quick Start Guide](./zypheron-go/QUICK_START.md)
 - [Migration Guide](./zypheron-go/MIGRATION_GUIDE.md)
 

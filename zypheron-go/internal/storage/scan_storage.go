@@ -3,7 +3,6 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -51,7 +50,7 @@ func (s *ScanStorage) SaveScan(scan *types.ScanResult) error {
 		return fmt.Errorf("failed to marshal scan: %w", err)
 	}
 
-	if err := ioutil.WriteFile(filepath, data, 0600); err != nil {
+	if err := os.WriteFile(filepath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write scan file: %w", err)
 	}
 
@@ -63,7 +62,7 @@ func (s *ScanStorage) LoadScan(scanID string) (*types.ScanResult, error) {
 	filename := fmt.Sprintf("%s.json", scanID)
 	filepath := filepath.Join(s.storageDir, filename)
 
-	data, err := ioutil.ReadFile(filepath)
+	data, err := os.ReadFile(filepath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("scan not found: %s", scanID)
@@ -81,7 +80,7 @@ func (s *ScanStorage) LoadScan(scanID string) (*types.ScanResult, error) {
 
 // ListScans lists all saved scans, newest first
 func (s *ScanStorage) ListScans() ([]types.ScanSummary, error) {
-	files, err := ioutil.ReadDir(s.storageDir)
+	files, err := os.ReadDir(s.storageDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read storage directory: %w", err)
 	}

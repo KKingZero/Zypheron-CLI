@@ -1,296 +1,100 @@
-# ⚡ Zypheron - AI-Powered Penetration Testing CLI (FREE VERSION)
+# Zypheron - AI-Powered Penetration Testing CLI
 
-[![Go Tests](https://github.com/KKingZero/Cobra-AI/actions/workflows/go-tests.yml/badge.svg)](https://github.com/KKingZero/Cobra-AI/actions/workflows/go-tests.yml)
-[![Python Tests](https://github.com/KKingZero/Cobra-AI/actions/workflows/python-tests.yml/badge.svg)](https://github.com/KKingZero/Cobra-AI/actions/workflows/python-tests.yml)
-[![Security Scan](https://github.com/KKingZero/Cobra-AI/actions/workflows/security.yml/badge.svg)](https://github.com/KKingZero/Cobra-AI/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/KKingZero/Cobra-AI/branch/main/graph/badge.svg)](https://codecov.io/gh/KKingZero/Cobra-AI)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://go.dev/)
 [![Python Version](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> High-performance, OPSEC-focused penetration testing command-line tool written in Go
-> 
-> **⚠️ FREE VERSION**: This is the free version of Zypheron. Automated exploit execution is not included.
-> Zypheron FREE focuses on vulnerability discovery, analysis, and reporting.
+> High-performance penetration testing CLI written in Go with AI-powered analysis.
 
 ```
-╔═══════════════════════════════════════════════════════════╗
-║  ███████╗██╗   ██╗██████╗ ██╗  ██╗███████╗██████╗  ██████╗║
-║  ╚══███╔╝╚██╗ ██╔╝██╔══██╗██║  ██║██╔════╝██╔══██╗██╔═══██╗
-║    ███╔╝  ╚████╔╝ ██████╔╝███████║█████╗  ██████╔╝██║   ██║║
-║   ███╔╝    ╚██╔╝  ██╔═══╝ ██╔══██║██╔══╝  ██╔══██╗██║   ██║║
-║  ███████╗   ██║   ██║     ██║  ██║███████╗██║  ██║╚██████╔╝║
-║  ╚══════╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ║
-╚═══════════════════════════════════════════════════════════╝
-    AI-Powered Penetration Testing Platform
+╔══════════════════════════════════════════════════════════════════════╗
+║  ███████╗██╗   ██╗██████╗ ██╗  ██╗███████╗██████╗  ██████╗ ██╗   ██╗ ║
+║  ╚══███╔╝╚██╗ ██╔╝██╔══██╗██║  ██║██╔════╝██╔══██╗██╔═══██╗████╗ ██║ ║
+║    ███╔╝  ╚████╔╝ ██████╔╝███████║█████╗  ██████╔╝██║   ██║██╔██╗██║ ║
+║   ███╔╝    ╚██╔╝  ██╔═══╝ ██╔══██║██╔══╝  ██╔══██╗██║   ██║██║╚████║ ║
+║  ███████╗   ██║   ██║     ██║  ██║███████╗██║  ██║╚██████╔╝██║ ╚███║ ║
+║  ╚══════╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚══╝ ║
+╚══════════════════════════════════════════════════════════════════════╝
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-cd zypheron-go
+# Clone and build
+git clone https://github.com/KKingZero/Zypheron-CLI.git
+cd Zypheron-CLI/zypheron-go
+go mod tidy && go build -o zypheron ./cmd/zypheron
 
-# Install dependencies
-make deps
-# in case you had any errros  run this
-go mod tidy
-# Build
-make build
+# Install system-wide (optional)
+sudo cp zypheron /usr/local/bin/
 
-# Install system-wide
-sudo make install
-
-# Start pentesting!
+# Start scanning
 zypheron scan example.com
 ```
 
-## 📖 Full Documentation
+## Features
 
-**All documentation is in the `zypheron-go/` directory:**
+- **Fast** - Single ~10MB binary, 5-10ms startup
+- **30+ Security Tools** - nmap, nuclei, nikto, sqlmap, radare2, and more
+- **AI-Powered** - Chat assistant, scan analysis, guided scanning
+- **Cross-Platform** - Linux, macOS, Windows (WSL)
+- **OPSEC-Friendly** - Minimal footprint, no dependencies
 
-- **[README.md](zypheron-go/README.md)** - Complete documentation
-- **[QUICK_START.md](zypheron-go/QUICK_START.md)** - Get started in 5 minutes
-- **[MIGRATION_GUIDE.md](zypheron-go/MIGRATION_GUIDE.md)** - Migrating from older versions
+## Documentation
 
-## ⚡ What is Zypheron?
+| Guide | Description |
+|-------|-------------|
+| **[Quick Start](QUICKSTART.md)** | Get running in under 5 minutes |
+| **[Installation](docs/INSTALL.md)** | Full installation guide with all options |
+| **[Setup & Usage](docs/SETUP_AND_USE.md)** | Configuration and usage guide |
+| **[Go CLI Reference](docs/GO_GUIDE.md)** | Complete command reference |
+| **[AI Features](docs/AI_GUIDE.md)** | AI setup and usage |
+| **[MCP Integration](docs/MCP_INTEGRATION.md)** | Connect AI agents to security tools |
+| **[Troubleshooting](HELP.md)** | Common issues and solutions |
 
-Zypheron is a **high-performance penetration testing CLI** built in Go that integrates directly with Kali Linux tools. It provides:
-
-- 🚀 **10-20x faster** than Node.js alternatives
-- 📦 **Single 7-15 MB binary** (no dependencies)
-- 🔒 **Excellent OPSEC** (minimal footprint)
-- 🛠️ **20+ integrated Kali tools**
-- 🤖 **AI-powered analysis** (optional backend integration)
-- ⚡ **Real-time streaming** output
-- 🎯 **Cross-platform** (Linux, macOS, Windows)
-
-## 🎯 Key Features
-
-### Security Scanning
-```bash
-# Quick scan
-zypheron scan example.com
-
-# Web application test
-zypheron scan https://example.com --web
-
-# Full pentest suite
-zypheron scan example.com --full
-```
-
-### Tool Management
-```bash
-# Check installed tools
-zypheron tools check
-
-# List all available tools
-zypheron tools list
-
-# Install missing tools
-zypheron tools install-all --critical-only
-```
-
-### AI Integration
-```bash
-# AI chat assistant
-zypheron chat "How do I test for SQL injection?"
-
-# AI-guided scanning
-zypheron scan example.com --ai-guided
-```
-
-## 📊 Performance
-
-| Metric | Value |
-|--------|-------|
-| **Startup Time** | 5-10ms |
-| **Binary Size** | 7-15 MB |
-| **Memory Usage** | 10-20 MB |
-| **Dependencies** | 0 |
-| **OPSEC Rating** | Excellent |
-
-## 🛠️ Integrated Tools
-
-- **nmap** - Network scanning
-- **nikto** - Web server scanning
-- **nuclei** - Vulnerability scanning
-- **masscan** - Fast port scanning
-- **sqlmap** - SQL injection testing
-- **hydra** - Bruteforce attacks
-- **gobuster** - Directory busting
-- **ffuf** - Web fuzzing
-- **subfinder** - Subdomain enumeration
-- And 10+ more...
-
-**Note**: Metasploit and automated exploit execution are not available in the FREE version.
-
-## 🎓 Examples
+## Commands
 
 ```bash
-# Basic security scan
-zypheron scan example.com
+# Scanning
+zypheron scan example.com              # Basic scan
+zypheron scan example.com --web        # Web app scan
+zypheron scan example.com --ai-guided  # AI-guided scan
 
-# Web application pentest
-zypheron scan https://example.com --web --ai-analysis
+# Tool Management
+zypheron tools check                   # Check installed tools
+zypheron tools install-all             # Install all tools
 
-# Fast network scan
-zypheron scan 192.168.1.0/24 --fast
+# AI Chat
+zypheron chat "How do I test for SQLi?"
 
-# Bruteforce SSH
-zypheron bruteforce ssh 192.168.1.1
+# Reverse Engineering
+zypheron reverse-eng binary --tool radare2
 
-# OSINT gathering
-zypheron osint email target@example.com
-
-# Install all tools
-zypheron tools install-all -y
+# Forensics
+zypheron forensics image.dd --tool volatility
 ```
 
-## 🐚 Ultra-Fast Mode
+## Integrated Tools
 
-For **instant execution**, use the bash wrappers:
+| Category | Tools |
+|----------|-------|
+| **Scanning** | nmap, masscan, nuclei |
+| **Web** | nikto, sqlmap, gobuster, ffuf |
+| **Password** | hydra, john, hashcat |
+| **Recon** | subfinder, amass, theharvester |
+| **RE/Pwn** | radare2, gdb, ghidra, pwntools, checksec |
+| **Forensics** | volatility, sleuthkit, binwalk |
 
-```bash
-# Direct tool execution (no overhead)
-./zypheron-go/scripts/bash/zscan example.com
-./zypheron-go/scripts/bash/ztools
-```
+## Requirements
 
-## 📋 Available Commands
+- Go 1.21+ (for building)
+- Python 3.9+ (for AI features)
+- Linux/macOS/WSL (Kali recommended)
 
-- `scan` - Security scanning
-- `tools` - Tool management
-- `chat` - AI assistant
-- `config` - Configuration
-- `recon` - Reconnaissance
-- `bruteforce` - Credential attacks
-- `fuzz` - Web fuzzing
-- `osint` - OSINT operations
-- `threat` - Threat intelligence
-- `report` - Report generation
-- `dashboard` - Real-time monitoring
-- `setup` - Initial setup
-- `kali` - Kali-specific operations
+## Legal
 
-**Note**: `exploit` command is not available in the FREE version. Upgrade to Zypheron Pro for automated exploit execution.
+**For authorized security testing only.** Always obtain written permission before testing any systems. See [SECURITY.md](SECURITY.md) for our security policy.
 
-## 🏗️ Architecture
+## License
 
-```
-┌─────────────────────────────────────────┐
-│      Zypheron CLI (Single Binary)      │
-│       - No dependencies                 │
-│       - Statically linked               │
-│       - Cross-platform                  │
-└──────────────┬──────────────────────────┘
-               │
-       ┌───────┴────────┐
-       │                │
-  ┌────▼────┐      ┌────▼────┐
-  │  Kali   │      │Optional │
-  │  Tools  │      │Backend  │
-  └─────────┘      └─────────┘
-```
-
-## 📦 Installation
-
-### Prerequisites
-- Go 1.21+ (for building from source)
-- Linux, macOS, or Windows
-- Kali Linux (recommended for tool integration)
-
-### From Source
-```bash
-git clone https://github.com/yourusername/zypheron.git
-cd zypheron/zypheron-go
-make deps
-make build
-sudo make install
-```
-
-### Pre-built Binaries
-Download from [Releases](https://github.com/yourusername/zypheron/releases)
-
-## 🔒 OPSEC Features
-
-- ✅ **Single binary** - No installation traces
-- ✅ **No dependencies** - Statically linked
-- ✅ **Stripped symbols** - Harder to reverse engineer
-- ✅ **Minimal footprint** - 7-15 MB only
-- ✅ **Portable** - Copy and run anywhere
-
-## 🌟 Why Zypheron?
-
-Traditional pentesting CLIs are slow, bloated, and leave traces. Zypheron is:
-
-- **Fast** - Native Go performance
-- **Lightweight** - Single small binary
-- **Stealthy** - Minimal OPSEC footprint
-- **Powerful** - Full Kali tool integration
-- **Smart** - Optional AI assistance
-- **Professional** - Built for security pros
-
-## 📞 Support & Documentation
-
-- **Main Documentation**: See `zypheron-go/README.md`
-- **Security Policy**: [SECURITY.md](SECURITY.md)
-- **Testing Guide**: [TESTING.md](TESTING.md)
-- **Quick Start**: [zypheron-go/QUICK_START.md](zypheron-go/QUICK_START.md)
-- **Issues**: GitHub Issues
-- **Security**: Report vulnerabilities responsibly
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## ⚠️ Legal Disclaimer
-
-Zypheron is intended **exclusively for authorized security testing and educational purposes**. Users are solely responsible for ensuring compliance with applicable laws, regulations, and organizational policies. **Always obtain explicit written authorization** before conducting penetration tests on any systems.
-
-Unauthorized access to computer systems is illegal and unethical.
-
-## 🛡️ Security Features
-
-Zypheron implements comprehensive security measures:
-
-### Input Validation & Injection Prevention
-- ✅ **Command injection protection** - All user inputs validated against allowlists
-- ✅ **Target validation** - Strict validation of IPs, domains, and CIDR ranges
-- ✅ **Port validation** - Range checking (1-65535)
-- ✅ **Path sanitization** - Prevents directory traversal attacks
-
-### Secure IPC Communication
-- 🔐 **Authentication tokens** - 256-bit token for Go ↔ Python communication
-- 🔐 **Socket permissions** - Unix socket restricted to owner (0600)
-- 🔐 **Token persistence** - Secure storage in `~/.zypheron/ipc.token`
-
-### API Key Storage
-- 🔑 **System keyring integration** - Uses OS credential manager
-- 🔑 **No plain text storage** - API keys never stored in .env files
-- 🔑 **Cross-platform** - Keychain (macOS), Secret Service (Linux), Credential Manager (Windows)
-
-```bash
-# Securely store API keys
-zypheron config set-key anthropic
-zypheron config get-providers
-```
-
-### Scan Data Protection
-- 💾 **Encrypted storage** - Scan results stored with 0600 permissions
-- 💾 **Audit logging** - All scans logged with timestamps
-- 💾 **Data isolation** - User-specific storage directories
-
-**For more details, see [SECURITY.md](SECURITY.md)**
-
-## 🛡️ Security Notice
-
-This tool is designed for professional penetration testers, security researchers, and system administrators. Misuse of this software may violate laws in your jurisdiction. The authors assume no liability for any misuse or damage caused by this software.
-
-**Report security vulnerabilities responsibly** - see [SECURITY.md](SECURITY.md) for our security policy.
-
----
-
-**⚡ Built for security professionals who demand performance and stealth.**
-
-For detailed documentation, installation instructions, and examples, see **[zypheron-go/README.md](zypheron-go/README.md)**
-
+MIT License - see [LICENSE](LICENSE)

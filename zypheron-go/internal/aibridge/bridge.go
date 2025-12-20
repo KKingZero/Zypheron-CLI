@@ -447,3 +447,8 @@ func (b *AIBridge) GetConfiguredProviders() (map[string]interface{}, error) {
 
 	return resp.Result, nil
 }
+
+// SendRequest is a public wrapper for sendRequest to allow external packages to send custom requests
+func (b *AIBridge) SendRequest(method string, params map[string]interface{}) (*Response, error) {
+	return b.sendRequest(method, params)
+}

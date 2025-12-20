@@ -197,11 +197,10 @@ func PwnCmd() *cobra.Command {
 
 			// Build execution options
 			opts := tools.ExecutionOptions{
-				Tool:     selectedTool,
-				Target:   targetBinary,
-				Stream:   stream,
-				Timeout:  time.Duration(timeout) * time.Second,
-				AssumeYes: assumeYes,
+				Tool:    selectedTool,
+				Target:  targetBinary,
+				Stream:  stream,
+				Timeout: time.Duration(timeout) * time.Second,
 			}
 
 			// Add tool-specific args
