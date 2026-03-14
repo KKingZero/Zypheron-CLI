@@ -1,33 +1,35 @@
 # Zypheron Documentation
 
-Complete documentation for Zypheron CLI.
+This directory contains the active user-facing documentation for Zypheron CLI.
 
-## Getting Started
+## Start Here
 
 | Document | Description |
-|----------|-------------|
-| [INSTALL.md](INSTALL.md) | Installation guide - system requirements, build instructions, platform-specific setup |
-| [SETUP_AND_USE.md](SETUP_AND_USE.md) | Configuration, tool installation, usage workflows |
+|---|---|
+| [INSTALL.md](INSTALL.md) | Current install paths, requirements, and post-install checks |
+| [SETUP_AND_USE.md](SETUP_AND_USE.md) | First-time setup and day-to-day CLI usage |
+| [AI_GUIDE.md](AI_GUIDE.md) | AI engine, provider setup, and model behavior |
 
 ## Reference
 
 | Document | Description |
-|----------|-------------|
-| [GO_GUIDE.md](GO_GUIDE.md) | Complete Go CLI command reference |
-| [AI_GUIDE.md](AI_GUIDE.md) | AI features setup and usage |
-| [MCP_INTEGRATION.md](MCP_INTEGRATION.md) | MCP server for AI agents (Claude Desktop, Cursor, etc.) |
-| [TOOL_CHAINS.md](TOOL_CHAINS.md) | Tool chain configuration |
+|---|---|
+| [GO_GUIDE.md](GO_GUIDE.md) | Broad Go CLI command reference |
+| [MCP_INTEGRATION.md](MCP_INTEGRATION.md) | MCP integration for external AI clients |
+| [TOOL_CHAINS.md](TOOL_CHAINS.md) | Toolchain-oriented workflows |
+| [CLI_GUIDE.md](CLI_GUIDE.md) | Additional CLI usage material |
 
-## Support
+## Project Docs
 
 | Document | Description |
-|----------|-------------|
-| [../HELP.md](../HELP.md) | Troubleshooting guide |
-| [../SECURITY.md](../SECURITY.md) | Security policy and vulnerability reporting |
-| [../TESTING.md](../TESTING.md) | Testing guide |
-| [../CHANGELOG.md](../CHANGELOG.md) | Version history |
+|---|---|
+| [../README.md](../README.md) | Main project README |
+| [../CHANGELOG.md](../CHANGELOG.md) | Release history |
+| [../HELP.md](../HELP.md) | Troubleshooting |
+| [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | Community guidelines |
 
-## Quick Links
+## Notes
 
-- **Repository**: https://github.com/KKingZero/Cobra-AI/tree/Zypheron-CLI
-- **Issues**: https://github.com/KKingZero/Cobra-AI/issues
+- Some files in `docs/archive/` are historical and may not reflect the current product state.
+- For the current install flow, prefer [INSTALL.md](INSTALL.md) and the root [README.md](../README.md).
+- For command truth, prefer `zypheron --help` and `zypheron <command> --help` for your current build.

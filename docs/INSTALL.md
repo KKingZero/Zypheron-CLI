@@ -1,419 +1,113 @@
 # Zypheron Installation Guide
 
-Complete step-by-step installation instructions for Zypheron CLI.
+This guide covers the current supported install paths for Zypheron CLI.
 
-## Table of Contents
+## Install Paths
 
-- [System Requirements](#system-requirements)
-- [Installation Methods](#installation-methods)
-  - [Method 1: Quick Install (Recommended)](#method-1-quick-install-recommended)
-  - [Method 2: Build from Source](#method-2-build-from-source)
-  - [Method 3: Pre-built Binaries](#method-3-pre-built-binaries)
-- [Platform-Specific Instructions](#platform-specific-instructions)
-- [Post-Installation](#post-installation)
-- [Troubleshooting](#troubleshooting)
+There are two primary ways to install Zypheron:
 
----
+1. Source bootstrap with [setup-hybrid.sh](../setup-hybrid.sh)
+2. Release binary install with [scripts/install.sh](../scripts/install.sh)
+
+## Option 1: Bootstrap From Source
+
+Use this when you want the repository, local build flow, and automated dependency setup.
+
+```bash
+git clone https://github.com/KKingZero/Zypheron-CLI.git
+cd Zypheron-CLI
+bash ./setup-hybrid.sh
+```
+
+By default, the bootstrap script:
+
+- builds the CLI to `~/.local/bin/zypheron`
+- runs `zypheron install-deps`
+- installs shell completion when possible
+- optionally installs external tools
+
+Useful options:
+
+```bash
+ZYPHERON_INSTALL_DIR="$HOME/.local/bin" bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=critical bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=all bash ./setup-hybrid.sh
+ZYPHERON_DEP_PACKS=core bash ./setup-hybrid.sh
+```
+
+## Option 2: Install a Release Binary
+
+Use this when you want a packaged CLI without cloning the repo.
+
+```bash
+curl -sSfL https://download.zypheron.net/install.sh | bash
+```
+
+Useful options:
+
+```bash
+ZYPHERON_VERSION=v2.0.0 curl -sSfL https://download.zypheron.net/install.sh | bash
+ZYPHERON_INSTALL_DIR="$HOME/.local/bin" curl -sSfL https://download.zypheron.net/install.sh | bash
+```
+
+The release installer:
+
+- detects OS and architecture
+- downloads the matching archive and `SHA256SUMS`
+- verifies checksums when local checksum tools are available
+- installs the `zypheron` binary into the target directory
 
 ## System Requirements
 
-### Minimum Requirements
+Minimum requirements:
 
-| Component | Requirement |
-|-----------|-------------|
-| **OS** | Linux (Ubuntu 20.04+, Debian 11+, Kali 2023+), macOS 12+, Windows 10+ (WSL2) |
-| **Go** | 1.24 or higher (for building from source) |
-| **Python** | 3.9 or higher (for AI features only) |
-| **RAM** | 4 GB minimum |
-| **Disk** | 2 GB free space (10 GB with all security tools) |
+- Go `1.24+` for source builds
+- Python `3.9+`
+- Linux, macOS, or WSL
 
-### Recommended Setup
+Recommended environment:
 
-- **Kali Linux 2023.3+** - Best compatibility with security tools
-- **8-16 GB RAM** - For AI features and large scans
-- **SSD** - Faster tool execution
-- **Modern terminal** - With Unicode and color support (e.g., GNOME Terminal, iTerm2, Windows Terminal)
+- Kali or a similarly equipped Linux distro
+- a modern terminal with color and Unicode support
+- enough disk space for the external security tools you plan to install
 
-### Checking Your System
+## Post-Install Checks
+
+After installation:
 
 ```bash
-# Check Go version (need 1.24+)
-go version
-
-# Check Python version (need 3.9+ for AI features)
-python3 --version
-
-# Check available disk space
-df -h .
-
-# Check RAM
-free -h
-```
-
----
-
-## Installation Methods
-
-### Method 1: Quick Install (Recommended)
-
-The fastest way to get Zypheron running:
-
-```bash
-# 1. Clone the repository
-git clone -b Zypheron-CLI https://github.com/KKingZero/Cobra-AI.git
-cd Cobra-AI
-
-# 2. Build the Go CLI
-cd zypheron-go
-go mod tidy
-go build -o zypheron ./cmd/zypheron
-
-# 3. Verify it works
-./zypheron --version
-
-# 4. (Optional) Install system-wide
-sudo cp zypheron /usr/local/bin/
-```
-
-That's it! You now have a working Zypheron installation.
-
----
-
-### Method 2: Build from Source
-
-Full build with all options using Make:
-
-#### Step 1: Install Prerequisites
-
-**Ubuntu/Debian/Kali:**
-```bash
-# Update package lists
-sudo apt update
-
-# Install Go (if not installed)
-sudo apt install -y golang-go
-
-# Verify Go version (must be 1.24+)
-go version
-
-# If Go is too old, install manually:
-wget https://go.dev/dl/go1.24.2.linux-amd64.tar.gz
-sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf go1.24.2.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**macOS:**
-```bash
-# Using Homebrew
-brew install go
-
-# Verify
-go version
-```
-
-**Windows (WSL2):**
-```bash
-# In WSL2 Ubuntu terminal
-sudo apt update
-sudo apt install -y golang-go
-```
-
-#### Step 2: Clone Repository
-
-```bash
-# Clone via HTTPS
-git clone -b Zypheron-CLI https://github.com/KKingZero/Cobra-AI.git
-
-# Or clone via SSH (if you have SSH keys configured)
-git clone -b Zypheron-CLI git@github.com:KKingZero/Cobra-AI.git
-
-# Enter the directory
-cd Cobra-AI
-```
-
-#### Step 3: Build the Go CLI
-
-```bash
-cd zypheron-go
-
-# Install Go dependencies
-go mod tidy
-
-# Build the binary
-go build -ldflags="-s -w" -o zypheron ./cmd/zypheron
-
-# The binary is now at ./zypheron
-ls -lh zypheron
-```
-
-**Build Options:**
-
-```bash
-# Standard build
-go build -o zypheron ./cmd/zypheron
-
-# Optimized build (smaller binary, stripped symbols)
-go build -ldflags="-s -w" -o zypheron ./cmd/zypheron
-
-# Debug build (with debug symbols)
-go build -gcflags="all=-N -l" -o zypheron-debug ./cmd/zypheron
-```
-
-#### Step 4: Install System-Wide (Optional)
-
-```bash
-# Copy to system path
-sudo cp zypheron /usr/local/bin/
-
-# Make executable (should already be, but just in case)
-sudo chmod +x /usr/local/bin/zypheron
-
-# Verify installation
-which zypheron
 zypheron --version
+zypheron doctor
 ```
 
-#### Step 5: Set Up Shell Completion (Optional)
+For source installs, if `~/.local/bin` is not already on `PATH`, add it:
 
 ```bash
-# Bash
-zypheron completion bash | sudo tee /etc/bash_completion.d/zypheron > /dev/null
-source ~/.bashrc
-
-# Zsh
-zypheron completion zsh > "${fpath[1]}/_zypheron"
-source ~/.zshrc
-
-# Fish
-zypheron completion fish > ~/.config/fish/completions/zypheron.fish
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
----
+## Installing Dependencies Later
 
-### Method 3: Pre-built Binaries
-
-Download pre-compiled binaries from the releases page:
+If you skip parts of setup initially:
 
 ```bash
-# Linux AMD64
-wget https://github.com/KKingZero/Cobra-AI/releases/latest/download/zypheron-linux-amd64.tar.gz
-tar -xzf zypheron-linux-amd64.tar.gz
-sudo mv zypheron /usr/local/bin/
-
-# Linux ARM64 (Raspberry Pi, etc.)
-wget https://github.com/KKingZero/Cobra-AI/releases/latest/download/zypheron-linux-arm64.tar.gz
-tar -xzf zypheron-linux-arm64.tar.gz
-sudo mv zypheron /usr/local/bin/
-
-# macOS AMD64 (Intel)
-wget https://github.com/KKingZero/Cobra-AI/releases/latest/download/zypheron-darwin-amd64.tar.gz
-tar -xzf zypheron-darwin-amd64.tar.gz
-sudo mv zypheron /usr/local/bin/
-
-# macOS ARM64 (Apple Silicon M1/M2/M3)
-wget https://github.com/KKingZero/Cobra-AI/releases/latest/download/zypheron-darwin-arm64.tar.gz
-tar -xzf zypheron-darwin-arm64.tar.gz
-sudo mv zypheron /usr/local/bin/
-```
-
----
-
-## Platform-Specific Instructions
-
-### Kali Linux
-
-Kali is the recommended platform - all security tools are readily available:
-
-```bash
-# Install
-cd Cobra-AI/zypheron-go
-go mod tidy && go build -o zypheron ./cmd/zypheron
-sudo cp zypheron /usr/local/bin/
-
-# Install security tools
-zypheron tools install-all --critical-only -y
-```
-
-### Ubuntu/Debian
-
-```bash
-# Install dependencies
-sudo apt update
-sudo apt install -y golang-go git
-
-# Build Zypheron
-cd Cobra-AI/zypheron-go
-go mod tidy && go build -o zypheron ./cmd/zypheron
-sudo cp zypheron /usr/local/bin/
-
-# Install some security tools (may need to add Kali repos for others)
-sudo apt install -y nmap nikto
-```
-
-### macOS
-
-```bash
-# Install Go via Homebrew
-brew install go
-
-# Build Zypheron
-cd Cobra-AI/zypheron-go
-go mod tidy && go build -o zypheron ./cmd/zypheron
-sudo cp zypheron /usr/local/bin/
-
-# Install security tools via Homebrew
-brew install nmap nikto sqlmap
-```
-
-### Windows (WSL2)
-
-Zypheron works best in WSL2 with a Linux distribution:
-
-```bash
-# In PowerShell (as Administrator)
-wsl --install -d kali-linux
-
-# In WSL2 Kali terminal
-sudo apt update
-sudo apt install -y golang-go git
-
-# Clone and build
-git clone -b Zypheron-CLI https://github.com/KKingZero/Cobra-AI.git
-cd Cobra-AI/zypheron-go
-go mod tidy && go build -o zypheron ./cmd/zypheron
-sudo cp zypheron /usr/local/bin/
-```
-
----
-
-## Post-Installation
-
-### Verify Installation
-
-```bash
-# Check version
-zypheron --version
-
-# Check help
-zypheron --help
-
-# Check tool status
+zypheron install-deps --all
 zypheron tools check
+zypheron tools install-all --critical-only --yes
 ```
-
-### Install Security Tools
-
-```bash
-# Check what's installed
-zypheron tools check
-
-# Install critical tools
-zypheron tools install-all --critical-only
-
-# Or install all tools
-zypheron tools install-all
-```
-
-### Configure (Optional)
-
-```bash
-# Run setup wizard
-zypheron setup
-
-# Or configure manually
-zypheron config wizard
-```
-
-### Test Your Installation
-
-```bash
-# Test a simple scan (uses scanme.nmap.org - a safe test target)
-zypheron scan scanme.nmap.org --fast
-
-# Test tool management
-zypheron tools list --installed
-```
-
----
 
 ## Troubleshooting
 
-### "go: command not found"
+If the bootstrap fails:
 
-Go is not installed or not in PATH:
+- verify `go version`
+- verify `python3 --version`
+- run `zypheron doctor`
+- check [../HELP.md](../HELP.md)
 
-```bash
-# Check if Go is installed
-which go
+If the release installer fails:
 
-# If not found, install it:
-# Ubuntu/Debian
-sudo apt install -y golang-go
-
-# Or download directly from https://go.dev/dl/
-```
-
-### "go.mod file not found"
-
-You're not in the correct directory:
-
-```bash
-# Make sure you're in the zypheron-go directory
-cd /path/to/Zypheron-CLI-Production/zypheron-go
-ls go.mod  # Should show go.mod file
-```
-
-### Build fails with "module requires Go 1.24"
-
-Your Go version is too old:
-
-```bash
-# Check version
-go version
-
-# Upgrade Go (Ubuntu/Debian)
-sudo apt remove golang-go
-wget https://go.dev/dl/go1.24.2.linux-amd64.tar.gz
-sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf go1.24.2.linux-amd64.tar.gz
-export PATH=$PATH:/usr/local/go/bin
-```
-
-### "permission denied" when installing
-
-Use sudo for system-wide installation:
-
-```bash
-sudo cp zypheron /usr/local/bin/
-sudo chmod +x /usr/local/bin/zypheron
-```
-
-### Tools not found after installation
-
-Some tools require root or special permissions:
-
-```bash
-# Run with sudo for tools that need it
-sudo zypheron scan example.com
-
-# Or grant capabilities
-sudo setcap cap_net_raw,cap_net_admin=eip /usr/local/bin/zypheron
-```
-
-### Need more help?
-
-- Check the [HELP.md](../HELP.md) troubleshooting guide
-- Open an issue: https://github.com/KKingZero/Cobra-AI/issues
-- Enable debug mode: `zypheron --debug scan example.com`
-
----
-
-## Next Steps
-
-After installation, see:
-
-- [SETUP_AND_USE.md](SETUP_AND_USE.md) - Configuration and usage guide
-- [GO_GUIDE.md](GO_GUIDE.md) - Go CLI reference
-- [AI_GUIDE.md](AI_GUIDE.md) - AI features setup
+- make sure `curl` or `wget` is installed
+- make sure the target install directory is writable or use `sudo`
+- rerun with an explicit install directory such as `ZYPHERON_INSTALL_DIR="$HOME/.local/bin"`

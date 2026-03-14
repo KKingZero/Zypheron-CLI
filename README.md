@@ -1,97 +1,131 @@
 <div align="center">
   <h1>Zypheron CLI</h1>
-  <h3>AI-Powered Penetration Testing Platform</h3>
+  <h3>AI-native offensive security CLI for real operator workflows</h3>
 
   <p>
     <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white" alt="Go"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
-    <a href="#integrated-tools"><img src="https://img.shields.io/badge/Security_Tools-50%2B-2ea44f" alt="Tools"></a>
-    <a href="#ai-providers"><img src="https://img.shields.io/badge/AI_Models-10%2B-8a2be2" alt="AI Models"></a>
+    <a href=".github/ISSUE_TEMPLATE/bug_report.md"><img src="https://img.shields.io/badge/Issues-Bug%20Reports-2ea44f" alt="Issues"></a>
   </p>
 
-  <p>AI-native pentesting CLI with autonomous orchestration, custom tooling flows, and multi-model intelligence.</p>
+  <p>Terminal-first recon, scanning, AI-assisted workflows, and operator tooling in one open source project.</p>
 
-  <!-- TODO: Replace with actual asciinema recording
-  <a href="https://asciinema.org/a/YOUR_RECORDING_ID">
-    <img src="https://asciinema.org/a/YOUR_RECORDING_ID.svg" width="800" alt="Zypheron AutoPent Demo">
-  </a>
-  -->
-
-  <p><a href="CHANGELOG.md">What's New</a> • <a href="#architecture-overview">Architecture</a> • <a href="docs/INSTALL.md">Installation</a> • <a href="#features">Features</a> • <a href="#ai-providers">AI Providers</a> • <a href="docs/MCP_INTEGRATION.md">API/MCP</a></p>
+  <p>
+    <a href="CHANGELOG.md">Changelog</a> •
+    <a href="#install">Install</a> •
+    <a href="#quick-start">Quick Start</a> •
+    <a href="#common-commands">Commands</a> •
+    <a href="#documentation">Docs</a>
+  </p>
 </div>
 
 ---
 
-## Follow Us
+## Overview
 
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Follow-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/)
+Zypheron CLI is an AI-native security CLI built around practical terminal workflows rather than disconnected scripts and raw output dumps.
 
-## Architecture Overview
+It combines:
 
-Zypheron combines command orchestration, tool-chain automation, and AI-native analysis in one CLI.
+- A Go-based CLI and TUI
+- AI model integration across local and hosted providers
+- Toolchain-aware workflows for recon, scanning, and operator tasks
+- Local session, loot, and artifact storage under `~/.zypheron`
+- Bootstrap and release installers for both source-based and packaged installs
 
-```mermaid
-flowchart TD
-    U[User / Operator] --> C[Zypheron CLI]
-    C --> P[Planner + Agent Router]
-    P --> T[Security Tool Chains]
-    P --> A[AI Model Layer]
-    T --> R[Findings + Artifacts]
-    A --> R
-    R --> O[Reports / Sessions / Recommendations]
+This repository is the open source CLI. It is intended for authorized security testing, research, and operator workflow automation.
+
+## Install
+
+There are two primary install paths.
+
+### Option 1: Bootstrap from source
+
+Use this if you want the full repo, local development workflow, and automated dependency setup.
+
+```bash
+git clone https://github.com/KKingZero/Zypheron-CLI.git
+cd Zypheron-CLI
+bash ./setup-hybrid.sh
 ```
+
+What `setup-hybrid.sh` does:
+
+- Builds the Go CLI into `~/.local/bin/zypheron` by default
+- Runs `zypheron install-deps` for Python-side dependencies
+- Installs shell completion for `bash` or `zsh` when possible
+- Optionally installs missing external tools
+
+Useful bootstrap options:
+
+```bash
+ZYPHERON_INSTALL_DIR="$HOME/.local/bin" bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=all bash ./setup-hybrid.sh
+ZYPHERON_DEP_PACKS=core bash ./setup-hybrid.sh
+```
+
+### Option 2: Install a release binary
+
+Use this if you want the packaged CLI without cloning the repo.
+
+```bash
+curl -sSfL https://download.zypheron.net/install.sh | bash
+```
+
+Useful installer options:
+
+```bash
+ZYPHERON_VERSION=v2.0.0 curl -sSfL https://download.zypheron.net/install.sh | bash
+ZYPHERON_INSTALL_DIR="$HOME/.local/bin" curl -sSfL https://download.zypheron.net/install.sh | bash
+```
+
+The release installer:
+
+- Detects OS and architecture
+- Downloads the matching archive and `SHA256SUMS`
+- Verifies the checksum when checksum tools are available
+- Installs the `zypheron` binary into the target directory
 
 ## Quick Start
 
 ```bash
-# Clone and run the bootstrap
-git clone -b Zypheron-CLI https://github.com/KKingZero/Cobra-AI.git
-cd Cobra-AI
-bash ./setup-hybrid.sh
+# Launch the terminal UI
+zypheron
+
+# Verify local setup
+zypheron doctor
+
+# Install Python-side dependencies if needed
+zypheron install-deps --all
+
+# Check CLI version
+zypheron --version
 ```
 
-That bootstrap builds the CLI, installs Python dependencies, configures shell completion, and can install the critical toolchain in one pass.
+For a fresh source install, the shortest path is:
 
-## Features
+```bash
+git clone https://github.com/KKingZero/Zypheron-CLI.git && cd Zypheron-CLI && bash ./setup-hybrid.sh
+```
 
-- Fast single binary with minimal runtime overhead
-- 50+ integrated offensive and defensive security tools
-- AI agent orchestration for autonomous scan planning and execution
-- Runtime model switching from TUI for multi-provider workflows
-- AutoPent session save/resume for long engagements
-- CVE enrichment from multiple public sources
-- Cross-platform operation on Linux, macOS, and WSL
-- **Bug bounty mode** with scope parsing and submission draft generation
-- **Cloud security** scanning (AWS, Azure, GCP, K8s)
-- **Active Directory** kill-chain with approval gates
-- **MITRE ATT&CK** objective-driven attack execution
-- Structured report export and session artifacts
+## What It Does
 
-## Benchmark Results
+Zypheron CLI is built for operator workflow acceleration, not just command wrapping.
 
-> AutoPent performance on HackTheBox machines. All runs use default settings with Claude as the AI provider.
+Current project capabilities include:
 
-| Machine | Difficulty | Time | Tools Used | Findings | Root |
-|---------|-----------|------|------------|----------|------|
-| _Placeholder_ | Easy | _TBD_ | nmap, gobuster, nuclei, sqlmap | _TBD_ | _TBD_ |
-| _Placeholder_ | Medium | _TBD_ | nmap, ffuf, nikto, metasploit | _TBD_ | _TBD_ |
-| _Placeholder_ | Hard | _TBD_ | nmap, bloodhound, impacket, certipy | _TBD_ | _TBD_ |
+- AI-assisted terminal workflows
+- Interactive TUI with model selection and persisted provider/model settings
+- Recon, scanning, and structured terminal output flows
+- Workflow execution and session storage
+- Dorking and AI-guided query enhancement
+- Active Directory, cloud, and broader offensive workflow modules in the CLI
+- Integration points for common security tools and local model runtimes
+- Updater support for packaged releases
 
-> Run your own benchmarks: `zypheron autopent <target> --save-session` and results are logged to `~/.zypheron/loot/<session>/timeline.log`
-
-## Documentation
-
-| Guide | Description |
-|---|---|
-| [Installation](docs/INSTALL.md) | Full installation options |
-| [Setup & Usage](docs/SETUP_AND_USE.md) | Configuration and practical usage |
-| [Go CLI Reference](docs/GO_GUIDE.md) | Command-level reference |
-| [AI Features](docs/AI_GUIDE.md) | Providers, keys, and model behavior |
-| [MCP Integration](docs/MCP_INTEGRATION.md) | Agent/tool bridge integration |
-| [Tool Chains](docs/TOOL_CHAINS.md) | Automated chain workflows |
-| [Troubleshooting](HELP.md) | Common issues and fixes |
+The project is terminal-first. Some workflows depend on external tools being installed locally.
 
 ## Common Commands
 
@@ -100,109 +134,101 @@ That bootstrap builds the CLI, installs Python dependencies, configures shell co
 zypheron
 zypheron tui
 
-# Scanning
+# Health checks
+zypheron doctor
+zypheron install-deps --all
+
+# Scan and recon
 zypheron scan example.com
 zypheron scan example.com --web
-zypheron scan example.com --ai-guided
+zypheron recon example.com
 
-# Autonomous pentest
-zypheron autopent example.com
-zypheron autopent --resume session.json
-
-# Bug bounty mode
-zypheron bounty --scope scope.txt --platform hackerone
-zypheron bounty example.com --auto
-
-# Cloud security
-zypheron cloud --provider aws --target <account>
-zypheron cloud --provider azure --target <tenant>
-zypheron cloud check
-
-# Active Directory
-zypheron ad --target 10.10.10.1 --domain corp.local
-zypheron ad --target 10.10.10.1 --domain corp.local --mode enum
-zypheron ad check
-
-# MITRE ATT&CK
-zypheron mitre run --objective "Initial Access" --target 10.10.10.1
-zypheron mitre run --objective "Credential Access" --target 10.10.10.1
-zypheron mitre list
-zypheron mitre update
-
-# Reports
-zypheron report --session <id> --format md
-zypheron report --session <id> --format pdf --output report.pdf
+# AI-assisted dorking
+zypheron dork "exposed login portals"
+zypheron dork "admin panels" --ai-guided
 
 # AI chat
-zypheron chat "How do I test for SQLi?"
+zypheron chat "How would you approach this target?"
 
-# Recon / OSINT
-zypheron recon example.com
-zypheron osint subdomain example.com
+# Workflows and sessions
+zypheron workflow list
+zypheron autopent example.com
+
+# Tooling and environment
+zypheron tools status
+zypheron tools install-all --critical-only --yes
+
+# Updates
+zypheron update check
 ```
 
-## Integrated Tools
+Run `zypheron --help` or `zypheron <command> --help` for the current command surface in your build.
 
-| Category | Tools |
-|---|---|
-| Scanning | nmap, masscan, nuclei |
-| Web | nikto, sqlmap, gobuster, ffuf, feroxbuster, dirsearch, wfuzz, dirb, whatweb, wpscan |
-| Web Recon | httpx, katana, gau, waybackurls, assetfinder |
-| API | kiterunner, newman, schemathesis, jwt-tool |
-| Password | hydra, john, hashcat |
-| Recon | subfinder, amass, theharvester, sublist3r |
-| Frameworks | metasploit |
-| C2 | sliver, covenant, empire |
-| AD | bloodhound, netexec, impacket, certipy, responder, mimikatz, lsassy, snaffler |
-| Cloud | prowler, pacu, scoutsuite, cloudbrute, trivy, kube-hunter, checkov |
-| Wireless | aircrack-ng |
-| RE/Pwn | radare2, gdb, ghidra, pwntools, checksec |
-| Forensics | volatility, sleuthkit, binwalk |
+## Setup Notes
 
-## AI Providers
+### AI providers and models
 
-| Provider | Default Model | Fallback |
-|---|---|---|
-| Anthropic Claude | claude-opus-4-6 | claude-sonnet-4-6 |
-| OpenAI | gpt-5.4 | gpt-5.2 |
-| Google Gemini | gemini-3.1-pro-preview | gemini-3-flash-preview |
-| DeepSeek | deepseek-r1 | deepseek-chat |
-| Moonshot Kimi | kimi-k2 | moonshot-v1-128k |
-| Ollama (local) | qwen3-coder | llama3.2:3b, mistral:latest, any local model |
+Zypheron supports local and hosted model providers. In the TUI, selecting a hosted model without a configured API key now prompts for the key and stores it for reuse.
 
-## Loot Directory Structure
+Typical provider setup paths:
 
-All session data is logged locally to `~/.zypheron/loot/<session-id>/`:
+- Local models through Ollama
+- Hosted models through provider API keys in Zypheron config/key storage
 
+If you want to verify your environment after setup:
+
+```bash
+zypheron doctor
+zypheron
 ```
-session.json        # Session metadata
-timeline.log        # JSONL timeline of all actions
-ports/              # Port scan results
-services/           # Service enumeration
-hosts/              # Discovered hosts
-creds/              # Captured credentials
-vulns/              # Vulnerability findings
-findings/           # General findings
-screenshots/        # Visual evidence
-web/                # Web application data
-cloud/              # Cloud scan results
-ad/                 # Active Directory data
-attack/             # MITRE ATT&CK execution logs
-reports/            # Generated reports
-raw/                # Raw tool output
+
+### External tools
+
+Many workflows call external tools. `setup-hybrid.sh` can install critical tools automatically:
+
+```bash
+ZYPHERON_INSTALL_TOOLS=critical bash ./setup-hybrid.sh
+```
+
+If you prefer to manage them yourself:
+
+```bash
+ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
+zypheron tools status
 ```
 
 ## Requirements
 
-- Go `1.24+`
-- Python `3.9+`
-- Linux/macOS/WSL (Kali recommended)
+Minimum local requirements:
 
-For heavy AI workflows, see `zypheron-ai/install-heavy.sh`.
+- Go `1.24+` for source bootstrap and local builds
+- Python `3.9+`
+- Linux, macOS, or WSL
+
+Kali or a similarly equipped Linux environment is recommended for heavier offensive workflows.
+
+## Documentation
+
+| Guide | Description |
+|---|---|
+| [docs/INSTALL.md](docs/INSTALL.md) | Installation and environment setup |
+| [docs/SETUP_AND_USE.md](docs/SETUP_AND_USE.md) | Practical setup and usage |
+| [docs/GO_GUIDE.md](docs/GO_GUIDE.md) | Go CLI reference |
+| [docs/AI_GUIDE.md](docs/AI_GUIDE.md) | AI providers, keys, and model behavior |
+| [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md) | MCP and integration details |
+| [docs/TOOL_CHAINS.md](docs/TOOL_CHAINS.md) | Toolchain workflows |
+| [HELP.md](HELP.md) | Troubleshooting |
+
+## Repository Notes
+
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [.github/ISSUE_TEMPLATE/bug_report.md](.github/ISSUE_TEMPLATE/bug_report.md)
+- [.github/ISSUE_TEMPLATE/feature_request.md](.github/ISSUE_TEMPLATE/feature_request.md)
+- [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md)
 
 ## Legal
 
-For authorized security testing only. Always obtain written permission before scanning systems.
+For authorized security testing only. Always obtain written permission before scanning, exploiting, or interacting with systems you do not own.
 
 ## License
 
