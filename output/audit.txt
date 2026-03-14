@@ -1,0 +1,20 @@
+Foremost version 1.5.7 by Jesse Kornblum, Kris Kendall, and Nick Mikus
+Audit File
+
+Foremost started at Wed Dec 17 20:37:33 2025
+Invocation: foremost -v 
+Output directory: /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/output
+Configuration file: /etc/foremost.conf
+------------------------------------------------------------------
+File: stdin
+Start: Wed Dec 17 20:37:33 2025
+Length: Unknown
+ 
+Num	 Name (bs=512)	       Size	 File Offset	 Comment 
+
+
+0 FILES EXTRACTED
+	
+------------------------------------------------------------------
+
+Foremost finished at Wed Dec 17 20:37:33 2025

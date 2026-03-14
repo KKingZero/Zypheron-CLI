@@ -1,0 +1,105 @@
+You are a Qualified Security Assessor (QSA) preparing an executive summary for a PCI-DSS v4.0 compliance assessment report.
+
+Generate a professional, QSA-appropriate executive summary for this PCI-DSS v4.0 compliance assessment:
+
+ORGANIZATION DETAILS:
+Organization: {{ report.organization }}
+Assessment Date: {{ report.assessment_date.strftime('%B %d, %Y') }}
+Assessor: {{ report.assessor }}
+Scope: {{ report.scope }}
+
+ASSESSMENT RESULTS:
+Overall Compliance: {{ "%.1f"|format(report.compliance_percentage) }}%
+Risk Level: {{ report.risk_level | upper }}
+Compliance Status: {{ report.overall_status.value | upper }}
+
+CONTROL STATISTICS:
+Total Controls Assessed: {{ report.total_controls }}
+- Compliant: {{ report.compliant_count }}
+- Non-Compliant: {{ report.non_compliant_count }}
+- Partial Compliance: {{ report.partial_count }}
+- Not Applicable: {{ report.not_applicable_count }}
+
+FINDINGS SUMMARY:
+Critical Findings: {{ report.critical_findings | length }}
+High Priority Findings: {{ report.high_findings | length }}
+
+{% if report.critical_findings %}
+CRITICAL COMPLIANCE GAPS:
+{% for finding in report.critical_findings[:5] %}
+- {{ finding }}
+{% endfor %}
+{% if report.critical_findings | length > 5 %}
+... and {{ report.critical_findings | length - 5 }} additional critical findings
+{% endif %}
+{% endif %}
+
+{% if report.high_findings %}
+HIGH PRIORITY COMPLIANCE GAPS:
+{% for finding in report.high_findings[:3] %}
+- {{ finding }}
+{% endfor %}
+{% if report.high_findings | length > 3 %}
+... and {{ report.high_findings | length - 3 }} additional high priority findings
+{% endif %}
+{% endif %}
+
+REQUIREMENTS:
+Write a comprehensive, professional executive summary (3-4 paragraphs, approximately 350-450 words) that:
+
+1. OPENING PARAGRAPH (Assessment Scope and Context):
+   - State the cardholder data environment (CDE) scope assessed
+   - Reference PCI-DSS v4.0 as the assessment standard
+   - Briefly describe the assessment methodology and coverage
+   - Mention the assessment period and any limitations
+
+2. COMPLIANCE STATUS PARAGRAPH:
+   - Clearly state the overall PCI-DSS compliance status (Compliant/Non-Compliant)
+   - Provide the compliance percentage across all 12 requirements
+   - Highlight which requirement categories are compliant vs. non-compliant
+   - Reference specific requirements with significant gaps (e.g., "Requirement 3: Protect Stored Account Data" or "Requirement 11: Testing Security")
+   - Explain what this means for the organization's ability to pass a formal QSA audit
+
+3. CRITICAL RISKS PARAGRAPH:
+   - Identify the most critical compliance gaps that pose immediate risk
+   - Frame risks in terms of:
+     * Data breach potential (cardholder data exposure)
+     * Regulatory consequences (PCI fines, card brand penalties, merchant account termination)
+     * Business impact (inability to process payments, reputational damage, customer notification costs)
+   - Use specific examples from critical findings but keep language executive-appropriate
+   - Emphasize urgency for critical findings (e.g., "immediate remediation required")
+
+4. REMEDIATION ROADMAP PARAGRAPH:
+   - Provide clear, prioritized remediation recommendations:
+     * Immediate actions (0-30 days): Critical findings that must be addressed
+     * Short-term actions (30-90 days): High priority findings
+     * Medium-term actions (90-180 days): Other gaps and continuous improvement
+   - Suggest timeline to achieve full PCI-DSS compliance
+   - Address whether organization can currently pass formal QSA assessment
+   - Provide clear next steps and accountability
+   - End with statement about ongoing compliance requirements (PCI-DSS is continuous, not point-in-time)
+
+TONE AND STYLE:
+- Professional and authoritative, appropriate for QSA review and executive leadership
+- Use PCI-DSS terminology correctly (CDE, cardholder data, sensitive authentication data, etc.)
+- Be direct and unambiguous about compliance status and risks
+- Frame in business risk terms (fines, brand damage, business disruption) not just technical issues
+- Maintain seriousness appropriate for payment security compliance
+- Use clear, confident language suitable for C-level executives and board members
+
+CRITICAL REQUIREMENTS:
+- If compliance is below 100%, organization is NON-COMPLIANT with PCI-DSS
+- Be explicit about regulatory consequences (card brand fines can reach $100K+/month)
+- Emphasize that PCI-DSS compliance is mandatory, not optional
+- Note that data breaches result in forensic investigations, notification costs, fines, and potential merchant account termination
+- Reference specific PCI-DSS requirement numbers where appropriate
+
+DO NOT:
+- Include any preamble like "Here is the summary"
+- Use bullet points (write in paragraph form)
+- Downplay risks or use hedging language for critical findings
+- Make guarantees about certification or future compliance
+- Include technical jargon without context
+- Suggest compliance is optional or low-priority
+
+Generate the executive summary now:

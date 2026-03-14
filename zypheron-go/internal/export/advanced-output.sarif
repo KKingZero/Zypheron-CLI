@@ -1,0 +1,92 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "zypheron-scanner",
+          "version": "1.0.0",
+          "informationUri": "https://github.com/your-org/zypheron",
+          "organization": "Zypheron Security",
+          "semanticVersion": "1.0.0",
+          "rules": [
+            {
+              "id": "vuln-001",
+              "name": "SQL Injection Vulnerability",
+              "shortDescription": {
+                "text": "SQL Injection Vulnerability"
+              },
+              "fullDescription": {
+                "text": "User input is not properly sanitized"
+              },
+              "defaultConfiguration": {
+                "level": "error",
+                "enabled": true
+              },
+              "properties": {
+                "severity": "critical",
+                "tags": [
+                  "security"
+                ]
+              }
+            },
+            {
+              "id": "vuln-002",
+              "name": "Cross-Site Scripting (XSS)",
+              "shortDescription": {
+                "text": "Cross-Site Scripting (XSS)"
+              },
+              "fullDescription": {
+                "text": "Reflected XSS vulnerability found"
+              },
+              "defaultConfiguration": {
+                "level": "error",
+                "enabled": true
+              },
+              "properties": {
+                "severity": "high",
+                "tags": [
+                  "security"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "vuln-001",
+          "level": "error",
+          "message": {
+            "text": "User input is not properly sanitized"
+          },
+          "partialFingerprints": {
+            "content": "761bfc04307174868f01ae09244fbca4f832d1087a7ab0ba9010325b584af94d",
+            "primary": "vuln-001",
+            "vulnerability_id": "vuln-001"
+          },
+          "properties": {}
+        },
+        {
+          "ruleId": "vuln-002",
+          "level": "error",
+          "message": {
+            "text": "Reflected XSS vulnerability found"
+          },
+          "partialFingerprints": {
+            "content": "c8a9aa9af0303629e33e376cef1d5ccc5a7873cd76688c858a6ab846d3969ded",
+            "primary": "vuln-002",
+            "vulnerability_id": "vuln-002"
+          },
+          "properties": {}
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "environment": "production",
+        "scan_mode": "comprehensive"
+      }
+    }
+  ]
+}

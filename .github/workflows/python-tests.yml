@@ -1,0 +1,96 @@
+name: Python Tests
+
+on:
+  push:
+    branches: [ main, develop, Zypheron-CLI ]
+  pull_request:
+    branches: [ main, develop, Zypheron-CLI ]
+
+jobs:
+  test-ai:
+    name: Run AI Backend Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache Python packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-ai-${{ hashFiles('zypheron-ai/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-ai-
+
+      - name: Install dependencies
+        run: |
+          cd zypheron-ai
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e ".[test]"
+
+      - name: Run tests with coverage
+        run: |
+          cd zypheron-ai
+          pytest --cov=. --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./zypheron-ai/coverage.xml
+          flags: python-ai
+          name: ai-coverage
+          fail_ci_if_error: false
+
+  test-api:
+    name: Run API Backend Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache Python packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-api-${{ hashFiles('zypheron-api/requirements.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-api-
+
+      - name: Install dependencies
+        run: |
+          cd zypheron-api
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+          pip install -e . --no-deps
+
+      - name: Run tests with coverage
+        run: |
+          cd zypheron-api
+          pytest --cov=app --cov-report=xml --cov-report=term-missing -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./zypheron-api/coverage.xml
+          flags: python-api
+          name: api-coverage
+          fail_ci_if_error: false

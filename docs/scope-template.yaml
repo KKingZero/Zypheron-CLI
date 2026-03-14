@@ -1,0 +1,204 @@
+# Zypheron Penetration Testing Scope Document
+# This document defines the authorized scope for security testing
+
+version: "1.0"
+
+# Authorization Information
+authorization:
+  # Unique identifier for this authorization
+  id: "AUTH-2025-001"
+
+  # Client/organization authorizing the test
+  client: "Example Corp"
+
+  # Person who signed the authorization
+  signed_by: "John Doe <john.doe@example.com>"
+
+  # Date authorization was signed (ISO 8601 format)
+  signed_date: "2025-11-17"
+
+  # Expiration date (ISO 8601 format)
+  expires: "2025-12-17"
+
+  # Optional: Digital signature (SHA-256 hash of document)
+  # Generate with: shasum -a 256 scope.yaml
+  signature: ""
+
+# Testing Scope
+scope:
+  # In-scope targets
+  targets:
+    # Domain-based targets (supports wildcards)
+    - type: "domain"
+      value: "*.staging.example.com"
+      classification: "development"  # development, test, production
+      description: "All staging subdomains"
+
+    - type: "domain"
+      value: "test-app.example.com"
+      classification: "test"
+      description: "Test application server"
+
+    # IP range targets (CIDR notation)
+    - type: "ip_range"
+      value: "10.50.0.0/24"
+      classification: "development"
+      description: "Development network"
+
+    - type: "ip_range"
+      value: "192.168.100.0/28"
+      classification: "test"
+      description: "Test environment subnet"
+
+    # Specific host targets
+    - type: "specific_host"
+      value: "pentest-target.example.com"
+      classification: "test"
+      description: "Dedicated pentest target"
+
+    - type: "specific_host"
+      value: "10.50.0.10"
+      classification: "development"
+      description: "Dev application server"
+
+  # Excluded targets (explicitly out of scope)
+  exclusions:
+    - "production.example.com"
+    - "www.example.com"
+    - "mail.example.com"
+    - "10.50.0.1"  # Gateway
+    - "10.50.0.2"  # DNS server
+
+  # Restrictions and rules of engagement
+  restrictions:
+    - "No Denial of Service (DoS) attacks"
+    - "No social engineering or phishing"
+    - "Testing only during business hours (9am-5pm EST, Monday-Friday)"
+    - "Maximum scan rate: 100 packets/second"
+    - "No data exfiltration"
+    - "No account creation (except in designated test areas)"
+    - "Stop immediately if production impact detected"
+    - "Notify security team before testing: security@example.com"
+
+# Safety Settings
+safety_settings:
+  # Actions requiring human confirmation before execution
+  require_confirmation_for:
+    - "sql_injection"
+    - "command_injection"
+    - "file_upload"
+    - "privilege_escalation"
+    - "password_bruteforce"
+    - "account_manipulation"
+
+  # Actions that are explicitly permitted
+  permitted_actions:
+    - "port_scanning"
+    - "vulnerability_scanning"
+    - "web_application_scanning"
+    - "subdomain_enumeration"
+    - "directory_bruteforce"
+    - "ssl_tls_analysis"
+    - "osint_gathering"
+
+  # Actions that are explicitly prohibited
+  prohibited_actions:
+    - "data_deletion"
+    - "data_modification"
+    - "account_deletion"
+    - "service_disruption"
+    - "malware_deployment"
+    - "lateral_movement"
+    - "production_exploitation"
+
+# Contact Information
+contacts:
+  # Primary point of contact
+  primary:
+    name: "John Doe"
+    email: "john.doe@example.com"
+    phone: "+1-555-0100"
+
+  # Technical contact
+  technical:
+    name: "Jane Smith"
+    email: "jane.smith@example.com"
+    phone: "+1-555-0101"
+
+  # Emergency contact (24/7)
+  emergency:
+    name: "Security Team"
+    email: "security@example.com"
+    phone: "+1-555-0911"
+
+# Testing Schedule
+schedule:
+  # Permitted testing days
+  days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+
+  # Permitted testing hours (24-hour format, timezone-aware)
+  hours:
+    start: "09:00"
+    end: "17:00"
+    timezone: "America/New_York"
+
+  # Blackout dates (no testing allowed)
+  blackouts:
+    - date: "2025-11-28"
+      reason: "Thanksgiving"
+    - date: "2025-12-25"
+      reason: "Christmas"
+
+# Reporting
+reporting:
+  # How to report findings
+  method: "Email encrypted report to security@example.com"
+
+  # PGP key for encrypted reports (optional)
+  pgp_key_fingerprint: ""
+
+  # Report delivery deadline
+  delivery_deadline: "2025-12-20"
+
+  # Severity thresholds requiring immediate notification
+  immediate_notification:
+    - "critical"
+    - "high"
+
+# Legal
+legal:
+  # Type of engagement
+  engagement_type: "Penetration Test"
+
+  # Governing law
+  governing_law: "State of New York, USA"
+
+  # Liability limitations
+  liability_note: "Tester is not liable for service disruptions during authorized testing within approved scope."
+
+  # Insurance
+  insurance_required: true
+  insurance_minimum: "$1,000,000 USD"
+
+# Notes
+notes: |
+  Additional important information:
+  - All findings must be kept confidential
+  - Do not share results with unauthorized parties
+  - Delete all test data after engagement
+  - Provide sanitized version of tools/exploits used
+  - Retest allowed only with explicit permission
+
+# Digital Signature Verification
+# To verify this document hasn't been tampered with:
+# 1. Remove the 'signature' field value
+# 2. Calculate: shasum -a 256 scope.yaml
+# 3. Compare with original signature
+# If they don't match, document has been modified!
+
+# Example Usage:
+# 1. Copy this template
+# 2. Fill in your specific details
+# 3. Get it signed by authorized representative
+# 4. Save to: ~/.zypheron/scopes/AUTH-2025-001.yaml
+# 5. Verify it loads: zypheron auth list-scopes

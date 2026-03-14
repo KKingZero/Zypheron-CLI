@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+dist
+build
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Tests (excluded from production Dockerfile, included for Dockerfile.test)
+# tests/  -- NOT excluded; Dockerfile.test needs tests/
+pytest.ini
+.pytest_cache
+.coverage
+htmlcov
+
+# Docker
+Dockerfile
+.dockerignore
+# docker-compose*.yml kept accessible for structure tests
+
+# Documentation
+docs/
+*.md
+LICENSE
+
+# Other
+prometheus.yml
+Procfile
+Makefile

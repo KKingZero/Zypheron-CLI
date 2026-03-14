@@ -1,0 +1,60 @@
+[project]
+name = "zypheron-api"
+version = "0.1.0"
+description = "Zypheron Backend API - License validation, AI proxy, and token tracking"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi~=0.115.0",
+    "uvicorn[standard]~=0.34.0",
+    "pydantic~=2.10.0",
+    "pydantic-settings~=2.7.0",
+    "python-jose[cryptography]~=3.3.0",
+    "passlib[bcrypt]~=1.7.4",
+    "python-multipart~=0.0.20",
+    "httpx~=0.28.0",
+    "aiosqlite~=0.20.0",
+    "sqlalchemy[asyncio]~=2.0.36",
+    "asyncpg~=0.30.0",
+    "psycopg2-binary~=2.9.10",
+    "redis~=5.2.0",
+    "tiktoken~=0.8.0",
+    "tenacity~=9.0.0",
+    "structlog~=24.4.0",
+    "stripe~=11.4.0",
+    "prometheus-client~=0.21.0",
+    "alembic~=1.14.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest~=8.3.0",
+    "pytest-asyncio~=0.24.0",
+    "pytest-cov~=6.0.0",
+    "pytest-mock~=3.14.0",
+    "httpx~=0.28.0",
+    "ruff~=0.8.0",
+    "mypy~=1.13.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true

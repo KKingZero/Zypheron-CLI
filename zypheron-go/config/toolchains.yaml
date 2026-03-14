@@ -1,0 +1,801 @@
+network_discovery:
+  - tool: arp-scan
+    priority: 1
+    params:
+      local_network: true
+      
+  - tool: rustscan
+    priority: 2
+    params:
+      ulimit: 5000
+      batch_size: 65535
+      scripts: "default,vuln"
+      
+  - tool: nmap
+    priority: 3
+    params:
+      scan_type: "-sS"
+      os_detection: true
+      version_detection: true
+      script_scan: "default,discovery,vuln"
+      
+  - tool: naabu
+    priority: 4
+    params:
+      top_ports: 1000
+      rate: 1000
+      timeout: 1000
+      
+  - tool: enum4linux-ng
+    priority: 5
+    params:
+      shares: true
+      users: true
+      groups: true
+      
+  - tool: nbtscan
+    priority: 6
+    params:
+      verbose: true
+      
+  - tool: smbmap
+    priority: 7
+    params:
+      recursive: true
+      
+  - tool: rpcclient
+    priority: 8
+    params:
+      commands: "enumdomusers;enumdomgroups;querydominfo"
+      
+  - tool: dnsx
+    priority: 9
+    params:
+      a: true
+      aaaa: true
+      cname: true
+      mx: true
+      ns: true
+      
+  - tool: mapcidr
+    priority: 10
+    params:
+      aggregate: true
+      shuffle: true
+
+subdomain_enum:
+  - tool: amass
+    priority: 1
+    params:
+      active: true
+      passive: true
+      brute: true
+      
+  - tool: subfinder
+    priority: 2
+    params:
+      all_sources: true
+      recursive: true
+      
+  - tool: assetfinder
+    priority: 3
+    params:
+      subs_only: true
+      
+  - tool: chaos
+    priority: 4
+    params:
+      silent: false
+      
+  - tool: crtsh
+    priority: 5
+    params:
+      json: true
+      
+  - tool: tlsx
+    priority: 6
+    params:
+      scan_mode: "ecn,syn,auto"
+      probes: 100
+      
+  - tool: github-subdomains
+    priority: 7
+    params:
+      token: "${GITHUB_TOKEN}"
+      
+  - tool: gitlab-subdomains
+    priority: 8
+    params:
+      token: "${GITLAB_TOKEN}"
+      
+  - tool: shuffledns
+    priority: 9
+    params:
+      massdns: true
+      strict_wildcard: true
+
+web_security:
+  - tool: httpx
+    priority: 1
+    params:
+      status_code: true
+      title: true
+      tech_detect: true
+      follow_redirects: true
+      
+  - tool: nuclei
+    priority: 2
+    params:
+      severity: "critical,high,medium"
+      update_templates: true
+      rate_limit: 150
+      
+  - tool: katana
+    priority: 3
+    params:
+      crawl_duration: "5m"
+      headless: true
+      automatic_form_fill: true
+      
+  - tool: feroxbuster
+    priority: 4
+    params:
+      threads: 50
+      extract_links: true
+      recursion_depth: 4
+      
+  - tool: ffuf
+    priority: 5
+    params:
+      threads: 40
+      rate: 0
+      recursion: true
+      
+  - tool: dalfox
+    priority: 6
+    params:
+      mining_dom: true
+      mining_dict: true
+      blind: "${XSS_BLIND_SERVER}"
+      
+  - tool: kxss
+    priority: 7
+    params:
+      parallelism: 10
+      
+  - tool: sqlmap
+    priority: 8
+    params:
+      level: 3
+      risk: 2
+      crawl: 2
+      batch: true
+      
+  - tool: arjun
+    priority: 9
+    params:
+      stable: true
+      level: 3
+      
+  - tool: gf
+    priority: 10
+    params:
+      json: true
+
+api_security:
+  - tool: kiterunner
+    priority: 1
+    params:
+      scan: "routes,parameters"
+      
+  - tool: graphqlmap
+    priority: 2
+    params:
+      dump_schema: true
+      
+  - tool: inql
+    priority: 3
+    params:
+      generate_html: true
+      
+  - tool: restler
+    priority: 4
+    params:
+      time_budget: 1
+      
+  - tool: postman
+    priority: 5
+    params:
+      collection: "${COLLECTION_FILE}"
+      environment: "${ENV_FILE}"
+
+cloud_security:
+  - tool: prowler
+    priority: 1
+    params:
+      provider: "aws"
+      groups: "cis,forensics,internet-exposed"
+      
+  - tool: scout-suite
+    priority: 2
+    params:
+      provider: "aws,gcp,azure"
+      
+  - tool: steampipe
+    priority: 3
+    params:
+      mod: "aws_compliance"
+      
+  - tool: pacu
+    priority: 4
+    params:
+      session: "default"
+      
+  - tool: cloudsploit
+    priority: 5
+    params:
+      console: "text"
+      
+  - tool: cloudfox
+    priority: 6
+    params:
+      all_checks: true
+      
+  - tool: iam-vulnerable
+    priority: 7
+    params:
+      all_privileges: true
+      
+  - tool: enumerate-iam
+    priority: 8
+    params:
+      access_key: "${AWS_ACCESS_KEY_ID}"
+      
+  - tool: s3scanner
+    priority: 9
+    params:
+      scan: "all"
+      
+  - tool: cloud_enum
+    priority: 10
+    params:
+      provider: "aws,azure,gcp"
+      
+  - tool: azucar
+    priority: 11
+    params:
+      export: "csv"
+      
+  - tool: gcp-audit
+    priority: 12
+    params:
+      project: "${GCP_PROJECT_ID}"
+
+container_security:
+  - tool: trivy
+    priority: 1
+    params:
+      scan_type: "image,fs,repo"
+      severity: "HIGH,CRITICAL"
+      
+  - tool: kube-bench
+    priority: 2
+    params:
+      run: "master,node,etcd,policies"
+      
+  - tool: kube-hunter
+    priority: 3
+    params:
+      active: true
+      
+  - tool: kubectl
+    priority: 4
+    params:
+      context: "${K8S_CONTEXT}"
+      
+  - tool: kubescape
+    priority: 5
+    params:
+      framework: "nsa,mitre"
+      
+  - tool: popeye
+    priority: 6
+    params:
+      all_namespaces: true
+      
+  - tool: starboard
+    priority: 7
+    params:
+      delete_scan_jobs: false
+      
+  - tool: falco
+    priority: 8
+    params:
+      rules_file: "/etc/falco/falco_rules.yaml"
+      
+  - tool: helm
+    priority: 9
+    params:
+      verify: true
+      
+  - tool: dockle
+    priority: 10
+    params:
+      exit_level: "WARN"
+
+active_directory:
+  - tool: bloodhound
+    priority: 1
+    params:
+      collection: "All"
+      output_directory: "./bloodhound-data"
+      
+  - tool: sharphound
+    priority: 2
+    params:
+      collection_methods: "Default"
+      
+  - tool: crackmapexec
+    priority: 3
+    params:
+      protocol: "smb,winrm,ssh,ldap,mssql"
+      
+  - tool: impacket
+    priority: 4
+    params:
+      scripts: "psexec,smbexec,wmiexec,atexec"
+      
+  - tool: evil-winrm
+    priority: 5
+    params:
+      ssl: true
+      
+  - tool: powerview
+    priority: 6
+    params:
+      server: "${DC_IP}"
+      
+  - tool: responder
+    priority: 7
+    params:
+      wpad: true
+      force_wpad_auth: true
+      
+  - tool: mitm6
+    priority: 8
+    params:
+      interface: "eth0"
+      
+  - tool: ldapdomaindump
+    priority: 9
+    params:
+      output_dir: "./ldap-data"
+      
+  - tool: rbcd-attack
+    priority: 10
+    params:
+      target_spn: true
+      
+  - tool: petitpotam
+    priority: 11
+    params:
+      method: "efsr"
+
+exploitation:
+  - tool: metasploit
+    priority: 1
+    params:
+      rpc_server: true
+      rpc_port: 55553
+      
+  - tool: sliver
+    priority: 2
+    params:
+      operator: true
+      
+  - tool: havoc
+    priority: 3
+    params:
+      teamserver: "${HAVOC_SERVER}"
+      
+  - tool: searchsploit
+    priority: 4
+    params:
+      json: true
+      
+  - tool: pwntools
+    priority: 5
+    params:
+      context_arch: "amd64"
+      context_os: "linux"
+      
+  - tool: ropgadget
+    priority: 6
+    params:
+      binary: true
+      
+  - tool: one_gadget
+    priority: 7
+    params:
+      level: 1
+      
+  - tool: gtfobins
+    priority: 8
+    params:
+      reference: true
+
+password_attacks:
+  - tool: hashcat
+    priority: 1
+    params:
+      attack_mode: 0
+      hash_type: 0
+      
+  - tool: medusa
+    priority: 2
+    params:
+      threads: 4
+      timeout: 10
+      
+  - tool: ncrack
+    priority: 3
+    params:
+      connection_limit: 50
+      
+  - tool: asleap
+    priority: 4
+    params:
+      wordlist: "${WORDLIST}"
+
+wireless_security:
+  - tool: aircrack-ng
+    priority: 1
+    params:
+      bssid: "${TARGET_BSSID}"
+      
+  - tool: wifite
+    priority: 2
+    params:
+      wps: true
+      pixie: true
+      
+  - tool: reaver
+    priority: 3
+    params:
+      brute_force: true
+      
+  - tool: bully
+    priority: 4
+    params:
+      force: true
+      
+  - tool: hcxdumptool
+    priority: 5
+    params:
+      enable_status: 3
+      
+  - tool: hcxtools
+    priority: 6
+    params:
+      convert: true
+
+forensics:
+  - tool: file
+    priority: 1
+    params:
+      detailed: true
+      
+  - tool: strings
+    priority: 2
+    params:
+      min_length: 4
+      
+  - tool: binwalk
+    priority: 3
+    params:
+      extract: true
+      entropy: true
+      
+  - tool: foremost
+    priority: 4
+    params:
+      recover: true
+      
+  - tool: volatility3
+    priority: 5
+    params:
+      plugin: "linux.pslist"
+      
+  - tool: autopsy
+    priority: 6
+    params:
+      case_dir: "./autopsy-case"
+      
+  - tool: bulk_extractor
+    priority: 7
+    params:
+      outdir: "./bulk-output"
+      
+  - tool: photorec
+    priority: 8
+    params:
+      output_dir: "./recovered"
+      
+  - tool: chainsaw
+    priority: 9
+    params:
+      rules: "sigma"
+
+reverse_engineering:
+  - tool: file
+    priority: 1
+    params:
+      detailed: true
+      
+  - tool: strings
+    priority: 2
+    params:
+      min_length: 4
+      
+  - tool: objdump
+    priority: 3
+    params:
+      disassemble: true
+      
+  - tool: readelf
+    priority: 4
+    params:
+      headers: true
+      
+  - tool: radare2
+    priority: 5
+    params:
+      analysis: "aaa"
+      
+  - tool: ghidra
+    priority: 6
+    params:
+      headless: true
+      
+  - tool: cutter
+    priority: 7
+    params:
+      json: true
+      
+  - tool: angr
+    priority: 8
+    params:
+      auto_load_libs: false
+      
+  - tool: z3
+    priority: 9
+    params:
+      smt2: true
+
+osint:
+  - tool: osint-framework
+    priority: 1
+    params:
+      category: "all"
+      
+  - tool: spiderfoot
+    priority: 2
+    params:
+      modules: "all"
+      
+  - tool: h8mail
+    priority: 3
+    params:
+      breach: true
+      
+  - tool: holehe
+    priority: 4
+    params:
+      email: "${TARGET_EMAIL}"
+      
+  - tool: social-analyzer
+    priority: 5
+    params:
+      metadata: true
+      
+  - tool: waybackurls
+    priority: 6
+    params:
+      dates: true
+      
+  - tool: gau
+    priority: 7
+    params:
+      providers: "wayback,otx,commoncrawl"
+
+utilities:
+  - tool: jq
+    priority: 1
+    params:
+      compact: false
+      
+  - tool: yq
+    priority: 2
+    params:
+      prettyPrint: true
+      
+  - tool: gron
+    priority: 3
+    params:
+      colorize: true
+      
+  - tool: interactsh
+    priority: 4
+    params:
+      server: "${INTERACTSH_SERVER}"
+      
+  - tool: notify
+    priority: 5
+    params:
+      provider: "slack,discord,telegram"
+      
+  - tool: meg
+    priority: 6
+    params:
+      verbose: true
+
+comprehensive_network_pentest:
+  - tool: autorecon
+    priority: 1
+    params:
+      plugins: "default"
+      
+  - tool: rustscan
+    priority: 2
+    params:
+      ulimit: 5000
+      
+  - tool: nmap
+    priority: 3
+    params:
+      aggressive: true
+      
+  - tool: enum4linux-ng
+    priority: 4
+    params:
+      all: true
+      
+  - tool: responder
+    priority: 5
+    params:
+      duration: 300
+      
+  - tool: crackmapexec
+    priority: 6
+    params:
+      all_protocols: true
+
+modern_web_assessment:
+  - tool: httpx
+    priority: 1
+    params:
+      tech_detect: true
+      
+  - tool: katana
+    priority: 2
+    params:
+      headless: true
+      
+  - tool: feroxbuster
+    priority: 3
+    params:
+      recursion: true
+      
+  - tool: nuclei
+    priority: 4
+    params:
+      severity: "critical,high"
+      
+  - tool: dalfox
+    priority: 5
+    params:
+      mining: true
+      
+  - tool: sqlmap
+    priority: 6
+    params:
+      level: 3
+
+cloud_infrastructure_audit:
+  - tool: prowler
+    priority: 1
+    params:
+      full_scan: true
+      
+  - tool: trivy
+    priority: 2
+    params:
+      all_severities: true
+      
+  - tool: scout-suite
+    priority: 3
+    params:
+      all_providers: true
+      
+  - tool: cloudfox
+    priority: 4
+    params:
+      all_checks: true
+
+kubernetes_security_assessment:
+  - tool: kube-bench
+    priority: 1
+    params:
+      all_node_types: true
+      
+  - tool: trivy
+    priority: 2
+    params:
+      scan_images: true
+      
+  - tool: kubescape
+    priority: 3
+    params:
+      framework: "all"
+      
+  - tool: kube-hunter
+    priority: 4
+    params:
+      active: true
+      
+  - tool: falco
+    priority: 5
+    params:
+      detect: true
+
+active_directory_assessment:
+  - tool: bloodhound
+    priority: 1
+    params:
+      collection: "All"
+      
+  - tool: sharphound
+    priority: 2
+    params:
+      stealth: true
+      
+  - tool: crackmapexec
+    priority: 3
+    params:
+      all_protocols: true
+      
+  - tool: responder
+    priority: 4
+    params:
+      wpad: true
+      
+  - tool: mitm6
+    priority: 5
+    params:
+      relay: true
+
+red_team_operations:
+  - tool: sliver
+    priority: 1
+    params:
+      operator: true
+      
+  - tool: bloodhound
+    priority: 2
+    params:
+      analysis: true
+      
+  - tool: crackmapexec
+    priority: 3
+    params:
+      lateral_movement: true
+      
+  - tool: responder
+    priority: 4
+    params:
+      hash_capture: true
+      
+  - tool: metasploit
+    priority: 5
+    params:
+      advanced: true

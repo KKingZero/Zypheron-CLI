@@ -1,0 +1,254 @@
+"""Application configuration with environment variable support."""
+
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Application
+    app_name: str = "Zypheron API"
+    app_version: str = "0.1.0"
+    debug: bool = False
+    environment: Literal["development", "staging", "production"] = "development"
+
+    # Server
+    host: str = "0.0.0.0"
+    port: int = 8000
+    frontend_url: str = "http://localhost:3000"  # Web app URL for device code verification
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://zypheron.net",
+            "https://app.zypheron.net",
+            "https://api.zypheron.net",
+        ],
+        description="Explicit allowed origins for CORS in non-development environments",
+    )
+
+    # Database - SQLite for dev, Supabase/Postgres for production
+    database_type: Literal["sqlite", "postgresql"] = "sqlite"
+    database_url: str = "sqlite+aiosqlite:///./zypheron.db"
+
+    # PostgreSQL (Local Development or Self-hosted)
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_user: str = "zypheron"
+    postgres_password: str = "zypheron_dev_password"
+    postgres_db: str = "zypheron"
+    postgres_url_override: str | None = None  # Override auto-generated URL if needed
+
+    # Supabase (for production)
+    supabase_url: str | None = None
+    supabase_key: str | None = None
+    supabase_service_key: str | None = None
+
+    # Redis (Upstash recommended for serverless)
+    # Format: redis://default:PASSWORD@HOST:PORT or rediss:// for TLS
+    redis_url: str | None = None
+    redis_enabled: bool = False
+    redis_ssl: bool = True  # Upstash uses TLS by default
+    redis_host: str = "localhost"  # Redis host (if not using redis_url)
+    redis_port: int = 6379  # Redis port (if not using redis_url)
+    redis_password: str | None = None  # Redis password (if not using redis_url)
+    redis_db: int = 0  # Redis database number
+
+    # JWT Authentication
+    # SECURITY: JWT secret must be set via environment variable in production
+    # Generate with: python -c "import secrets; print(secrets.token_urlsafe(64))"
+    jwt_secret_key: str = Field(
+        default="dev-secret-UNSAFE-FOR-PRODUCTION",
+        description="JWT signing key - MUST be set via JWT_SECRET_KEY env var in production"
+    )
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 10080  # 7 days
+
+    def model_post_init(self, __context) -> None:
+        """Validate critical security settings after initialization."""
+        # Validate JWT secret in production
+        if self.environment == "production":
+            if "UNSAFE" in self.jwt_secret_key or self.jwt_secret_key == "dev-secret-UNSAFE-FOR-PRODUCTION":
+                raise ValueError(
+                    "CRITICAL: JWT_SECRET_KEY must be set in production! "
+                    "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+                )
+            if len(self.jwt_secret_key) < 32:
+                raise ValueError(
+                    "CRITICAL: JWT_SECRET_KEY must be at least 32 characters in production"
+                )
+
+    # API Keys for AI Providers (server-side pool)
+    openai_api_keys: list[str] = Field(default_factory=list)
+    anthropic_api_keys: list[str] = Field(default_factory=list)
+    grok_api_keys: list[str] = Field(default_factory=list)
+    deepseek_api_keys: list[str] = Field(default_factory=list)
+
+    # Ollama (Local LLM server - no API key required)
+    enable_ollama: bool = True  # Enable Ollama provider (runs locally)
+    ollama_base_url: str = "http://localhost:11434"  # Ollama server URL
+
+    # Rate Limiting
+    enable_rate_limiting: bool = True  # Master switch for rate limiting
+    rate_limit_free: int = 10  # requests per minute
+    rate_limit_starter: int = 60
+    rate_limit_pro: int = 120
+    rate_limit_enterprise: int = 300
+
+    # Token Limits (monthly)
+    token_limit_free: int = 0  # BYOK only
+    token_limit_starter: int = 1_000_000
+    token_limit_pro: int = 3_000_000
+    token_limit_enterprise: int = 15_000_000  # per 5 users
+
+    # Cache TTL (seconds) - Aggressive strategy for ~35-40% cost savings
+    cache_ttl_prompt: int = 3600  # 1 hour for identical prompts
+    cache_ttl_vuln_desc: int = 86400  # 24 hours for vulnerability descriptions (CVE lookups)
+    cache_ttl_general: int = 21600  # 6 hours for general security info
+
+    # Stripe Payment Integration
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_publishable_key: str | None = None
+    # Monthly price IDs
+    stripe_price_id_starter_monthly: str | None = None
+    stripe_price_id_pro_monthly: str | None = None
+    stripe_price_id_enterprise_monthly: str | None = None
+    # Annual price IDs
+    stripe_price_id_starter_annual: str | None = None
+    stripe_price_id_pro_annual: str | None = None
+    stripe_price_id_enterprise_annual: str | None = None
+    stripe_payment_grace_period_days: int = 3
+
+    # Pricing (in cents for Stripe)
+    price_starter_monthly: int = 2900  # $29
+    price_starter_annual: int = 26100  # $261 (25% off $348)
+    price_pro_monthly: int = 14900  # $149
+    price_pro_annual: int = 134100  # $1,341 (25% off $1,788)
+    price_enterprise_monthly: int = 49900  # $499 per user
+    price_enterprise_annual: int = 449100  # $4,491 per user (25% off $5,988)
+    enterprise_min_seats: int = 3
+
+    # Metrics endpoint security
+    metrics_secret_token: str | None = None  # Bearer token for /metrics access
+
+    # Allowed redirect domains for Stripe checkout/portal
+    allowed_redirect_domains: list[str] = Field(
+        default_factory=lambda: ["zypheron.com", "localhost"],
+        description="Allowed domains for Stripe redirect URLs",
+    )
+
+    # GitHub OAuth Integration
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    base_url: str = "https://api.zypheron.net"  # API base URL for OAuth callback
+
+    # BYOK (Bring Your Own Key) Encryption
+    # SECURITY: Encryption keys for BYOK API key storage
+    # CRYPTO-H1: AES-256-GCM is recommended (stronger than Fernet)
+    # Generate AES-256 key: python -c "import secrets; print(secrets.token_hex(32))"
+    # Generate Fernet key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+    # NEW: AES-256-GCM keys (recommended for production)
+    byok_encryption_key_gcm_v1: str | None = Field(
+        default=None,
+        description="AES-256-GCM encryption key version 1 (64-char hex string)"
+    )
+    byok_encryption_key_gcm_v2: str | None = Field(
+        default=None,
+        description="AES-256-GCM encryption key version 2 (64-char hex string)"
+    )
+    byok_encryption_key_gcm_v3: str | None = Field(
+        default=None,
+        description="AES-256-GCM encryption key version 3 (64-char hex string)"
+    )
+    byok_encryption_key_gcm_v4: str | None = Field(
+        default=None,
+        description="AES-256-GCM encryption key version 4 (64-char hex string)"
+    )
+    byok_encryption_key_gcm_v5: str | None = Field(
+        default=None,
+        description="AES-256-GCM encryption key version 5 (64-char hex string)"
+    )
+
+    # LEGACY: Fernet keys (AES-128-CBC) - kept for backward compatibility read-only
+    byok_encryption_key: str | None = Field(
+        default=None,
+        description="Legacy Fernet encryption key (deprecated - use GCM keys)"
+    )
+    byok_encryption_key_v1: str | None = Field(
+        default=None,
+        description="Legacy Fernet encryption key version 1 (read-only for migration)"
+    )
+    byok_encryption_key_v2: str | None = Field(
+        default=None,
+        description="Legacy Fernet encryption key version 2 (read-only for migration)"
+    )
+    byok_encryption_key_v3: str | None = Field(
+        default=None,
+        description="Legacy Fernet encryption key version 3 (read-only for migration)"
+    )
+    byok_encryption_key_v4: str | None = Field(
+        default=None,
+        description="Legacy Fernet encryption key version 4 (read-only for migration)"
+    )
+    byok_encryption_key_v5: str | None = Field(
+        default=None,
+        description="Legacy Fernet encryption key version 5 (read-only for migration)"
+    )
+
+    byok_encryption_key_current: int | None = Field(
+        default=None,
+        description="Current key version to use for new encryptions (1-5). Defaults to highest available version."
+    )
+
+    @computed_field
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+    @computed_field
+    @property
+    def postgres_url(self) -> str | None:
+        """Generate PostgreSQL URL from configuration.
+
+        Priority:
+        1. postgres_url_override (if set)
+        2. Supabase credentials (for production)
+        3. Local PostgreSQL settings (for development)
+        """
+        # Allow manual override
+        if self.postgres_url_override:
+            return self.postgres_url_override
+
+        # Supabase connection (production)
+        if self.supabase_url and self.supabase_service_key:
+            # Extract host from Supabase URL
+            host = self.supabase_url.replace("https://", "").split(".")[0]
+            return f"postgresql+asyncpg://postgres:{self.supabase_service_key}@db.{host}.supabase.co:5432/postgres"
+
+        # Local PostgreSQL connection (development)
+        if self.database_type == "postgresql":
+            return (
+                f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            )
+
+        return None
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Get cached settings instance."""
+    return Settings()

@@ -1,0 +1,109 @@
+ZYPHERON INTEGRATION TEST SUITE - FILE MANIFEST
+================================================
+
+Created: 2025-12-21
+Status: COMPLETE
+Location: /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/
+
+TEST SCRIPTS (Executable)
+==========================
+
+1. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/test_integration.sh
+   Purpose: Master integration test orchestrator
+   Usage: ./scripts/test_integration.sh [--skip-api]
+   Tests: Coordinates all integration test suites
+   Size: 8.3 KB
+
+2. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/test_auth_flow.sh
+   Purpose: OAuth 2.0 Device Authorization Grant flow testing
+   Usage: ./scripts/test_auth_flow.sh
+   Tests: 9 test cases for authentication
+   Size: 14 KB
+
+3. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/test_license_flow.sh
+   Purpose: License validation and tier feature testing
+   Usage: ./scripts/test_license_flow.sh
+   Tests: 9 test cases for licensing
+   Size: 14 KB
+
+4. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/test_stripe_webhooks.sh
+   Purpose: Stripe webhook event handler testing
+   Usage: ./scripts/test_stripe_webhooks.sh
+   Tests: 9 test cases for webhooks
+   Size: 14 KB
+
+5. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/test_compliance.sh
+   Purpose: Compliance framework and report generation testing
+   Usage: ./scripts/test_compliance.sh
+   Tests: 9 test cases for compliance
+   Size: 14 KB
+
+6. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/run_all_tests.sh
+   Purpose: Comprehensive test runner with unit + integration tests
+   Usage: ./scripts/run_all_tests.sh [OPTIONS]
+   Options: --skip-unit, --skip-integration, --skip-coverage, --fast, --ci
+   Size: 15 KB
+
+7. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/test
+   Purpose: Quick launcher wrapper for common test commands
+   Usage: ./scripts/test [command]
+   Commands: all, fast, unit, integration, auth, license, webhooks, compliance, ci
+   Size: 2.9 KB
+
+DOCUMENTATION
+=============
+
+8. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/TESTING_README.md
+   Purpose: Comprehensive test suite documentation
+   Contents: Setup, usage, troubleshooting, CI/CD examples
+   Size: 12 KB
+
+9. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/scripts/TEST_QUICK_REFERENCE.md
+   Purpose: Quick reference card for common commands
+   Contents: One-liners, quick checks, debugging tips
+   Size: 5.7 KB
+
+10. /home/zero/Downloads/Zypheron project/Zypheron-CLI-Production/INTEGRATION_TEST_SUMMARY.md
+    Purpose: Implementation summary and overview
+    Contents: Features, coverage matrix, usage examples
+    Size: 13 KB
+
+TOTAL: 10 files (~99 KB, ~3,200 lines of code)
+
+QUICK START
+===========
+
+# Install dependencies
+sudo apt install curl jq  # Ubuntu/Debian
+brew install curl jq      # macOS
+
+# Run all tests (fast mode)
+./scripts/test fast
+
+# Run specific test suite
+./scripts/test auth
+./scripts/test license
+./scripts/test webhooks
+./scripts/test compliance
+
+# Full test suite with coverage
+./scripts/test all
+
+# CI pipeline mode
+./scripts/test ci
+
+VERIFICATION
+============
+
+All files created:     ✓ YES (10 files)
+All scripts executable: ✓ YES (7 scripts)
+Syntax verified:       ✓ PASSED
+Documentation:         ✓ COMPLETE (3 docs)
+Ready to use:          ✓ YES
+
+STATUS: ✅ IMPLEMENTATION COMPLETE
+
+For detailed documentation, see:
+- ./scripts/TESTING_README.md (full guide)
+- ./scripts/TEST_QUICK_REFERENCE.md (quick reference)
+- ./INTEGRATION_TEST_SUMMARY.md (implementation summary)

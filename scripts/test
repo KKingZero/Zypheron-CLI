@@ -1,0 +1,112 @@
+#!/bin/bash
+
+################################################################################
+# test - Ultra-quick test launcher for Zypheron
+#
+# A convenient wrapper around the test suite for common workflows.
+#
+# Usage:
+#   ./scripts/test [command]
+#
+# Commands:
+#   all              Run all tests with coverage (default)
+#   fast             Run all tests without coverage
+#   unit             Run only unit tests (Python + Go)
+#   integration      Run only integration tests
+#   auth             Test authentication flow
+#   license          Test license/tier features
+#   webhooks         Test Stripe webhooks
+#   compliance       Test compliance framework
+#   ci               CI mode (fail fast, no color)
+#   help             Show this help
+#
+# Examples:
+#   ./scripts/test               # Run all tests
+#   ./scripts/test fast          # Quick run
+#   ./scripts/test auth          # Test auth only
+#   ./scripts/test ci            # CI pipeline
+################################################################################
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+BOLD='\033[1m'
+
+show_help() {
+    grep "^#" "$0" | grep -v "#!/bin/bash" | sed 's/^# //'
+    exit 0
+}
+
+print_info() {
+    echo -e "${CYAN}[TEST]${NC} $1"
+}
+
+# Parse command
+COMMAND="${1:-all}"
+
+case "$COMMAND" in
+    all)
+        print_info "Running all tests with coverage..."
+        exec "${SCRIPT_DIR}/run_all_tests.sh"
+        ;;
+
+    fast)
+        print_info "Running all tests (fast mode, no coverage)..."
+        exec "${SCRIPT_DIR}/run_all_tests.sh" --fast
+        ;;
+
+    unit)
+        print_info "Running unit tests only..."
+        exec "${SCRIPT_DIR}/run_all_tests.sh" --skip-integration
+        ;;
+
+    integration|int)
+        print_info "Running integration tests only..."
+        exec "${SCRIPT_DIR}/test_integration.sh"
+        ;;
+
+    auth|authentication)
+        print_info "Testing authentication flow..."
+        exec "${SCRIPT_DIR}/test_auth_flow.sh"
+        ;;
+
+    license|lic|tier)
+        print_info "Testing license and tier features..."
+        exec "${SCRIPT_DIR}/test_license_flow.sh"
+        ;;
+
+    webhooks|stripe|webhook)
+        print_info "Testing Stripe webhooks..."
+        exec "${SCRIPT_DIR}/test_stripe_webhooks.sh"
+        ;;
+
+    compliance|comp|soc2|pci)
+        print_info "Testing compliance framework..."
+        exec "${SCRIPT_DIR}/test_compliance.sh"
+        ;;
+
+    ci|pipeline)
+        print_info "Running in CI mode..."
+        exec "${SCRIPT_DIR}/run_all_tests.sh" --ci
+        ;;
+
+    help|--help|-h)
+        show_help
+        ;;
+
+    *)
+        echo -e "${BOLD}Error:${NC} Unknown command '${COMMAND}'"
+        echo ""
+        echo "Available commands:"
+        echo "  all, fast, unit, integration, auth, license, webhooks, compliance, ci, help"
+        echo ""
+        echo "Run './scripts/test help' for more information"
+        exit 1
+        ;;
+esac

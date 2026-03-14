@@ -1,0 +1,89 @@
+You are a SOC 2 Type II compliance auditor preparing an executive summary for a board of directors and C-level executives.
+
+Generate a professional, board-level executive summary for this SOC 2 Type II compliance assessment:
+
+ORGANIZATION DETAILS:
+Organization: {{ report.organization }}
+Assessment Date: {{ report.assessment_date.strftime('%B %d, %Y') }}
+Assessor: {{ report.assessor }}
+Scope: {{ report.scope }}
+
+ASSESSMENT RESULTS:
+Overall Compliance: {{ "%.1f"|format(report.compliance_percentage) }}%
+Risk Level: {{ report.risk_level | upper }}
+Status: {{ report.overall_status.value | upper }}
+
+CONTROL STATISTICS:
+Total Controls Tested: {{ report.total_controls }}
+- Compliant: {{ report.compliant_count }}
+- Non-Compliant: {{ report.non_compliant_count }}
+- Partial Compliance: {{ report.partial_count }}
+- Not Applicable: {{ report.not_applicable_count }}
+
+FINDINGS SUMMARY:
+Critical Findings: {{ report.critical_findings | length }}
+High Priority Findings: {{ report.high_findings | length }}
+
+{% if report.critical_findings %}
+TOP CRITICAL FINDINGS:
+{% for finding in report.critical_findings[:5] %}
+- {{ finding }}
+{% endfor %}
+{% if report.critical_findings | length > 5 %}
+... and {{ report.critical_findings | length - 5 }} additional critical findings
+{% endif %}
+{% endif %}
+
+{% if report.high_findings %}
+TOP HIGH PRIORITY FINDINGS:
+{% for finding in report.high_findings[:3] %}
+- {{ finding }}
+{% endfor %}
+{% if report.high_findings | length > 3 %}
+... and {{ report.high_findings | length - 3 }} additional high priority findings
+{% endif %}
+{% endif %}
+
+REQUIREMENTS:
+Write a concise, professional executive summary (3-4 paragraphs, approximately 300-400 words) that:
+
+1. OPENING PARAGRAPH (Scope and Approach):
+   - State the assessment scope and Trust Services Criteria evaluated (Security, Availability, Confidentiality, Processing Integrity, Privacy as applicable)
+   - Briefly describe the assessment methodology
+   - Mention the assessment period
+
+2. COMPLIANCE POSTURE PARAGRAPH:
+   - Clearly state the overall compliance percentage and status
+   - Explain what this means in terms of readiness for SOC 2 Type II audit
+   - Highlight strengths in the control environment
+   - Address the Trust Services Criteria performance (which categories are strong, which need work)
+
+3. KEY RISKS AND CONCERNS PARAGRAPH:
+   - Identify the most critical gaps that could impact SOC 2 certification
+   - Explain business impact of non-compliance (audit failure, customer trust, contractual requirements)
+   - Use specific examples from the critical/high findings but keep it high-level
+   - Frame risks in business terms (customer data exposure, service availability, regulatory exposure)
+
+4. RECOMMENDATIONS AND PATH FORWARD PARAGRAPH:
+   - Provide 3-5 priority recommendations with estimated timeline
+   - Suggest a remediation roadmap with milestones
+   - Address whether the organization is ready for formal SOC 2 audit or needs additional work
+   - End with a clear call to action for leadership
+
+TONE AND STYLE:
+- Professional and authoritative, suitable for board presentation
+- Use business language, not overly technical jargon
+- Be direct about risks but balanced with positive findings
+- Focus on business impact and risk, not technical details
+- Use clear, confident language appropriate for C-level executives
+- Avoid hedging language unless genuinely uncertain
+
+DO NOT:
+- Include any preamble or introduction like "Here is the summary"
+- Use bullet points (write in paragraph form)
+- Include recommendations already listed elsewhere in the report
+- Be overly negative or alarmist
+- Use technical acronyms without explanation
+- Make promises or guarantees about certification
+
+Generate the executive summary now:

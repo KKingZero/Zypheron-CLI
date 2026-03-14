@@ -1,0 +1,28 @@
+# Executive Summary — {{ report.target }}
+
+**Date:** {{ report.report_date }}
+**Classification:** {{ report.classification }}
+
+## Risk Overview
+
+| Severity | Count |
+|----------|-------|
+| Critical | {{ report.severity_summary.critical }} |
+| High | {{ report.severity_summary.high }} |
+| Medium | {{ report.severity_summary.medium }} |
+| Low | {{ report.severity_summary.low }} |
+| **Total** | **{{ report.severity_summary.total }}** |
+
+## Key Findings
+
+{% for vuln in report.vulnerabilities[:10] %}
+{{ loop.index }}. **{{ vuln.title }}** ({{ vuln.severity.value | upper }}, CVSS {{ "%.1f" | format(vuln.cvss_score) }}){% if vuln.affected_target %} — {{ vuln.affected_target }}{% endif %}
+
+{% endfor %}
+
+## Recommendations
+
+{{ report.executive_summary or "_Run with AI enabled for auto-generated recommendations._" }}
+
+---
+*Zypheron AI — {{ report.report_date }}*

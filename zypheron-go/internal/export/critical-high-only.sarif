@@ -1,0 +1,81 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "zypheron",
+          "version": "1.0.0",
+          "informationUri": "https://github.com/KKingZero/Cobra-AI/zypheron-go",
+          "organization": "Zypheron Security",
+          "semanticVersion": "1.0.0",
+          "rules": [
+            {
+              "id": "vuln-001",
+              "name": "Critical Issue",
+              "shortDescription": {
+                "text": "Critical Issue"
+              },
+              "fullDescription": {},
+              "defaultConfiguration": {
+                "level": "error",
+                "enabled": true
+              },
+              "properties": {
+                "severity": "critical",
+                "tags": [
+                  "security"
+                ]
+              }
+            },
+            {
+              "id": "vuln-002",
+              "name": "High Issue",
+              "shortDescription": {
+                "text": "High Issue"
+              },
+              "fullDescription": {},
+              "defaultConfiguration": {
+                "level": "error",
+                "enabled": true
+              },
+              "properties": {
+                "severity": "high",
+                "tags": [
+                  "security"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "vuln-001",
+          "level": "error",
+          "message": {},
+          "partialFingerprints": {
+            "content": "16183a3d216310e5b5387abb395af2f63c6c0f9316a3b201cf5598296e1dd041",
+            "primary": "vuln-001",
+            "vulnerability_id": "vuln-001"
+          },
+          "properties": {}
+        },
+        {
+          "ruleId": "vuln-002",
+          "level": "error",
+          "message": {},
+          "partialFingerprints": {
+            "content": "a6d6abb14ef54d98857a8f6f5417f6f0f11bffbb241a70e74353b66fc13b2478",
+            "primary": "vuln-002",
+            "vulnerability_id": "vuln-002"
+          },
+          "properties": {}
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {}
+    }
+  ]
+}

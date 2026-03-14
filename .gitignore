@@ -1,0 +1,67 @@
+# Zypheron CLI - Go Project
+
+# Binaries
+zypheron-go/build/
+zypheron-go/release/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+!Dockerfile.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# Test cache
+go.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+
+# Python cache/venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+zypheron-ai/venv/
+zypheron-ai/.venv/
+
+# Configuration (keep examples)
+*.env
+!.env.example
+
+# Build artifacts
+dist/
+*.tar.gz
+*.zip
+
+# Compressed binaries
+zypheron-go/build/*-upx
+
+# Local dev binaries
+zypheron-go/zypheron.real
+zypheron-go/zypheron.bin
+
+# Archived documentation (outdated/internal)
+docs/archive/

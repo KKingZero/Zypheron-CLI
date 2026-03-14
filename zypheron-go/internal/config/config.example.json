@@ -1,0 +1,18 @@
+{
+  "ai": {
+    "provider": "ollama",
+    "ollama_url": "http://localhost:11434",
+    "ollama_model": "codellama",
+    "temperature": 0.7,
+    "max_tokens": 4096
+  },
+  "ai_engine_timeout": 60000000000,
+  "connection_pool_size": 5,
+  "ipc_timeout": 30000000000,
+  "ipc_retries": 3,
+  "scan_timeout": 300000000000,
+  "max_concurrent_scans": 10,
+  "rate_limit_rps": 10,
+  "log_sanitization": true,
+  "audit_logging": true
+}

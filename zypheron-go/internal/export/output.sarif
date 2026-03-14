@@ -1,0 +1,89 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "nmap",
+          "version": "1.0.0",
+          "informationUri": "https://github.com/KKingZero/Cobra-AI/zypheron-go",
+          "organization": "Zypheron Security",
+          "semanticVersion": "1.0.0",
+          "rules": [
+            {
+              "id": "CVE-2023-12345",
+              "name": "Outdated SSL/TLS Configuration",
+              "shortDescription": {
+                "text": "Outdated SSL/TLS Configuration"
+              },
+              "fullDescription": {
+                "text": "The server supports outdated SSL/TLS protocols"
+              },
+              "defaultConfiguration": {
+                "level": "error",
+                "enabled": true
+              },
+              "properties": {
+                "cve_id": "CVE-2023-12345",
+                "cvss_score": 7.5,
+                "severity": "high",
+                "tags": [
+                  "security"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CVE-2023-12345",
+          "level": "error",
+          "message": {
+            "text": "The server supports outdated SSL/TLS protocols"
+          },
+          "locations": [
+            {
+              "properties": {
+                "host": "example.com",
+                "port": 443
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "content": "798a08cfeb97699d03aaf91729176ee8074e7e067644f23c697fb5e27240bbab",
+            "cve": "CVE-2023-12345",
+            "location": "2d92752e69614799ea8467c10d252c76f79c85845cf23d54406ef49ab463ff0c",
+            "primary": "CVE-2023-12345"
+          },
+          "properties": {
+            "cve_id": "CVE-2023-12345",
+            "cvss_score": 7.5
+          },
+          "rank": 75
+        }
+      ],
+      "invocations": [
+        {
+          "startTimeUtc": "2026-02-14T05:12:53Z",
+          "endTimeUtc": "2026-02-14T05:13:39Z",
+          "executionSuccessful": true,
+          "properties": {
+            "ports": "1-1000",
+            "scan_id": "scan-001",
+            "target": "example.com",
+            "tool": "nmap"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "scan_id": "scan-001",
+        "scan_target": "example.com",
+        "scan_timestamp": "2026-02-13T23:12:53-06:00",
+        "scan_tool": "nmap"
+      }
+    }
+  ]
+}

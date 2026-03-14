@@ -1,0 +1,61 @@
+version: 2
+
+project_name: zypheron
+
+before:
+  hooks:
+    - cd zypheron-go && go mod tidy
+
+builds:
+  - id: zypheron
+    dir: zypheron-go
+    main: ./cmd/zypheron/main.go
+    binary: zypheron
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - >-
+        -s -w
+        -X main.version={{ .Version }}
+        -X github.com/KKingZero/Cobra-AI/zypheron-go/internal/updater.CurrentVersion={{ .Version }}
+
+archives:
+  - id: default
+    ids:
+      - zypheron
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}-{{ .Os }}-{{ .Arch }}
+
+checksum:
+  name_template: SHA256SUMS
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: KKingZero
+    name: Cobra-AI
+  draft: false
+  prerelease: auto

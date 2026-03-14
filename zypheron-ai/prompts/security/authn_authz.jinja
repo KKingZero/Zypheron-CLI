@@ -1,0 +1,405 @@
+<authentication_authorization_testing_guide>
+<title>AUTHENTICATION & AUTHORIZATION SECURITY TESTING</title>
+
+<critical>Broken authentication and authorization are consistently in OWASP Top 10. These vulnerabilities allow attackers to impersonate users, escalate privileges, and access unauthorized data. Test authentication mechanisms thoroughly and verify authorization at every access point.</critical>
+
+<scope>
+- Authentication mechanisms (passwords, MFA, SSO, OAuth, SAML)
+- Session management (cookies, tokens, session fixation)
+- Authorization models (RBAC, ABAC, ACL, resource-level)
+- Password policies and credential storage
+- Account recovery and password reset flows
+- Multi-factor authentication (MFA) implementation
+- API authentication (JWT, OAuth2, API keys)
+</scope>
+
+<methodology>
+1. **Enumerate auth mechanisms**: Identify all authentication methods and entry points
+2. **Test authentication bypass**: Attempt to bypass login and auth checks
+3. **Test credential policies**: Weak passwords, no rate limiting, credential stuffing
+4. **Test session management**: Session fixation, hijacking, timeout issues
+5. **Test authorization**: Horizontal and vertical privilege escalation
+6. **Test account recovery**: Password reset vulnerabilities
+7. **Test MFA**: Bypass attempts and implementation flaws
+</methodology>
+
+<authentication_attacks>
+<credential_attacks>
+# Default credentials
+admin:admin
+admin:password
+root:root
+administrator:administrator
+admin:admin123
+
+# Weak password testing
+- No minimum length
+- No complexity requirements
+- Common passwords allowed (Password123)
+- Username as password
+- Sequential/repeated characters (111111, abc123)
+
+# Username enumeration
+Login with valid username: "Invalid password"
+Login with invalid username: "User not found"
+# Different error messages reveal valid usernames
+
+# Timing attacks
+Valid user: Response in 200ms
+Invalid user: Response in 50ms
+# Timing difference reveals valid usernames
+
+# Rate limiting bypass
+- No account lockout after failed attempts
+- Bypass lockout with different IP (X-Forwarded-For)
+- Bypass lockout by adding null byte to username
+- Rotate between multiple accounts
+</credential_attacks>
+
+<authentication_bypass>
+# SQL injection in login
+Username: admin'--
+Password: anything
+# Query: SELECT * FROM users WHERE username='admin'--' AND password='...'
+
+# NoSQL injection
+{"username": {"$ne": null}, "password": {"$ne": null}}
+{"username": "admin", "password": {"$regex": ".*"}}
+
+# Logic flaws
+if (password_verify($input, $hash)) {
+    login_success();
+} else {
+    // Missing return statement
+}
+login_success(); // Always executes!
+
+# Response manipulation
+# If server response controls authentication
+# Change: {"authenticated": false}
+# To: {"authenticated": true}
+
+# Cookie manipulation
+# Change: auth=false to auth=true
+# Change: role=user to role=admin
+
+# JWT manipulation
+# Change payload: {"role": "user"} to {"role": "admin"}
+# Remove signature if verification is weak
+# Use "alg": "none"
+</authentication_bypass>
+
+<session_management>
+# Session fixation
+1. Attacker gets session ID: SESSIONID=abc123
+2. Victim logs in with that session ID
+3. Attacker uses abc123 to access victim's session
+
+# Session hijacking
+- Steal session cookie via XSS
+- Intercept unencrypted session token (HTTP not HTTPS)
+- Predict session token if weak generation
+
+# Session timeout issues
+- No idle timeout
+- No absolute timeout
+- Session persists after logout
+- Concurrent sessions allowed without limit
+
+# Cookie security attributes
+Missing Secure flag: Cookie sent over HTTP
+Missing HttpOnly flag: Accessible via JavaScript (XSS risk)
+Missing SameSite: CSRF vulnerable
+Long expiration: Persistent sessions forever
+</session_management>
+
+<mfa_bypass>
+# Direct URL access
+1. Enter username/password
+2. MFA prompt appears at /mfa-verify
+3. Try accessing /dashboard directly (bypassing MFA)
+
+# Response manipulation
+POST /verify-mfa
+{"code": "000000", "user": "victim"}
+# Response: {"mfa_valid": false}
+# Change to: {"mfa_valid": true}
+
+# Code reuse
+1. Complete MFA with code 123456
+2. Logout
+3. Login again and try same code 123456
+# If code reuse allowed, MFA is bypassable
+
+# Missing rate limiting
+- Brute force 6-digit codes (000000-999999)
+- No lockout after failed attempts
+- Try top 20 common codes
+
+# Backup codes issues
+- Backup codes not invalidated after use
+- Backup codes predictable
+- Backup codes accessible without MFA
+
+# Remember me bypass
+- "Remember this device" bypasses MFA permanently
+- Device fingerprint can be spoofed
+- No re-authentication required for sensitive actions
+</mfa_bypass>
+</authentication_attacks>
+
+<authorization_attacks>
+<horizontal_privilege_escalation>
+# IDOR - Accessing other users' data
+User A logged in:
+GET /api/profile/123 ← User A's profile (own)
+GET /api/profile/124 ← User B's profile (test this!)
+
+User A:
+GET /api/orders?user_id=123 ← Own orders
+GET /api/orders?user_id=124 ← Someone else's orders (test)
+
+# Parameter tampering
+POST /api/update-profile
+{"user_id": 123, "email": "new@example.com"} ← Own ID
+{"user_id": 124, "email": "new@example.com"} ← Other user (test)
+
+# Object reference in URL
+/users/john/settings (logged in as john)
+/users/jane/settings (try accessing jane's settings)
+
+# Cookie manipulation
+Cookie: user_id=123
+Change to: user_id=124
+Access someone else's account
+</horizontal_privilege_escalation>
+
+<vertical_privilege_escalation>
+# Function level authorization missing
+Regular user: GET /admin/dashboard
+Regular user: POST /admin/delete-user
+Regular user: GET /api/admin/stats
+
+# Hidden admin functions
+Regular user visits: /user/settings
+Try: /admin/settings
+Try: /administrator/panel
+Try: /backend/admin
+
+# Parameter injection
+POST /api/create-user
+{
+  "username": "test",
+  "email": "test@ex.com",
+  "role": "admin"  ← Try injecting admin role
+}
+
+# Mass assignment
+POST /api/users/123
+{
+  "name": "Test",
+  "is_admin": true,  ← Try setting admin flag
+  "is_superuser": true
+}
+
+# Path traversal in roles
+GET /api/users/123/role
+# Returns: "user"
+PUT /api/users/123/role
+{"role": "../admin"}  ← Try path traversal
+
+# JWT privilege escalation
+JWT payload: {"user": "test", "role": "user"}
+Change to: {"user": "test", "role": "admin"}
+Re-sign or use with weak validation
+</vertical_privilege_escalation>
+
+<resource_level_authorization>
+# Missing authorization checks
+User A creates document: POST /api/docs (gets ID: abc123)
+User B tries:
+  GET /api/docs/abc123 (can read?)
+  PUT /api/docs/abc123 (can update?)
+  DELETE /api/docs/abc123 (can delete?)
+
+# Shared resources authorization
+Team A member: GET /api/teams/team-a/projects
+Team B member: GET /api/teams/team-a/projects (should fail)
+
+# Tenant isolation
+Tenant 1: GET /api/customers
+# Should only see Tenant 1 customers
+# Test: Can we see Tenant 2 customers?
+
+# File access authorization
+Upload file as User A: /uploads/user-a/file.pdf
+User B tries: /uploads/user-a/file.pdf (should fail)
+Try: /uploads/../user-a/file.pdf (path traversal)
+</resource_level_authorization>
+
+<authorization_bypass_techniques>
+# HTTP method override
+GET /api/users/123 (allowed)
+DELETE /api/users/123 (forbidden)
+GET /api/users/123 with X-HTTP-Method-Override: DELETE (bypass?)
+
+# Parameter pollution
+/api/users?id=123&id=456
+# Which ID is processed? Can we confuse authorization logic?
+
+# JSON parameter injection
+{"id": "123", "id": "456"}  # Duplicate keys
+{"id": [123, 456]}  # Array instead of single value
+
+# Case sensitivity
+/api/Admin/users (forbidden)
+/api/admin/users (allowed)
+/api/ADMIN/users (bypass?)
+
+# URL encoding
+/api/admin/users (forbidden)
+/api/%61dmin/users (bypass with URL encoding)
+/api/admin%2fusers (encode path separator)
+
+# Content-Type confusion
+POST /api/admin/action
+Content-Type: application/json
+{"action": "delete"} (forbidden)
+
+POST /api/admin/action
+Content-Type: application/x-www-form-urlencoded
+action=delete (bypass?)
+</authorization_bypass_techniques>
+</authorization_attacks>
+
+<password_reset_vulnerabilities>
+# Token predictability
+Reset token: user123_1234567890
+# Predictable: username + timestamp
+
+# Token not expiring
+Request reset token on Monday
+Use token on Friday (should be expired)
+
+# Token reuse
+Use reset token to change password
+Use same token again (should be invalidated)
+
+# No rate limiting
+Request 1000 password resets
+Flood user's email
+Potential DoS
+
+# User enumeration
+Reset for valid user: "Reset email sent"
+Reset for invalid user: "User not found"
+# Different messages reveal valid users
+
+# Token sent over HTTP
+Reset email contains: http://site.com/reset?token=abc123
+Should be HTTPS
+
+# Token in Referer header
+Click reset link, then click external link
+External site receives token in Referer header
+
+# Account takeover via reset
+1. Request reset for victim@example.com
+2. Change Host header to attacker.com
+3. Victim gets reset link with attacker.com domain
+4. Victim clicks link, sends token to attacker
+</password_reset_vulnerabilities>
+
+<oauth_attacks>
+# Authorization code interception
+1. User authenticates with OAuth provider
+2. Provider redirects: app.com/callback?code=ABC123
+3. Attacker intercepts code ABC123
+4. Attacker exchanges code for access token
+
+# Redirect URI manipulation
+Registered: https://app.com/callback
+Try: https://app.com/callback/../attacker.com
+Try: https://app.com.attacker.com
+Try: https://attacker.com?redirected_from=app.com
+
+# State parameter missing
+# No CSRF protection
+# Attacker can initiate OAuth flow for victim
+
+# Scope escalation
+Request: scope=read
+OAuth provider grants: scope=read
+Change to: scope=read,write,admin (before token exchange)
+
+# Open redirect in redirect_uri
+redirect_uri=https://app.com/oauth/callback?next=https://attacker.com
+</oauth_attacks>
+
+<testing_checklist>
+## Authentication
+- [ ] Test default/common credentials
+- [ ] Test weak password policy
+- [ ] Test username enumeration
+- [ ] Test rate limiting on login
+- [ ] Test SQL/NoSQL injection in login
+- [ ] Test authentication bypass techniques
+- [ ] Test session fixation
+- [ ] Test session hijacking
+- [ ] Test concurrent sessions
+- [ ] Test logout functionality
+- [ ] Test "remember me" security
+- [ ] Test MFA bypass attempts
+- [ ] Test password reset vulnerabilities
+
+## Authorization
+- [ ] Test IDOR on all resource endpoints
+- [ ] Test horizontal privilege escalation
+- [ ] Test vertical privilege escalation
+- [ ] Test access to admin functions as regular user
+- [ ] Test mass assignment vulnerabilities
+- [ ] Test authorization with different HTTP methods
+- [ ] Test tenant isolation (multi-tenant apps)
+- [ ] Test authorization after logout
+- [ ] Test authorization with expired session
+- [ ] Test direct object reference in URLs
+- [ ] Test parameter tampering
+- [ ] Test cookie manipulation
+</testing_checklist>
+
+<validation_requirements>
+Provide complete proof-of-concept including:
+1. **User context**: Which user account(s) were used
+2. **Attack vector**: Exact steps to reproduce
+3. **Request/Response**: HTTP requests showing unauthorized access
+4. **Expected behavior**: What should happen
+5. **Actual behavior**: What actually happened
+6. **Impact**: What attacker can do (access data, escalate privileges, etc.)
+7. **Affected endpoints**: List all vulnerable endpoints found
+8. **Remediation**: Specific fix (add auth check, validate session, etc.)
+</validation_requirements>
+
+<pro_tips>
+1. **Test with multiple accounts**: Create test accounts with different roles
+2. **Test every endpoint**: Authorization bugs often inconsistent across endpoints
+3. **Use different browsers**: Different session stores for parallel testing
+4. **Proxy all traffic**: Burp Suite makes request modification easy
+5. **Test after logout**: Authorization checks sometimes fail after logout
+6. **Check all HTTP methods**: GET might be protected but POST isn't
+7. **Test negative cases**: What happens with invalid IDs, missing parameters?
+8. **Look for patterns**: Vuln in /api/users/123 likely exists in /api/orders/456
+9. **Test cascading actions**: Deleting user should also delete their data
+10. **Document everything**: Screenshots, requests, responses, reproduction steps
+</pro_tips>
+
+<remember>
+Authentication and authorization flaws are critical vulnerabilities. Always:
+- Test with real user accounts (not just admin)
+- Verify authorization on EVERY endpoint
+- Test both horizontal and vertical escalation
+- Never cause damage (use test accounts, safe operations)
+- Document exact reproduction steps
+- Provide specific remediation advice
+- Retest after fixes are implemented
+</remember>
+</authentication_authorization_testing_guide>

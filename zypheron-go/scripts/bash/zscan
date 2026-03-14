@@ -1,0 +1,65 @@
+#!/bin/bash
+# Zypheron Quick Scan Wrapper
+# A simple script to quickly scan a target using a specified tool.
+
+set -e
+
+TARGET="$1"
+TOOL="${2:-nmap}"
+
+if [ -z "$TARGET" ]; then
+    echo "Usage: zscan <target> [tool]"
+    echo ""
+    echo "Tools: nmap, rustscan, feroxbuster, nuclei, httpx, prowler"
+    echo ""
+    echo "Examples:"
+    echo "  zscan example.com"
+    echo "  zscan example.com rustscan"
+    echo "  zscan 10.0.0.1 feroxbuster"
+    exit 1
+fi
+
+# Color codes
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+echo -e "${CYAN}[*] Quick scan: ${GREEN}${TARGET}${NC} with ${GREEN}${TOOL}${NC}"
+echo ""
+
+# Direct execution - optimized for speed
+case "$TOOL" in
+    nmap)
+        # Standard fast scan
+        nmap -sV -sC -F --visual "$TARGET"
+        ;;
+    rustscan)
+        # Replaces masscan: 65k ports in seconds then pipes to nmap
+        rustscan -a "$TARGET" --ulimit 5000 -- -sV
+        ;;
+    feroxbuster)
+        # Replaces nikto/gobuster: Recursive directory discovery
+        feroxbuster --url "$TARGET" --depth 2 --no-state
+        ;;
+    nuclei)
+        # Modern vulnerability assessment (replaces nikto logic)
+        nuclei -u "$TARGET" -severity critical,high,medium
+        ;;
+    httpx)
+        # Fast web probing and tech detection
+        echo "$TARGET" | httpx -title -tech-detect -status-code
+        ;;
+    prowler)
+        # Cloud security check (Assuming TARGET is a provider or account alias)
+        prowler aws --quick-check
+        ;;
+    *)
+        echo -e "${RED}[-] Unknown tool: $TOOL${NC}"
+        echo "Available: nmap, rustscan, feroxbuster, nuclei, httpx, prowler"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo -e "${GREEN}[+] Scan complete!${NC}"

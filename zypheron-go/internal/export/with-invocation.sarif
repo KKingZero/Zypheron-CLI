@@ -1,0 +1,68 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "zypheron",
+          "version": "1.0.0",
+          "informationUri": "https://github.com/KKingZero/Cobra-AI/zypheron-go",
+          "organization": "Zypheron Security",
+          "semanticVersion": "1.0.0",
+          "rules": [
+            {
+              "id": "vuln-001",
+              "name": "Open Port",
+              "shortDescription": {
+                "text": "Open Port"
+              },
+              "fullDescription": {
+                "text": "Port 22 is open and accessible"
+              },
+              "defaultConfiguration": {
+                "level": "note",
+                "enabled": true
+              },
+              "properties": {
+                "severity": "info",
+                "tags": [
+                  "security"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "vuln-001",
+          "level": "note",
+          "message": {
+            "text": "Port 22 is open and accessible"
+          },
+          "partialFingerprints": {
+            "content": "aef2e2b5c41dbe196ea3c4a1a0fc20dff241c2b8e295bdb097367105c9d50ebb",
+            "primary": "vuln-001",
+            "vulnerability_id": "vuln-001"
+          },
+          "properties": {}
+        }
+      ],
+      "invocations": [
+        {
+          "commandLine": "zypheron scan example.com --ports 1-1000",
+          "startTimeUtc": "2026-02-14T05:12:53Z",
+          "endTimeUtc": "2026-02-14T05:13:23Z",
+          "executionSuccessful": true,
+          "properties": {
+            "ports": "1-1000",
+            "target": "example.com"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {}
+    }
+  ]
+}

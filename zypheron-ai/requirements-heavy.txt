@@ -1,0 +1,9 @@
+# Heavy optional dependencies for ML/exploitation tooling
+# Install when needed: ./install-heavy.sh
+
+# ML stack (large)
+torch>=2.1.0
+transformers>=4.36.0
+
+# Exploitation tooling (may require build tools)
+pwntools>=4.11.0

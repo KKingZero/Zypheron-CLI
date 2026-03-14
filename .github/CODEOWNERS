@@ -1,0 +1,14 @@
+# Default ownership
+* @KKingZero
+
+# Go CLI
+/zypheron-go/ @KKingZero
+
+# Python AI engine
+/zypheron-ai/ @KKingZero
+
+# API service
+/zypheron-api/ @KKingZero
+
+# GitHub automation and release metadata
+/.github/ @KKingZero

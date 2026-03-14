@@ -1,0 +1,81 @@
+Zypheron - AI-Powered Penetration Testing Platform
+Copyright 2025 Zypheron (KKingZero)
+
+This product includes software developed by Zypheron.
+
+Licensed under the Elastic License 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.elastic.co/licensing/elastic-license
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+================================================================================
+
+THIRD-PARTY COMPONENTS
+
+This software includes the following third-party components:
+
+--------------------------------------------------------------------------------
+Go Dependencies:
+--------------------------------------------------------------------------------
+- github.com/spf13/cobra (Apache 2.0)
+- github.com/chromedp/chromedp (MIT)
+- github.com/briandowns/spinner (Apache 2.0)
+- github.com/AlecAivazis/survey/v2 (MIT)
+
+See go.mod for complete list of Go dependencies.
+
+--------------------------------------------------------------------------------
+Python Dependencies:
+--------------------------------------------------------------------------------
+- loguru (MIT)
+- anthropic (MIT)
+- openai (Apache 2.0)
+- keyring (MIT/Python Software Foundation License)
+- cryptography (Apache 2.0/BSD)
+
+See requirements.txt for complete list of Python dependencies.
+
+--------------------------------------------------------------------------------
+Security Tools (External):
+--------------------------------------------------------------------------------
+This software integrates with the following Kali Linux security tools:
+- nmap (GPL 2.0 with the Nmap Public Source License Exception)
+- nikto (GPL 2.0)
+- nuclei (MIT)
+- masscan (AGPL 3.0)
+- sqlmap (GPL 2.0)
+- metasploit (BSD 3-Clause)
+
+Note: These tools are NOT included in this distribution.
+Users must install them separately and comply with their respective licenses.
+
+================================================================================
+
+TRADEMARKS
+
+"Zypheron" is a trademark of KKingZero.
+Use of this trademark is subject to the terms of the Elastic License 2.0.
+
+================================================================================
+
+PATENT GRANT
+
+This software includes patent claims licensed under the Elastic License 2.0.
+See the LICENSE file for details on patent grants and limitations.
+
+================================================================================
+
+SECURITY NOTICE
+
+This software is designed for authorized security testing only.
+Unauthorized use may violate computer fraud and abuse laws.
+Always obtain proper authorization before conducting security assessments.
+
+================================================================================

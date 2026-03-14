@@ -1,0 +1,21 @@
+Generate an executive summary for this compliance assessment:
+
+Framework: {{ report.framework.value | upper }}
+Organization: {{ report.organization }}
+Compliance: {{ "%.1f"|format(report.compliance_percentage) }}%
+Status: {{ report.overall_status.value }}
+Risk Level: {{ report.risk_level }}
+
+Controls Tested: {{ report.total_controls }}
+- Compliant: {{ report.compliant_count }}
+- Non-Compliant: {{ report.non_compliant_count }}
+- Partial: {{ report.partial_count }}
+
+Critical Findings: {{ report.critical_findings | length }}
+High Findings: {{ report.high_findings | length }}
+
+Provide a concise executive summary (3-4 paragraphs) covering:
+1. Overall compliance posture
+2. Key risks and concerns
+3. Priority recommendations
+4. Business impact

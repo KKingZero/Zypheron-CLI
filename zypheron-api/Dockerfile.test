@@ -1,0 +1,34 @@
+# Zypheron API - Test Runner
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy project files (touch README.md for hatchling metadata)
+COPY pyproject.toml .
+RUN touch README.md
+
+# Install all dependencies including dev/test
+RUN pip install --no-cache-dir ".[dev]"
+
+# Install extra test dependencies
+# Pin bcrypt<5 for passlib compatibility (bcrypt 5.x breaks passlib)
+RUN pip install --no-cache-dir pyyaml email-validator "bcrypt<5"
+
+# Copy application and test code
+COPY app/ ./app/
+COPY tests/ ./tests/
+COPY docker-compose.yml .
+
+# Run tests by default
+CMD ["pytest", "tests/test_code_review_fixes.py", "-v", "--tb=short", "-x"]

@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Run Full Test Suite
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
+      - name: Run Go tests
+        run: |
+          cd zypheron-go
+          make deps
+          make test
+      
+      - name: Run Python tests
+        run: |
+          cd zypheron-ai
+          pip install -r requirements.txt
+          pip install -e ".[test]"
+          pytest
+
+  release:
+    name: Build And Publish Release
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run Goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts for CDN
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS
+
+  upload-s3:
+    name: Upload to S3 CDN
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Prepare release files
+        run: |
+          VERSION=${{ github.ref_name }}
+          mkdir -p upload/${VERSION}
+          find dist -maxdepth 1 -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "SHA256SUMS" \) | while read f; do
+            cp "$f" upload/${VERSION}/
+          done
+
+      - name: Upload to S3 (versioned path)
+        run: |
+          VERSION=${{ github.ref_name }}
+          aws s3 sync upload/${VERSION}/ s3://${{ secrets.S3_BUCKET_NAME }}/${VERSION}/ \
+            --no-progress
+
+      - name: Update latest version pointer
+        run: |
+          VERSION=${{ github.ref_name }}
+          echo "$VERSION" > latest-version.txt
+          aws s3 cp latest-version.txt s3://${{ secrets.S3_BUCKET_NAME }}/latest/version.txt \
+            --content-type "text/plain"
+
+      - name: Upload install script
+        run: |
+          aws s3 cp scripts/install.sh s3://${{ secrets.S3_BUCKET_NAME }}/install.sh \
+            --content-type "text/plain"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/latest/*" "/install.sh"

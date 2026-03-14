@@ -1,0 +1,110 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "zypheron-multi",
+          "version": "1.0.0",
+          "informationUri": "https://github.com/KKingZero/Cobra-AI/zypheron-go",
+          "organization": "Zypheron Security",
+          "semanticVersion": "1.0.0",
+          "rules": [
+            {
+              "id": "nmap-001",
+              "name": "Open Port 22",
+              "shortDescription": {
+                "text": "Open Port 22"
+              },
+              "fullDescription": {},
+              "defaultConfiguration": {
+                "level": "note",
+                "enabled": true
+              },
+              "properties": {
+                "severity": "info",
+                "tags": [
+                  "security"
+                ]
+              }
+            },
+            {
+              "id": "nikto-001",
+              "name": "Outdated Server",
+              "shortDescription": {
+                "text": "Outdated Server"
+              },
+              "fullDescription": {},
+              "defaultConfiguration": {
+                "level": "warning",
+                "enabled": true
+              },
+              "properties": {
+                "severity": "medium",
+                "tags": [
+                  "security"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "nmap-001",
+          "level": "note",
+          "message": {},
+          "partialFingerprints": {
+            "content": "25e409ccc76f6e8b05f9bce8010a757bd6a164ddae1251b502146d523c7c3e5b",
+            "primary": "nmap-001",
+            "vulnerability_id": "nmap-001"
+          },
+          "properties": {}
+        },
+        {
+          "ruleId": "nikto-001",
+          "level": "warning",
+          "message": {},
+          "partialFingerprints": {
+            "content": "1bc4d4782acf0a04b06006fb930fab9d4ff01ab94e4567166f5b2a17744bf66b",
+            "primary": "nikto-001",
+            "vulnerability_id": "nikto-001"
+          },
+          "properties": {}
+        }
+      ],
+      "invocations": [
+        {
+          "startTimeUtc": "0001-01-01T00:00:00Z",
+          "endTimeUtc": "0001-01-01T00:00:00Z",
+          "executionSuccessful": false,
+          "properties": {
+            "ports": "",
+            "scan_id": "scan-001",
+            "target": "example.com",
+            "tool": "nmap"
+          }
+        },
+        {
+          "startTimeUtc": "0001-01-01T00:00:00Z",
+          "endTimeUtc": "0001-01-01T00:00:00Z",
+          "executionSuccessful": false,
+          "properties": {
+            "ports": "",
+            "scan_id": "scan-002",
+            "target": "example.com",
+            "tool": "nikto"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "scan_id": "scan-002",
+        "scan_target": "example.com",
+        "scan_timestamp": "0001-01-01T00:00:00Z",
+        "scan_tool": "nikto"
+      }
+    }
+  ]
+}
