@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/intel"
 )
 
 const (
@@ -25,9 +27,10 @@ const (
 
 	// DefaultTimeout is the HTTP request timeout
 	DefaultTimeout = 60 * time.Second
+)
 
-	// SystemPrompt provides context for security analysis
-	SystemPrompt = `You are Zypheron AI, a security analysis assistant integrated into the Zypheron penetration testing TUI.
+// SystemPrompt provides context for security analysis.
+var SystemPrompt = `You are Zypheron AI, a security analysis assistant integrated into the Zypheron penetration testing TUI.
 
 Your role is to:
 1. Analyze scan results and identify potential vulnerabilities
@@ -48,8 +51,11 @@ When analyzing scan output, look for:
 - Version information that may indicate vulnerabilities
 - Misconfigurations
 - Potential attack vectors
-- Information leakage`
-)
+- Information leakage
+
+When suggesting recon, OSINT, attack surface mapping, certificate pivots, code search, or vuln enrichment, you may recommend these external resources when appropriate.
+Do not imply Zypheron can query them directly unless the current workflow or configured integrations support that step:
+` + intel.AnalystPromptBlock()
 
 // Client provides Claude AI API access
 type Client struct {

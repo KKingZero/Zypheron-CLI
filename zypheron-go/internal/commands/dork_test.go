@@ -109,3 +109,23 @@ func TestSanitizeAIDorkQuery(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildDorkEnhancementPrompt(t *testing.T) {
+	prompt := buildDorkEnhancementPrompt("admin login", "bing")
+
+	required := []string{
+		"Selected engine: bing",
+		"Use only query syntax that is valid for bing web search.",
+		"do not use native Shodan/Censys/FOFA/etc. operators",
+		"site filters or plain search terms only",
+		"grep.app",
+		"crt.sh",
+		"User query: admin login",
+	}
+
+	for _, want := range required {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("buildDorkEnhancementPrompt() missing %q in prompt:\n%s", want, prompt)
+		}
+	}
+}

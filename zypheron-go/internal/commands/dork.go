@@ -10,6 +10,7 @@ import (
 	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/browser"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/intel"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/utils"
 	"github.com/spf13/cobra"
@@ -72,7 +73,7 @@ func DorkCmd() *cobra.Command {
 			if aiGuided {
 				fmt.Println(ui.InfoMsg("🤖 AI-Guided Query Enhancement..."))
 
-				enhancedQuery, err := enhanceQueryWithAI(searchQuery)
+				enhancedQuery, err := enhanceQueryWithAI(searchQuery, engine)
 				if err == nil && enhancedQuery != "" {
 					fmt.Printf("%s Enhanced query: %s\n", ui.Success.Sprint("✓"), ui.Accent.Sprint(enhancedQuery))
 					searchQuery = enhancedQuery
@@ -212,8 +213,8 @@ func DorkCmd() *cobra.Command {
 	return cmd
 }
 
-// enhanceQueryWithAI enhances a dork query using AI
-func enhanceQueryWithAI(query string) (string, error) {
+// enhanceQueryWithAI enhances a dork query using AI.
+func enhanceQueryWithAI(query string, engine string) (string, error) {
 	bridge := aibridge.GetSharedBridge()
 	if !bridge.IsRunning() {
 		if err := bridge.Start(); err != nil {
@@ -231,17 +232,7 @@ func enhanceQueryWithAI(query string) (string, error) {
 		return "", fmt.Errorf("no AI provider available for dork enhancement")
 	}
 
-	prompt := strings.TrimSpace(`
-You generate concise, effective security search dorks.
-
-Task:
-- Improve the user's query for reconnaissance or bug bounty style search.
-- Preserve the user's intent.
-- Prefer a single high-signal dork instead of multiple options.
-- Do not add explanation or markdown.
-- Output only the final query text.
-
-User query: ` + query)
+	prompt := buildDorkEnhancementPrompt(query, engine)
 
 	resp, err := bridge.Chat([]aibridge.Message{
 		{Role: "user", Content: prompt},
@@ -256,6 +247,27 @@ User query: ` + query)
 		return "", err
 	}
 	return sanitized, nil
+}
+
+func buildDorkEnhancementPrompt(query string, engine string) string {
+	return strings.TrimSpace(`
+You generate concise, effective security search dorks.
+
+Task:
+- Improve the user's query for reconnaissance or bug bounty style search.
+- Preserve the user's intent.
+- Prefer a single high-signal dork instead of multiple options.
+- Generate a query that can run directly on the selected web search engine.
+- If you bias toward a source, express that as valid web-search syntax such as site filters or plain keywords.
+- Do not use native syntax from Shodan, Censys, FOFA, or other external platforms.
+- Do not add explanation or markdown.
+- Output only the final query text.
+
+Selected engine: ` + engine + `
+
+` + intel.WebSearchPromptBlock(engine) + `
+
+User query: ` + query)
 }
 
 func chooseDorkEnhancementProvider(providers []string, defaultProvider string) string {

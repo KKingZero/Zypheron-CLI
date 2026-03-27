@@ -14,6 +14,7 @@ import (
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/agents"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/config"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/intel"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tools"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tui/components"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tui/styles"
@@ -1525,6 +1526,15 @@ Capabilities:
 - Track the full engagement state across multiple scans and tool runs
 
 Remember: Keep responses focused and useful. Security professionals value efficiency.`
+
+	basePrompt += "\n\nWhen recommending recon, OSINT, or vuln-enrichment steps, you may suggest these external analyst resources when they fit the task.\nDo not imply Zypheron can query them directly unless the current workflow or configured integrations support that step:\n" + intel.AnalystPromptBlock() + `
+
+Use them intentionally:
+- vuln/CVE enrichment: Vulners, LeakIX, Pulsedive, GreyNoise
+- exposed infrastructure: Shodan, Censys, FOFA, ZoomEye, Netlas, BinaryEdge, IVRE
+- cert/subdomain pivots: crt.sh, Censys
+- code and secret discovery: grep.app, Searchcode, PublicWWW
+- broader OSINT and attack surface: Intelligence X, FullHunt, urlscan, Hunter, SOCRadar, Onyphe, WiGLE`
 
 	// Add deep pentest context if available
 	if m.pentestCtx != nil {
