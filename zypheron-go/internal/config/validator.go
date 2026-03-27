@@ -54,42 +54,42 @@ func ValidateEnvironment() *ConfigStatus {
 		if cfg.AI.Model != "" {
 			status.Info = append(status.Info, fmt.Sprintf("Model: %s", cfg.AI.Model))
 		}
-
-		// Check API key
-		if !cfg.HasAPIKey() {
-			status.Errors = append(status.Errors, "ANTHROPIC_API_KEY environment variable is not set")
-			status.Valid = false
-		} else {
-			status.Info = append(status.Info, "API Key: ✓ Configured (from environment)")
-		}
+		status.Info = append(status.Info, "API Key: configure via secure keyring or ANTHROPIC_API_KEY")
 
 	case AIProviderOpenAI:
 		status.Info = append(status.Info, "Using OpenAI API")
 		if cfg.AI.Model != "" {
 			status.Info = append(status.Info, fmt.Sprintf("Model: %s", cfg.AI.Model))
 		}
+		status.Info = append(status.Info, "API Key: configure via secure keyring or OPENAI_API_KEY")
 
-		// Check API key
-		if !cfg.HasAPIKey() {
-			status.Errors = append(status.Errors, "OPENAI_API_KEY environment variable is not set")
-			status.Valid = false
-		} else {
-			status.Info = append(status.Info, "API Key: ✓ Configured (from environment)")
+	case AIProviderGemini:
+		status.Info = append(status.Info, "Using Google Gemini API")
+		if cfg.AI.Model != "" {
+			status.Info = append(status.Info, fmt.Sprintf("Model: %s", cfg.AI.Model))
 		}
+		status.Info = append(status.Info, "API Key: configure via secure keyring or GOOGLE_API_KEY")
+
+	case AIProviderKimi:
+		status.Info = append(status.Info, "Using Moonshot/Kimi API")
+		if cfg.AI.Model != "" {
+			status.Info = append(status.Info, fmt.Sprintf("Model: %s", cfg.AI.Model))
+		}
+		status.Info = append(status.Info, "API Key: configure via secure keyring or KIMI_API_KEY")
 
 	case AIProviderDeepSeek:
 		status.Info = append(status.Info, "Using DeepSeek API")
 		if cfg.AI.Model != "" {
 			status.Info = append(status.Info, fmt.Sprintf("Model: %s", cfg.AI.Model))
 		}
+		status.Info = append(status.Info, "API Key: configure via secure keyring or DEEPSEEK_API_KEY")
 
-		// Check API key
-		if !cfg.HasAPIKey() {
-			status.Errors = append(status.Errors, "DEEPSEEK_API_KEY environment variable is not set")
-			status.Valid = false
-		} else {
-			status.Info = append(status.Info, "API Key: ✓ Configured (from environment)")
+	case AIProviderGrok:
+		status.Info = append(status.Info, "Using xAI Grok API")
+		if cfg.AI.Model != "" {
+			status.Info = append(status.Info, fmt.Sprintf("Model: %s", cfg.AI.Model))
 		}
+		status.Info = append(status.Info, "API Key: configure via secure keyring or GROK_API_KEY")
 
 	default:
 		status.Errors = append(status.Errors, fmt.Sprintf("Unknown AI provider: %s", cfg.AI.Provider))
@@ -193,7 +193,10 @@ func PrintDiagnostics() {
 		"ZYPHERON_AI_PROVIDER",
 		"ANTHROPIC_API_KEY",
 		"OPENAI_API_KEY",
+		"GOOGLE_API_KEY",
+		"KIMI_API_KEY",
 		"DEEPSEEK_API_KEY",
+		"GROK_API_KEY",
 		"OLLAMA_URL",
 		"OLLAMA_MODEL",
 		"ZYPHERON_AI_MODEL",

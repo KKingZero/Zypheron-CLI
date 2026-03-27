@@ -3,6 +3,7 @@ Secure API Key Storage using OS keyring
 """
 
 import keyring
+import os
 from typing import Optional
 from loguru import logger
 
@@ -92,8 +93,17 @@ def list_configured_providers() -> list:
         List of provider names
     """
     configured = []
+    env_map = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "google": "GOOGLE_API_KEY",
+        "kimi": "KIMI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "grok": "GROK_API_KEY",
+        "nvd": "NVD_API_KEY",
+    }
     for provider in PROVIDERS:
-        if get_api_key(provider):
+        if get_api_key(provider) or os.getenv(env_map.get(provider, ""), ""):
             configured.append(provider)
     return configured
 
@@ -152,4 +162,3 @@ def check_keyring_available() -> bool:
     except Exception as e:
         logger.error(f"Keyring not available: {e}")
         return False
-

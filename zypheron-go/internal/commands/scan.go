@@ -16,7 +16,6 @@ import (
 	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/kali"
-	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/licensing"
 	reportpkg "github.com/KKingZero/Cobra-AI/zypheron-go/internal/report"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/storage"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tools"
@@ -457,139 +456,128 @@ Examples:
 
 			// AI Analysis
 			if aiAnalysis && result.Success {
-				// Cloud AI analysis requires paid tier
-				if err := licensing.RequireCloudAI(); err != nil {
-					if licErr, ok := err.(*licensing.FeatureLockedError); ok {
+				fmt.Println()
+				fmt.Println(ui.Accent.Sprint("🤖 AI-POWERED VULNERABILITY ANALYSIS"))
+				fmt.Println(ui.Separator(60))
+				fmt.Println()
+
+				bridge := aibridge.NewAIBridge()
+
+				// Check if AI engine is running
+				if !bridge.IsRunning() {
+					fmt.Println(ui.WarningMsg("AI Engine not running"))
+					fmt.Println(ui.InfoMsg("Start it with: zypheron ai start"))
+					fmt.Println()
+					return nil
+				}
+
+				fmt.Println(ui.InfoMsg("Analyzing scan results with AI..."))
+
+				// Analyze scan with AI
+				vulns, report, err := bridge.AnalyzeScan(result.Output, selectedTool, target, true)
+				if err != nil {
+					fmt.Println(ui.Error(fmt.Sprintf("AI analysis failed: %s", err)))
+					return nil
+				}
+
+				// Convert aibridge.Vulnerability to types.Vulnerability
+				for _, v := range vulns {
+					scanResult.Vulnerabilities = append(scanResult.Vulnerabilities, types.Vulnerability{
+						ID:          v.ID,
+						Title:       v.Title,
+						Description: v.Description,
+						Severity:    v.Severity,
+					})
+				}
+
+				// Store AI analysis report
+				scanResult.AIAnalysis = report
+
+				if len(vulns) > 0 {
+					fmt.Println()
+					fmt.Printf("%s %s\n", ui.Success.Sprint("✓"), ui.Success.Sprint(fmt.Sprintf("Found %d potential vulnerabilities", len(vulns))))
+					fmt.Println()
+
+					// Display top 5 vulnerabilities
+					displayCount := len(vulns)
+					if displayCount > 5 {
+						displayCount = 5
+					}
+
+					for i, vuln := range vulns[:displayCount] {
+						// Color code severity
+						var severityColor *ui.Color
+						switch vuln.Severity {
+						case "critical":
+							severityColor = ui.Danger
+						case "high":
+							severityColor = ui.Warning
+						case "medium":
+							severityColor = ui.Info
+						default:
+							severityColor = ui.Muted
+						}
+
+						fmt.Printf("  %d. [%s] %s\n",
+							i+1,
+							severityColor.Sprint(vuln.Severity),
+							vuln.Title,
+						)
+						fmt.Printf("     %s\n", ui.Muted.Sprint(vuln.Description[:min(100, len(vuln.Description))]+"..."))
 						fmt.Println()
-						fmt.Println(licErr.Message)
-						fmt.Println(ui.InfoMsg("Run 'zypheron upgrade' to enable AI analysis"))
+					}
+
+					if len(vulns) > 5 {
+						fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  ... and %d more", len(vulns)-5)))
 						fmt.Println()
+					}
+
+					// ML Vulnerability Prediction
+					if aiGuided {
+						fmt.Println(ui.InfoMsg("🔮 Running ML vulnerability prediction..."))
+
+						scanData := map[string]interface{}{
+							"target": target,
+							"tool":   selectedTool,
+							"output": result.Output,
+						}
+
+						predictions, err := bridge.PredictVulnerabilities(scanData, true)
+						if err == nil && len(predictions) > 0 {
+							fmt.Printf("%s Predicted %d additional vulnerabilities\n", ui.Success.Sprint("✓"), len(predictions))
+							for i, pred := range predictions[:min(3, len(predictions))] {
+								fmt.Printf("  %d. %s (confidence: %.0f%%)\n",
+									i+1,
+									pred.VulnerabilityType,
+									pred.Confidence*100,
+								)
+							}
+							fmt.Println()
+						}
+					}
+
+					// Save full report
+					if output != "" {
+						// Detect format from extension if not specified
+						detectedFormat := format
+						if format == "text" || format == "" {
+							detectedFormat = reportpkg.DetectFormatFromExtension(output)
+						}
+						// Map format names
+						if detectedFormat == "md" {
+							detectedFormat = "markdown"
+						}
+
+						if err := saveReport(scanResult, output, detectedFormat); err != nil {
+							fmt.Println(ui.Error(fmt.Sprintf("Failed to save report: %s", err)))
+						} else {
+							fmt.Println(ui.SuccessMsg(fmt.Sprintf("Report saved to: %s", output)))
+						}
 					}
 				} else {
-
-					fmt.Println()
-					fmt.Println(ui.Accent.Sprint("🤖 AI-POWERED VULNERABILITY ANALYSIS"))
-					fmt.Println(ui.Separator(60))
-					fmt.Println()
-
-					bridge := aibridge.NewAIBridge()
-
-					// Check if AI engine is running
-					if !bridge.IsRunning() {
-						fmt.Println(ui.WarningMsg("AI Engine not running"))
-						fmt.Println(ui.InfoMsg("Start it with: zypheron ai start"))
-						fmt.Println()
-						return nil
-					}
-
-					fmt.Println(ui.InfoMsg("Analyzing scan results with AI..."))
-
-					// Analyze scan with AI
-					vulns, report, err := bridge.AnalyzeScan(result.Output, selectedTool, target, true)
-					if err != nil {
-						fmt.Println(ui.Error(fmt.Sprintf("AI analysis failed: %s", err)))
-						return nil
-					}
-
-					// Convert aibridge.Vulnerability to types.Vulnerability
-					for _, v := range vulns {
-						scanResult.Vulnerabilities = append(scanResult.Vulnerabilities, types.Vulnerability{
-							ID:          v.ID,
-							Title:       v.Title,
-							Description: v.Description,
-							Severity:    v.Severity,
-						})
-					}
-
-					// Store AI analysis report
-					scanResult.AIAnalysis = report
-
-					if len(vulns) > 0 {
-						fmt.Println()
-						fmt.Printf("%s %s\n", ui.Success.Sprint("✓"), ui.Success.Sprint(fmt.Sprintf("Found %d potential vulnerabilities", len(vulns))))
-						fmt.Println()
-
-						// Display top 5 vulnerabilities
-						displayCount := len(vulns)
-						if displayCount > 5 {
-							displayCount = 5
-						}
-
-						for i, vuln := range vulns[:displayCount] {
-							// Color code severity
-							var severityColor *ui.Color
-							switch vuln.Severity {
-							case "critical":
-								severityColor = ui.Danger
-							case "high":
-								severityColor = ui.Warning
-							case "medium":
-								severityColor = ui.Info
-							default:
-								severityColor = ui.Muted
-							}
-
-							fmt.Printf("  %d. [%s] %s\n",
-								i+1,
-								severityColor.Sprint(vuln.Severity),
-								vuln.Title,
-							)
-							fmt.Printf("     %s\n", ui.Muted.Sprint(vuln.Description[:min(100, len(vuln.Description))]+"..."))
-							fmt.Println()
-						}
-
-						if len(vulns) > 5 {
-							fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  ... and %d more", len(vulns)-5)))
-							fmt.Println()
-						}
-
-						// ML Vulnerability Prediction
-						if aiGuided {
-							fmt.Println(ui.InfoMsg("🔮 Running ML vulnerability prediction..."))
-
-							scanData := map[string]interface{}{
-								"target": target,
-								"tool":   selectedTool,
-								"output": result.Output,
-							}
-
-							predictions, err := bridge.PredictVulnerabilities(scanData, true)
-							if err == nil && len(predictions) > 0 {
-								fmt.Printf("%s Predicted %d additional vulnerabilities\n", ui.Success.Sprint("✓"), len(predictions))
-								for i, pred := range predictions[:min(3, len(predictions))] {
-									fmt.Printf("  %d. %s (confidence: %.0f%%)\n",
-										i+1,
-										pred.VulnerabilityType,
-										pred.Confidence*100,
-									)
-								}
-								fmt.Println()
-							}
-						}
-
-						// Save full report
-						if output != "" {
-							// Detect format from extension if not specified
-							detectedFormat := format
-							if format == "text" || format == "" {
-								detectedFormat = reportpkg.DetectFormatFromExtension(output)
-							}
-							// Map format names
-							if detectedFormat == "md" {
-								detectedFormat = "markdown"
-							}
-
-							if err := saveReport(scanResult, output, detectedFormat); err != nil {
-								fmt.Println(ui.Error(fmt.Sprintf("Failed to save report: %s", err)))
-							} else {
-								fmt.Println(ui.SuccessMsg(fmt.Sprintf("Report saved to: %s", output)))
-							}
-						}
-					} else {
-						fmt.Println(ui.InfoMsg("✓ No critical vulnerabilities detected"))
-					}
-					fmt.Println()
-				} // else (licensed for cloud AI)
+					fmt.Println(ui.InfoMsg("✓ No critical vulnerabilities detected"))
+				}
+				fmt.Println()
 			}
 
 			// Save scan to storage

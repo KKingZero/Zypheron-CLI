@@ -127,19 +127,25 @@ func NewModel() Model {
 	}, cfg.AIModel); idx >= 0 {
 		ms.SetIndex(idx)
 	} else {
-		hasAnthropic := os.Getenv("ANTHROPIC_API_KEY") != ""
-		hasGemini := os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("GOOGLE_API_KEY") != ""
-		hasOpenAI := os.Getenv("OPENAI_API_KEY") != ""
+		configuredProviders := make(map[string]bool)
+		for _, provider := range config.ListProviders() {
+			configuredProviders[strings.ToLower(strings.TrimSpace(provider))] = true
+		}
 
-		if !hasAnthropic {
-			if hasGemini {
-				ms.SetIndex(3) // Default to Gemini 3.1 Pro
-			} else if hasOpenAI {
-				ms.SetIndex(2) // Default to GPT-5.4
-			} else {
-				// No cloud API keys found, default to local Ollama
-				ms.SetIndex(7) // Default to ollama-qwen3-coder
-			}
+		switch {
+		case configuredProviders["anthropic"]:
+			ms.SetIndex(0) // Default to Claude Opus
+		case configuredProviders["google"]:
+			ms.SetIndex(3) // Default to Gemini 3.1 Pro
+		case configuredProviders["openai"]:
+			ms.SetIndex(2) // Default to GPT-5.4
+		case configuredProviders["deepseek"]:
+			ms.SetIndex(5)
+		case configuredProviders["kimi"]:
+			ms.SetIndex(6)
+		default:
+			// No cloud API keys found, default to local Ollama
+			ms.SetIndex(7) // Default to ollama-qwen3-coder
 		}
 	}
 
@@ -422,7 +428,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case components.APIKeySubmittedMsg:
-		m.showAPIKeyPrompt = false
 		return m, m.storeAPIKeyAndActivateModel(msg.Provider, msg.APIKey)
 
 	case components.APIKeyCancelledMsg:
@@ -433,6 +438,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case apiKeyStoredMsg:
+		m.showAPIKeyPrompt = false
 		if m.pendingModelIdx >= 0 {
 			m.confirmModelSelection(m.pendingModelIdx)
 		}
@@ -442,9 +448,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case apiKeyStoreErrorMsg:
-		m.pendingModelIdx = -1
 		m.modelSelector.SetIndex(m.confirmedModelIdx)
-		m.console.AppendLog(styles.ErrorStyle.Render(fmt.Sprintf("Failed to save API key: %v", msg.Err)))
+		m.showAPIKeyPrompt = true
+		m.apiKeyPrompt.SetError(msg.Err.Error())
+		m.console.AppendLog(styles.ErrorStyle.Render(fmt.Sprintf("API key validation failed: %v", msg.Err)))
 		return m, nil
 
 	// Scan Progress Messages
@@ -2212,6 +2219,9 @@ func (m *Model) storeAPIKeyAndActivateModel(provider, apiKey string) tea.Cmd {
 
 		success, _ := resp["success"].(bool)
 		if !success {
+			if message, ok := resp["message"].(string); ok && strings.TrimSpace(message) != "" {
+				return apiKeyStoreErrorMsg{Err: fmt.Errorf("%s", message)}
+			}
 			return apiKeyStoreErrorMsg{Err: fmt.Errorf("AI engine rejected API key storage")}
 		}
 
@@ -2237,8 +2247,17 @@ func persistSelectedModel(modelName string) error {
 	case "openai":
 		cfg.AI.Provider = config.AIProviderOpenAI
 		cfg.AI.Model = modelName
+	case "gemini":
+		cfg.AI.Provider = config.AIProviderGemini
+		cfg.AI.Model = modelName
+	case "kimi":
+		cfg.AI.Provider = config.AIProviderKimi
+		cfg.AI.Model = modelName
 	case "deepseek":
 		cfg.AI.Provider = config.AIProviderDeepSeek
+		cfg.AI.Model = modelName
+	case "grok":
+		cfg.AI.Provider = config.AIProviderGrok
 		cfg.AI.Model = modelName
 	default:
 		cfg.AI.Model = modelName

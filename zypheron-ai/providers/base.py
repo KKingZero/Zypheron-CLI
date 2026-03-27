@@ -15,6 +15,7 @@ class AIProvider(str, Enum):
     GEMINI = "gemini"
     KIMI = "kimi"
     DEEPSEEK = "deepseek"
+    GROK = "grok"
     OLLAMA = "ollama"
 
 
@@ -99,4 +100,3 @@ class BaseAIProvider(ABC):
     def get_model_name(self) -> str:
         """Get the model name for this provider"""
         pass
-

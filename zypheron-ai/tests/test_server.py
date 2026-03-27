@@ -135,14 +135,37 @@ class TestIPCServer:
             'provider': 'anthropic',
             'api_key': 'test-key-123'
         }
-        
-        with patch('core.server.store_api_key') as mock_store:
+
+        with patch('core.server.validate_api_key_with_provider', return_value=(True, "ok")) as mock_validate, \
+             patch('core.secure_config.store_api_key') as mock_store, \
+             patch('core.server.ai_manager') as mock_manager, \
+             patch('core.server.config') as mock_config:
             mock_store.return_value = True
             
             result = await server.handle_store_api_key(params)
             
             assert result['success'] == True
             assert result['provider'] == 'anthropic'
+            mock_validate.assert_awaited_once()
+            mock_config.reload_api_keys.assert_called_once()
+            mock_manager.reload.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_store_api_key_invalid(self, server):
+        """Test invalid API key is rejected and not stored."""
+        params = {
+            'provider': 'anthropic',
+            'api_key': 'bad-key'
+        }
+
+        with patch('core.server.validate_api_key_with_provider', return_value=(False, "Invalid Claude API key")) as mock_validate, \
+             patch('core.secure_config.store_api_key') as mock_store:
+            result = await server.handle_store_api_key(params)
+
+            assert result['success'] == False
+            assert result['message'] == 'Invalid Claude API key'
+            mock_validate.assert_awaited_once()
+            mock_store.assert_not_called()
     
     @pytest.mark.asyncio
     async def test_handle_store_api_key_missing_params(self, server):
@@ -190,4 +213,3 @@ class TestIPCServer:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

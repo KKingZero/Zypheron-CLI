@@ -9,9 +9,9 @@ import (
 
 // Gate provides a fluent API for checking feature access
 type Gate struct {
-	feature  Feature
-	manager  *LicenseManager
-	minTier  Tier
+	feature Feature
+	manager *LicenseManager
+	minTier Tier
 }
 
 // NewGate creates a new feature gate
@@ -124,34 +124,11 @@ func IsCloudProvider(provider string) bool {
 
 // RequireProviderAccess checks if a specific AI provider can be used
 func RequireProviderAccess(provider string) error {
-	// Ollama is always allowed (self-hosted)
-	if strings.ToLower(provider) == "ollama" {
-		return nil
-	}
-
-	// Cloud providers require paid tier
-	if IsCloudProvider(provider) {
-		return RequireCloudAI()
-	}
-
-	// Unknown provider - allow (might be BYOK or custom)
 	return nil
 }
 
 // CheckProviderAndTokens validates provider access and token balance
 func CheckProviderAndTokens(provider string, estimatedTokens int64) error {
-	// Check provider access
-	if err := RequireProviderAccess(provider); err != nil {
-		return err
-	}
-
-	// Only check tokens for cloud providers
-	if IsCloudProvider(provider) {
-		if err := NewGate(FeatureCloudAI).RequireTokens(estimatedTokens); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 

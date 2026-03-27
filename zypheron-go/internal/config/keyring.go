@@ -18,8 +18,12 @@ const (
 	ProviderDeepSeek     = "deepseek"
 	ProviderAnthropic    = "anthropic"
 	ProviderOpenAI       = "openai"
+	ProviderGoogle       = "google"
+	ProviderKimi         = "kimi"
+	ProviderGrok         = "grok"
 	ProviderSupabaseURL  = "supabase_url"
 	ProviderSupabaseKey  = "supabase_key"
+	ProviderNVD          = "nvd"
 	ProviderShodan       = "shodan"
 	ProviderCensys       = "censys"
 	ProviderCensysSecret = "censys_secret"
@@ -43,8 +47,12 @@ var (
 		ProviderDeepSeek:     true,
 		ProviderAnthropic:    true,
 		ProviderOpenAI:       true,
+		ProviderGoogle:       true,
+		ProviderKimi:         true,
+		ProviderGrok:         true,
 		ProviderSupabaseURL:  true,
 		ProviderSupabaseKey:  true,
+		ProviderNVD:          true,
 		ProviderShodan:       true,
 		ProviderCensys:       true,
 		ProviderCensysSecret: true,
@@ -55,8 +63,12 @@ var (
 		ProviderDeepSeek:     "DEEPSEEK_API_KEY",
 		ProviderAnthropic:    "ANTHROPIC_API_KEY",
 		ProviderOpenAI:       "OPENAI_API_KEY",
+		ProviderGoogle:       "GOOGLE_API_KEY",
+		ProviderKimi:         "KIMI_API_KEY",
+		ProviderGrok:         "GROK_API_KEY",
 		ProviderSupabaseURL:  "SUPABASE_URL",
 		ProviderSupabaseKey:  "SUPABASE_KEY",
+		ProviderNVD:          "NVD_API_KEY",
 		ProviderShodan:       "SHODAN_API_KEY",
 		ProviderCensys:       "CENSYS_API_ID",
 		ProviderCensysSecret: "CENSYS_API_SECRET",

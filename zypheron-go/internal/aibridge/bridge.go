@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/licensing"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 )
 
@@ -719,27 +718,8 @@ func (b *AIBridge) GetPoolStats() map[string]interface{} {
 	return stats
 }
 
-// Chat sends a chat request to the AI with license and token tracking
+// Chat sends a chat request to the AI engine.
 func (b *AIBridge) Chat(messages []Message, provider string, model string, temperature float64, maxTokens int) (string, error) {
-	// Check license for cloud AI providers
-	if licensing.IsCloudProvider(provider) {
-		if err := licensing.RequireCloudAI(); err != nil {
-			return "", err
-		}
-
-		// Estimate tokens (rough estimate: 4 chars per token)
-		estimatedTokens := int64(0)
-		for _, msg := range messages {
-			estimatedTokens += int64(len(msg.Content) / 4)
-		}
-		estimatedTokens += int64(maxTokens) // Add expected output tokens
-
-		// Check token balance
-		if err := licensing.CheckProviderAndTokens(provider, estimatedTokens); err != nil {
-			return "", err
-		}
-	}
-
 	params := map[string]interface{}{
 		"messages":    messages,
 		"provider":    provider,
@@ -758,26 +738,6 @@ func (b *AIBridge) Chat(messages []Message, provider string, model string, tempe
 	content, ok := resp.Result["content"].(string)
 	if !ok {
 		return "", fmt.Errorf("invalid response format")
-	}
-
-	// Track token usage for cloud providers
-	if licensing.IsCloudProvider(provider) {
-		tokensUsed := int64(len(content) / 4) // Estimate output tokens
-		for _, msg := range messages {
-			tokensUsed += int64(len(msg.Content) / 4) // Add input tokens
-		}
-
-		// Deduct tokens from license
-		manager := licensing.GetManager()
-		usage := licensing.TokenUsage{
-			Action:   "chat",
-			Provider: provider,
-			Feature:  "cloud_ai",
-		}
-		if err := manager.DeductTokens(tokensUsed, usage); err != nil {
-			// Log but don't fail - user already got their response
-			fmt.Println(ui.WarningMsg(fmt.Sprintf("Token tracking error: %s", err)))
-		}
 	}
 
 	return content, nil
@@ -953,6 +913,16 @@ func (b *AIBridge) Health() (map[string]interface{}, error) {
 // StoreAPIKey stores an API key in the system keyring
 func (b *AIBridge) StoreAPIKey(params map[string]interface{}) (map[string]interface{}, error) {
 	resp, err := b.SendRequest("store_api_key", params)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Result, nil
+}
+
+// ValidateAPIKey validates an API key without storing it.
+func (b *AIBridge) ValidateAPIKey(params map[string]interface{}) (map[string]interface{}, error) {
+	resp, err := b.SendRequest("validate_api_key", params)
 	if err != nil {
 		return nil, err
 	}

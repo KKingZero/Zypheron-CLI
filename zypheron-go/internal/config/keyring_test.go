@@ -15,6 +15,10 @@ func TestValidateProvider(t *testing.T) {
 		{"valid deepseek", ProviderDeepSeek, false},
 		{"valid anthropic", ProviderAnthropic, false},
 		{"valid openai", ProviderOpenAI, false},
+		{"valid google", ProviderGoogle, false},
+		{"valid kimi", ProviderKimi, false},
+		{"valid grok", ProviderGrok, false},
+		{"valid nvd", ProviderNVD, false},
 		{"valid supabase url", ProviderSupabaseURL, false},
 		{"valid supabase key", ProviderSupabaseKey, false},
 		{"empty provider", "", true},
@@ -173,6 +177,12 @@ func TestSetAPIKeyValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := SetAPIKey(tt.provider, tt.key)
+			if tt.name == "valid input" && !IsKeyringAvailable() {
+				if err == nil {
+					t.Fatal("SetAPIKey() should fail without keyring for valid input")
+				}
+				return
+			}
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SetAPIKey() error = %v, wantErr %v", err, tt.wantErr)
 			}

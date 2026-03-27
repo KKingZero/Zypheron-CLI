@@ -56,6 +56,7 @@ class AIConfig(BaseSettings):
     GOOGLE_API_KEY: Optional[str] = Field(default=None)
     KIMI_API_KEY: Optional[str] = Field(default=None)
     DEEPSEEK_API_KEY: Optional[str] = Field(default=None)
+    GROK_API_KEY: Optional[str] = Field(default=None)
 
     # Ollama Configuration
     OLLAMA_HOST: str = Field(default="http://localhost:11434", env="OLLAMA_HOST")
@@ -72,6 +73,7 @@ class AIConfig(BaseSettings):
     GEMINI_MODEL_FAST: str = Field(default="gemini-3-flash-preview", env="GEMINI_MODEL_FAST")
     DEEPSEEK_MODEL: str = Field(default="deepseek-r1", env="DEEPSEEK_MODEL")
     KIMI_MODEL: str = Field(default="kimi-k2", env="KIMI_MODEL")
+    GROK_MODEL: str = Field(default="grok-3", env="GROK_MODEL")
     
     # Performance Settings
     MAX_TOKENS: int = Field(default=4096, env="AI_MAX_TOKENS")
@@ -123,14 +125,17 @@ class AIConfig(BaseSettings):
     def __init__(self, **kwargs):
         """Initialize config with keyring-first API key loading"""
         super().__init__(**kwargs)
-        
-        # Load API keys from keyring with fallback to env vars
-        self.ANTHROPIC_API_KEY = self.ANTHROPIC_API_KEY or get_secure_api_key("anthropic", "ANTHROPIC_API_KEY")
-        self.OPENAI_API_KEY = self.OPENAI_API_KEY or get_secure_api_key("openai", "OPENAI_API_KEY")
-        self.GOOGLE_API_KEY = self.GOOGLE_API_KEY or get_secure_api_key("google", "GOOGLE_API_KEY")
-        self.KIMI_API_KEY = self.KIMI_API_KEY or get_secure_api_key("kimi", "KIMI_API_KEY")
-        self.DEEPSEEK_API_KEY = self.DEEPSEEK_API_KEY or get_secure_api_key("deepseek", "DEEPSEEK_API_KEY")
-        self.NVD_API_KEY = self.NVD_API_KEY or get_secure_api_key("nvd", "NVD_API_KEY")
+        self.reload_api_keys()
+
+    def reload_api_keys(self) -> None:
+        """Reload secure API keys from keyring or environment."""
+        self.ANTHROPIC_API_KEY = get_secure_api_key("anthropic", "ANTHROPIC_API_KEY")
+        self.OPENAI_API_KEY = get_secure_api_key("openai", "OPENAI_API_KEY")
+        self.GOOGLE_API_KEY = get_secure_api_key("google", "GOOGLE_API_KEY")
+        self.KIMI_API_KEY = get_secure_api_key("kimi", "KIMI_API_KEY")
+        self.DEEPSEEK_API_KEY = get_secure_api_key("deepseek", "DEEPSEEK_API_KEY")
+        self.GROK_API_KEY = get_secure_api_key("grok", "GROK_API_KEY")
+        self.NVD_API_KEY = get_secure_api_key("nvd", "NVD_API_KEY")
 
 
 # Global config instance

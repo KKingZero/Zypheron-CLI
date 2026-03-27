@@ -10,6 +10,7 @@ import secrets
 from pathlib import Path
 from typing import Dict, Any, Optional
 import sys
+import httpx
 from loguru import logger
 
 # Ensure project root is on sys.path when executed as a script
@@ -21,6 +22,100 @@ from analysis.vulnerability_analyzer import VulnerabilityAnalyzer
 from ml.vulnerability_predictor import MLVulnerabilityPredictor
 from agents.autonomous_agent import AutonomousAgent, AgentTask, AgentOrchestrator
 from core.config import config
+
+
+async def validate_api_key_with_provider(provider: str, api_key: str) -> tuple[bool, str]:
+    """Validate a provider API key with a minimal network request."""
+    provider = (provider or "").strip().lower()
+    if not provider or not api_key:
+        return False, "Both provider and API key are required"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if provider == "anthropic":
+                response = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": config.CLAUDE_MODEL_FAST,
+                        "max_tokens": 1,
+                        "messages": [{"role": "user", "content": "ping"}],
+                    },
+                )
+                if response.status_code == 200:
+                    return True, "Anthropic API key validated successfully"
+                if response.status_code in (401, 403):
+                    return False, "Invalid Claude API key"
+                return False, f"Anthropic API returned status {response.status_code}"
+
+            if provider == "openai":
+                response = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                if response.status_code == 200:
+                    return True, "OpenAI API key validated successfully"
+                if response.status_code in (401, 403):
+                    return False, "Invalid OpenAI API key"
+                return False, f"OpenAI API returned status {response.status_code}"
+
+            if provider == "google":
+                response = await client.get(
+                    f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+                )
+                if response.status_code == 200:
+                    return True, "Gemini API key validated successfully"
+                if response.status_code in (400, 401, 403):
+                    return False, "Invalid Gemini API key"
+                return False, f"Gemini API returned status {response.status_code}"
+
+            if provider == "deepseek":
+                response = await client.get(
+                    "https://api.deepseek.com/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                if response.status_code == 200:
+                    return True, "DeepSeek API key validated successfully"
+                if response.status_code in (401, 403):
+                    return False, "Invalid DeepSeek API key"
+                return False, f"DeepSeek API returned status {response.status_code}"
+
+            if provider == "grok":
+                response = await client.get(
+                    "https://api.x.ai/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                if response.status_code == 200:
+                    return True, "Grok API key validated successfully"
+                if response.status_code in (401, 403):
+                    return False, "Invalid Grok API key"
+                return False, f"Grok API returned status {response.status_code}"
+
+            if provider == "kimi":
+                response = await client.get(
+                    "https://api.moonshot.cn/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                if response.status_code == 200:
+                    return True, "Kimi API key validated successfully"
+                if response.status_code in (401, 403):
+                    return False, "Invalid Kimi API key"
+                return False, f"Kimi API returned status {response.status_code}"
+
+            if provider == "nvd":
+                return True, "NVD API key accepted"
+
+            return False, f"Unknown provider: {provider}"
+    except httpx.TimeoutException:
+        return False, f"Timed out validating {provider} API key"
+    except httpx.RequestError as exc:
+        return False, f"Network error validating {provider} API key: {exc}"
+    except Exception as exc:
+        return False, f"Unexpected error validating {provider} API key: {exc}"
 
 
 class IPCServer:
@@ -254,6 +349,7 @@ class IPCServer:
             'list_providers': self.handle_list_providers,
             'health': self.handle_health,
             'stream_chat': self.handle_stream_chat,
+            'validate_api_key': self.handle_validate_api_key,
             'store_api_key': self.handle_store_api_key,
             'get_configured_providers': self.handle_get_configured_providers,
             'ad_attack': self.handle_ad_attack,
@@ -451,18 +547,42 @@ class IPCServer:
     async def handle_store_api_key(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle API key storage request"""
         from core.secure_config import store_api_key
-        
+
         provider = params.get('provider', '')
         api_key = params.get('api_key', '')
-        
+
         if not provider or not api_key:
             raise ValueError("Both provider and api_key are required")
-        
+
+        is_valid, message = await validate_api_key_with_provider(provider, api_key)
+        if not is_valid:
+            return {
+                'success': False,
+                'provider': provider,
+                'message': message,
+            }
+
         success = store_api_key(provider, api_key)
-        
+        if success:
+            config.reload_api_keys()
+            ai_manager.reload()
+
         return {
             'success': success,
             'provider': provider,
+            'message': "API key stored successfully" if success else "Failed to store API key",
+        }
+
+    async def handle_validate_api_key(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle API key validation request."""
+        provider = params.get('provider', '')
+        api_key = params.get('api_key', '')
+
+        is_valid, message = await validate_api_key_with_provider(provider, api_key)
+        return {
+            'success': is_valid,
+            'provider': provider,
+            'message': message,
         }
     
     async def handle_get_configured_providers(self, params: Dict[str, Any]) -> Dict[str, Any]:

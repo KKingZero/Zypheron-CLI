@@ -553,10 +553,10 @@ func TestWorkflow_ChatGate_CloudVsLocal(t *testing.T) {
 	m.license = &License{Tier: TierFree, Features: []Feature{}}
 	m.mu.Unlock()
 
-	// Cloud providers should be blocked on free tier
+	// Cloud providers should be allowed on free tier when users bring their own key
 	cloudErr := RequireProviderAccess("claude")
-	if cloudErr == nil {
-		t.Error("Claude should be blocked on free tier")
+	if cloudErr != nil {
+		t.Errorf("Claude should be allowed on free tier with BYOK, got: %v", cloudErr)
 	}
 
 	// Ollama should always pass
@@ -572,9 +572,8 @@ func TestWorkflow_ChatGate_CloudVsLocal(t *testing.T) {
 	}
 }
 
-// TestWorkflow_ScanAIGate tests that scan AI analysis requires cloud AI license
-func TestWorkflow_ScanAIGate(t *testing.T) {
-	// Free tier: AI analysis should be blocked
+// TestWorkflow_ScanAIProviderAccess tests scan AI provider access does not enforce paid cloud tiers
+func TestWorkflow_ScanAIProviderAccess(t *testing.T) {
 	instance = nil
 	once = sync.Once{}
 
@@ -583,19 +582,9 @@ func TestWorkflow_ScanAIGate(t *testing.T) {
 	m.license = &License{Tier: TierFree, Features: []Feature{}}
 	m.mu.Unlock()
 
-	err := RequireCloudAI()
-	if err == nil {
-		t.Error("Cloud AI analysis should be blocked on free tier")
-	}
-
-	// Pro tier: AI analysis should work
-	m.mu.Lock()
-	m.license = &License{Tier: TierPro, Features: TierConfigs[TierPro].Features}
-	m.mu.Unlock()
-
-	err = RequireCloudAI()
+	err := RequireProviderAccess("claude")
 	if err != nil {
-		t.Errorf("Cloud AI analysis should work on Pro, got: %v", err)
+		t.Errorf("Cloud AI provider access should allow BYOK on free tier, got: %v", err)
 	}
 }
 

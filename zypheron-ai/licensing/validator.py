@@ -235,12 +235,8 @@ class LicenseValidator:
 
         Args:
             provider: The provider name (e.g., "claude", "ollama")
-
-        Raises:
-            FeatureLockedError: If cloud AI is required but not available
         """
-        if self.is_cloud_provider(provider):
-            self.require_cloud_ai()
+        return
 
     def require_tokens(self, estimated: int) -> None:
         """
@@ -261,50 +257,14 @@ class LicenseValidator:
 
     def deduct_tokens(self, tokens: int, action: str = "ai_request", provider: str = None) -> None:
         """
-        Deduct tokens from balance and record usage.
+        OSS mode: provider usage is billed directly to the user's API key.
 
         Args:
             tokens: Number of tokens to deduct
             action: Description of the action
             provider: AI provider used
         """
-        if not self._db_path.exists():
-            return
-
-        try:
-            conn = sqlite3.connect(str(self._db_path))
-            cursor = conn.cursor()
-
-            # Update license cache
-            if self._license:
-                self._license.tokens_remaining -= tokens
-                self._license.tokens_used += tokens
-
-                # Update in database
-                cursor.execute(
-                    "SELECT license_json FROM license_cache WHERE id = 1"
-                )
-                row = cursor.fetchone()
-                if row:
-                    data = json.loads(row[0])
-                    data["tokens_remaining"] = self._license.tokens_remaining
-                    data["tokens_used"] = self._license.tokens_used
-                    cursor.execute(
-                        "UPDATE license_cache SET license_json = ?, cached_at = CURRENT_TIMESTAMP WHERE id = 1",
-                        (json.dumps(data),)
-                    )
-
-            # Record usage
-            cursor.execute(
-                "INSERT INTO token_usage (action, tokens, provider, timestamp) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-                (action, tokens, provider or "")
-            )
-
-            conn.commit()
-            conn.close()
-            logger.debug(f"Deducted {tokens} tokens, remaining: {self._license.tokens_remaining if self._license else 0}")
-        except Exception as e:
-            logger.error(f"Failed to deduct tokens: {e}")
+        logger.debug(f"Skipping OSS token deduction for provider={provider or 'unknown'} action={action} tokens={tokens}")
 
     @staticmethod
     def is_cloud_provider(provider: str) -> bool:
@@ -344,9 +304,7 @@ class LicenseValidator:
 
     def can_use_provider(self, provider: str) -> bool:
         """Check if a provider can be used without raising an error."""
-        if not self.is_cloud_provider(provider):
-            return True  # Local providers always allowed
-        return self.has_feature(Feature.CLOUD_AI)
+        return True
 
 
 # Singleton instance

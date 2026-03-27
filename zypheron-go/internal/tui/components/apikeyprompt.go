@@ -105,6 +105,10 @@ func (m APIKeyPromptModel) View() string {
 		Render(body.String())
 }
 
+func (m *APIKeyPromptModel) SetError(err string) {
+	m.errorMsg = strings.TrimSpace(err)
+}
+
 func promptMax(a, b int) int {
 	if a > b {
 		return a

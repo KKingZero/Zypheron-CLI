@@ -145,8 +145,8 @@ func TestRequireProviderAccess_OllamaAlwaysFree(t *testing.T) {
 	}
 }
 
-// TestRequireProviderAccess_CloudBlocked tests that cloud providers are blocked on free tier
-func TestRequireProviderAccess_CloudBlocked(t *testing.T) {
+// TestRequireProviderAccess_CloudAllowedOnFreeTier tests that BYOK providers are allowed on free tier
+func TestRequireProviderAccess_CloudAllowedOnFreeTier(t *testing.T) {
 	instance = nil
 	once = sync.Once{}
 
@@ -158,11 +158,8 @@ func TestRequireProviderAccess_CloudBlocked(t *testing.T) {
 	cloudProviders := []string{"claude", "openai", "gemini", "deepseek", "kimi"}
 	for _, provider := range cloudProviders {
 		err := RequireProviderAccess(provider)
-		if err == nil {
-			t.Errorf("RequireProviderAccess(%q) should block on free tier", provider)
-		}
-		if _, ok := err.(*FeatureLockedError); !ok {
-			t.Errorf("RequireProviderAccess(%q) should return FeatureLockedError, got %T", provider, err)
+		if err != nil {
+			t.Errorf("RequireProviderAccess(%q) should allow BYOK providers on free tier, got %v", provider, err)
 		}
 	}
 }
@@ -214,7 +211,7 @@ func TestRequireExploitation_FreeTierBlocked(t *testing.T) {
 	}
 }
 
-// TestRequireCloudAI_FreeTierBlocked tests cloud AI is blocked on free tier
+// TestRequireCloudAI_FreeTierBlocked tests legacy Cloud AI feature gating remains unchanged
 func TestRequireCloudAI_FreeTierBlocked(t *testing.T) {
 	instance = nil
 	once = sync.Once{}

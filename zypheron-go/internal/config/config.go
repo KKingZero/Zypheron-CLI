@@ -22,8 +22,14 @@ const (
 	AIProviderAnthropic AIProvider = "anthropic"
 	// AIProviderOpenAI represents OpenAI API
 	AIProviderOpenAI AIProvider = "openai"
+	// AIProviderGemini represents Google Gemini API
+	AIProviderGemini AIProvider = "gemini"
+	// AIProviderKimi represents Moonshot/Kimi API
+	AIProviderKimi AIProvider = "kimi"
 	// AIProviderDeepSeek represents DeepSeek API
 	AIProviderDeepSeek AIProvider = "deepseek"
+	// AIProviderGrok represents xAI Grok API
+	AIProviderGrok AIProvider = "grok"
 )
 
 // AIConfig holds AI provider configuration
@@ -192,8 +198,14 @@ func (c *Config) loadFromEnv() {
 			c.AI.Provider = AIProviderAnthropic
 		case "openai":
 			c.AI.Provider = AIProviderOpenAI
+		case "gemini":
+			c.AI.Provider = AIProviderGemini
+		case "kimi":
+			c.AI.Provider = AIProviderKimi
 		case "deepseek":
 			c.AI.Provider = AIProviderDeepSeek
+		case "grok":
+			c.AI.Provider = AIProviderGrok
 		}
 	}
 
@@ -211,8 +223,14 @@ func (c *Config) loadFromEnv() {
 		c.AI.APIKey = os.Getenv("ANTHROPIC_API_KEY")
 	case AIProviderOpenAI:
 		c.AI.APIKey = os.Getenv("OPENAI_API_KEY")
+	case AIProviderGemini:
+		c.AI.APIKey = os.Getenv("GOOGLE_API_KEY")
+	case AIProviderKimi:
+		c.AI.APIKey = os.Getenv("KIMI_API_KEY")
 	case AIProviderDeepSeek:
 		c.AI.APIKey = os.Getenv("DEEPSEEK_API_KEY")
+	case AIProviderGrok:
+		c.AI.APIKey = os.Getenv("GROK_API_KEY")
 	}
 
 	// Model override
@@ -334,10 +352,8 @@ func (c *Config) Validate() error {
 		if c.AI.OllamaModel == "" {
 			return errors.ConfigError("Ollama model must be specified when using Ollama provider")
 		}
-	case AIProviderAnthropic, AIProviderOpenAI, AIProviderDeepSeek:
-		if c.AI.APIKey == "" {
-			return errors.ConfigError(fmt.Sprintf("API key required for %s provider (set via environment variable)", c.AI.Provider))
-		}
+	case AIProviderAnthropic, AIProviderOpenAI, AIProviderGemini, AIProviderKimi, AIProviderDeepSeek, AIProviderGrok:
+		// Cloud providers may be authenticated through the Python engine's secure keyring.
 	case "":
 		return errors.ConfigError("AI provider must be specified")
 	default:
@@ -501,7 +517,7 @@ func (c *Config) SetAIProvider(provider AIProvider) error {
 	defer c.mu.Unlock()
 
 	switch provider {
-	case AIProviderOllama, AIProviderAnthropic, AIProviderOpenAI, AIProviderDeepSeek:
+	case AIProviderOllama, AIProviderAnthropic, AIProviderOpenAI, AIProviderGemini, AIProviderKimi, AIProviderDeepSeek, AIProviderGrok:
 		c.AI.Provider = provider
 		return nil
 	default:
@@ -537,7 +553,7 @@ func (c *Config) RequiresAPIKey() bool {
 	defer c.mu.RUnlock()
 
 	switch c.AI.Provider {
-	case AIProviderAnthropic, AIProviderOpenAI, AIProviderDeepSeek:
+	case AIProviderAnthropic, AIProviderOpenAI, AIProviderGemini, AIProviderKimi, AIProviderDeepSeek, AIProviderGrok:
 		return true
 	default:
 		return false

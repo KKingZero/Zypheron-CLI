@@ -11,6 +11,7 @@ from .openai_provider import OpenAIProvider
 from .gemini import GeminiProvider
 from .kimi import KimiProvider
 from .deepseek import DeepSeekProvider
+from .grok import GrokProvider
 from .ollama import OllamaProvider
 from core.config import config
 
@@ -24,6 +25,7 @@ class AIProviderManager:
     
     def _initialize_providers(self):
         """Initialize all AI providers"""
+        self.providers = {}
         
         # Claude
         try:
@@ -79,6 +81,17 @@ class AIProviderManager:
                 logger.warning("✗ DeepSeek provider not configured (missing API key)")
         except Exception as e:
             logger.error(f"✗ Failed to initialize DeepSeek: {e}")
+
+        # Grok
+        try:
+            grok = GrokProvider()
+            if grok.is_available():
+                self.providers[AIProvider.GROK] = grok
+                logger.info("✓ Grok provider initialized")
+            else:
+                logger.warning("✗ Grok provider not configured (missing API key)")
+        except Exception as e:
+            logger.error(f"✗ Failed to initialize Grok: {e}")
         
         # Ollama
         try:
@@ -130,6 +143,10 @@ class AIProviderManager:
     def list_available_providers(self) -> List[str]:
         """List all available (configured) providers"""
         return [provider.value for provider in self.providers.keys()]
+
+    def reload(self) -> None:
+        """Reload providers after configuration changes."""
+        self._initialize_providers()
     
     async def chat(
         self,
@@ -196,4 +213,3 @@ class AIProviderManager:
 
 # Global instance
 ai_manager = AIProviderManager()
-

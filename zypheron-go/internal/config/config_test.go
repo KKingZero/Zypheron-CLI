@@ -62,7 +62,7 @@ func TestAIProviderValidation(t *testing.T) {
 			name:     "Anthropic without API key",
 			provider: AIProviderAnthropic,
 			apiKey:   "",
-			wantErr:  true,
+			wantErr:  false,
 		},
 		{
 			name:     "Anthropic with API key",
@@ -80,6 +80,24 @@ func TestAIProviderValidation(t *testing.T) {
 			name:     "DeepSeek with API key",
 			provider: AIProviderDeepSeek,
 			apiKey:   "sk-test-key",
+			wantErr:  false,
+		},
+		{
+			name:     "Gemini without API key",
+			provider: AIProviderGemini,
+			apiKey:   "",
+			wantErr:  false,
+		},
+		{
+			name:     "Kimi without API key",
+			provider: AIProviderKimi,
+			apiKey:   "",
+			wantErr:  false,
+		},
+		{
+			name:     "Grok without API key",
+			provider: AIProviderGrok,
+			apiKey:   "",
 			wantErr:  false,
 		},
 	}
@@ -108,7 +126,10 @@ func TestSetAIProvider(t *testing.T) {
 		{AIProviderOllama, false},
 		{AIProviderAnthropic, false},
 		{AIProviderOpenAI, false},
+		{AIProviderGemini, false},
+		{AIProviderKimi, false},
 		{AIProviderDeepSeek, false},
+		{AIProviderGrok, false},
 		{"invalid", true},
 	}
 
@@ -132,7 +153,10 @@ func TestRequiresAPIKey(t *testing.T) {
 		{AIProviderOllama, false},
 		{AIProviderAnthropic, true},
 		{AIProviderOpenAI, true},
+		{AIProviderGemini, true},
+		{AIProviderKimi, true},
 		{AIProviderDeepSeek, true},
+		{AIProviderGrok, true},
 	}
 
 	for _, tt := range tests {
