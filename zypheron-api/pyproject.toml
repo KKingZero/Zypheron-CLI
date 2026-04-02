@@ -1,7 +1,7 @@
 [project]
 name = "zypheron-api"
-version = "0.1.0"
-description = "Zypheron Backend API - License validation, AI proxy, and token tracking"
+version = "2.0.0"
+description = "Zypheron API - local-first AI proxy and self-hosted service components"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

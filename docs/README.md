@@ -31,5 +31,6 @@ This directory contains the active user-facing documentation for Zypheron CLI.
 ## Notes
 
 - Some files in `docs/archive/` are historical and may not reflect the current product state.
+- Some older planning files in the repository are historical and may not reflect the current OSS direction.
 - For the current install flow, prefer [INSTALL.md](INSTALL.md) and the root [README.md](../README.md).
 - For command truth, prefer `zypheron --help` and `zypheron <command> --help` for your current build.

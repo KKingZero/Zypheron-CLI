@@ -6,6 +6,7 @@ import pytest
 import asyncio
 import json
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from contracts.runtime import QueryResponse, TaskStatus
 from core.server import IPCServer
 
 
@@ -13,8 +14,12 @@ class MockStreamReader:
     """Mock StreamReader for testing"""
     def __init__(self, data):
         self.data = data
+        self._consumed = False
     
     async def read(self, size):
+        if self._consumed:
+            return b""
+        self._consumed = True
         return self.data
 
 
@@ -127,6 +132,113 @@ class TestIPCServer:
             
             assert 'providers' in result
             assert isinstance(result['providers'], list)
+
+    @pytest.mark.asyncio
+    async def test_handle_chat_uses_query_engine(self, server):
+        """Chat should be routed through the unified query engine."""
+        params = {
+            'messages': [{'role': 'user', 'content': 'What configured providers do I have?'}],
+            'provider': 'anthropic',
+        }
+        mocked_response = QueryResponse(
+            content='configured providers: anthropic',
+            provider='zypheron-query-engine',
+            model='tool-runtime',
+            session_id='session-test',
+            task_id='task-test',
+            task_status=TaskStatus.COMPLETED,
+        )
+        server.query_engine.execute = AsyncMock(return_value=mocked_response)
+
+        result = await server.handle_chat(params)
+
+        server.query_engine.execute.assert_awaited_once()
+        assert result['content'] == 'configured providers: anthropic'
+        assert result['task_status'] == 'completed'
+
+    @pytest.mark.asyncio
+    async def test_handle_task_list(self, server):
+        """Task list should be served from the shared task store."""
+        mock_task = MagicMock()
+        mock_task.to_dict.return_value = {'task_id': 'task-1', 'status': 'running'}
+        server.query_engine.task_store.list_tasks = MagicMock(return_value=[mock_task])
+
+        result = await server.handle_task_list({'limit': 10, 'session_id': 'session-1'})
+
+        assert result['tasks'] == [{'task_id': 'task-1', 'status': 'running'}]
+        server.query_engine.task_store.list_tasks.assert_called_once_with(limit=10, session_id='session-1', task_id=None)
+
+    @pytest.mark.asyncio
+    async def test_handle_task_events(self, server):
+        """Task events should be returned for a known task."""
+        server.query_engine.task_store.get_task = MagicMock(return_value=MagicMock())
+        server.query_engine.task_store.list_events = MagicMock(
+            return_value=[{'event_type': 'step_started', 'payload': {'step': 1}}]
+        )
+
+        result = await server.handle_task_events({'task_id': 'task-1'})
+
+        assert result['events'][0]['event_type'] == 'step_started'
+
+    @pytest.mark.asyncio
+    async def test_handle_task_events_missing_task_raises(self, server):
+        """Unknown task ids should be rejected consistently."""
+        server.query_engine.task_store.get_task = MagicMock(return_value=None)
+
+        with pytest.raises(ValueError, match="Task not found"):
+            await server.handle_task_events({'task_id': 'missing-task'})
+
+    @pytest.mark.asyncio
+    async def test_handle_task_approve(self, server):
+        """Approval submissions should route through the query engine."""
+        task = MagicMock()
+        task.kind = "chat_turn"
+        server.query_engine.task_store.get_task = MagicMock(return_value=task)
+        server.query_engine.submit_approval = AsyncMock(
+            return_value=QueryResponse(
+                content='approved and executed',
+                provider='zypheron-query-engine',
+                model='tool-runtime',
+                session_id='session-1',
+                task_id='task-1',
+                task_status=TaskStatus.COMPLETED,
+            )
+        )
+
+        result = await server.handle_task_approve({
+            'task_id': 'task-1',
+            'request_id': 'approval-1',
+            'decision': 'approve_once',
+        })
+
+        assert result['content'] == 'approved and executed'
+        server.query_engine.submit_approval.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_task_approve_routes_autopent_to_store(self, server):
+        """Autopent approvals should update shared task metadata instead of query-engine flow."""
+        task = MagicMock()
+        task.kind = "autopent"
+        task.session_id = "session-1"
+        task.task_id = "autopent-1"
+        task.status = TaskStatus.WAITING_APPROVAL
+        server.query_engine.task_store.get_task = MagicMock(return_value=task)
+        server.query_engine.task_store.set_approval_response = MagicMock()
+        server.query_engine.submit_approval = AsyncMock()
+
+        result = await server.handle_task_approve({
+            'task_id': 'autopent-1',
+            'request_id': 'approval-1',
+            'decision': 'approve_once',
+        })
+
+        assert "Queued approval decision" in result['content']
+        server.query_engine.task_store.set_approval_response.assert_called_once_with(
+            task_id='autopent-1',
+            request_id='approval-1',
+            decision='approve_once',
+        )
+        server.query_engine.submit_approval.assert_not_awaited()
     
     @pytest.mark.asyncio
     async def test_handle_store_api_key(self, server):

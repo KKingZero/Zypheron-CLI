@@ -33,6 +33,13 @@ zypheron tools check
 zypheron ai status
 ```
 
+For repo-level local validation of the optional API service path:
+
+```bash
+./scripts/setup_api_test_env.sh --allow-online
+./scripts/local_smoke_test.sh
+```
+
 If you are running on Kali or WSL and want environment-specific checks:
 
 ```bash
@@ -151,4 +158,5 @@ bash ./setup-hybrid.sh
 
 - some workflows depend on external tools being present locally
 - AI features depend on either configured hosted keys or a local model runtime
+- optional API, Redis, and Prometheus services are not required for core CLI usage
 - not every command is equally mature; use `zypheron --help` and command help output as the source of truth for your build

@@ -22,6 +22,9 @@ from analysis.vulnerability_analyzer import VulnerabilityAnalyzer
 from ml.vulnerability_predictor import MLVulnerabilityPredictor
 from agents.autonomous_agent import AutonomousAgent, AgentTask, AgentOrchestrator
 from core.config import config
+from core.query_engine import QueryRequest, query_engine
+from contracts.runtime import PolicyMode
+from tools.registry import tool_registry
 
 
 async def validate_api_key_with_provider(provider: str, api_key: str) -> tuple[bool, str]:
@@ -128,6 +131,7 @@ class IPCServer:
         self.vuln_analyzer = VulnerabilityAnalyzer()
         self.ml_predictor = MLVulnerabilityPredictor()
         self.agent_orchestrator = AgentOrchestrator()
+        self.query_engine = query_engine
         self.server = None
         
         # Generate or load authentication token
@@ -356,6 +360,10 @@ class IPCServer:
             'cloud_scan': self.handle_cloud_scan,
             'bounty_analyze': self.handle_bounty_analyze,
             'mitre_attack': self.handle_mitre_attack,
+            'task_list': self.handle_task_list,
+            'task_get': self.handle_task_get,
+            'task_events': self.handle_task_events,
+            'task_approve': self.handle_task_approve,
         }
         
         handler = handlers.get(method)
@@ -381,32 +389,33 @@ class IPCServer:
     async def handle_chat(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle chat request"""
         messages_data = params.get('messages', [])
-        provider = params.get('provider')
-        model = params.get('model')
-        temperature = params.get('temperature', 0.7)
-        max_tokens = params.get('max_tokens', 4096)
-        
-        # Convert to AIMessage objects
         messages = [
-            AIMessage(role=msg['role'], content=msg['content'])
+            AIMessage(
+                role=msg['role'],
+                content=msg['content'],
+                metadata=msg.get('metadata'),
+            )
             for msg in messages_data
         ]
-        
-        # Get AI response
-        response = await ai_manager.chat(
-            messages=messages,
-            provider=provider,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            model=model
+
+        policy_mode_value = str(params.get('policy_mode', PolicyMode.INTERACTIVE_SAFE.value)).strip().lower()
+        try:
+            policy_mode = PolicyMode(policy_mode_value)
+        except ValueError:
+            policy_mode = PolicyMode.INTERACTIVE_SAFE
+        response = await self.query_engine.execute(
+            QueryRequest(
+                messages=messages,
+                provider=params.get('provider'),
+                model=params.get('model'),
+                temperature=params.get('temperature', 0.7),
+                max_tokens=params.get('max_tokens', 4096),
+                session_id=params.get('session_id'),
+                task_id=params.get('task_id'),
+                policy_mode=policy_mode,
+            )
         )
-        
-        return {
-            'content': response.content,
-            'provider': response.provider,
-            'model': response.model,
-            'tokens_used': response.tokens_used,
-        }
+        return response.to_result()
     
     async def handle_stream_chat(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -542,7 +551,78 @@ class IPCServer:
             'socket': self.socket_path,
             'transport': self.transport,
             'endpoint': self.endpoint,
+            'shared_tool_count': len(tool_registry.specs()),
         }
+
+    async def handle_task_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """List recent runtime tasks."""
+        limit = int(params.get('limit', 50))
+        session_id = params.get('session_id') or None
+        task_id = params.get('task_id') or None
+        tasks = [
+            task.to_dict()
+            for task in self.query_engine.task_store.list_tasks(
+                limit=limit,
+                session_id=session_id,
+                task_id=task_id,
+            )
+        ]
+        return {'tasks': tasks}
+
+    async def handle_task_get(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch a single task by id."""
+        task_id = params.get('task_id')
+        if not task_id:
+            raise ValueError("task_id is required")
+        task = self.query_engine.task_store.get_task(task_id)
+        if not task:
+            raise ValueError(f"Task not found: {task_id}")
+        return task.to_dict()
+
+    async def handle_task_events(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch audit events for a task."""
+        task_id = params.get('task_id')
+        if not task_id:
+            raise ValueError("task_id is required")
+        task = self.query_engine.task_store.get_task(task_id)
+        if not task:
+            raise ValueError(f"Task not found: {task_id}")
+        return {'events': self.query_engine.task_store.list_events(task_id)}
+
+    async def handle_task_approve(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply an approval decision to a waiting task."""
+        task_id = params.get('task_id')
+        request_id = params.get('request_id')
+        decision = params.get('decision')
+        if not task_id:
+            raise ValueError("task_id is required")
+        if not request_id:
+            raise ValueError("request_id is required")
+        if not decision:
+            raise ValueError("decision is required")
+        task = self.query_engine.task_store.get_task(task_id)
+        if not task:
+            raise ValueError(f"Task not found: {task_id}")
+        if task.kind == "autopent":
+            self.query_engine.task_store.set_approval_response(
+                task_id=task_id,
+                request_id=request_id,
+                decision=decision,
+            )
+            return {
+                'content': f'Queued approval decision `{decision}` for autopent task {task_id}.',
+                'session_id': task.session_id,
+                'task_id': task.task_id,
+                'task_status': task.status.value,
+                'progress_events': [],
+                'approval_request': None,
+            }
+        response = await self.query_engine.submit_approval(
+            task_id=task_id,
+            request_id=request_id,
+            decision=decision,
+        )
+        return response.to_result()
     
     async def handle_store_api_key(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle API key storage request"""

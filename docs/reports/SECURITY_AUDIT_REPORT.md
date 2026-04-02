@@ -266,7 +266,7 @@ JWT tokens are configured with 0 expiration by default.
 - **OWASP Top 10 2021:** Addresses A01 (Broken Access Control), A02 (Cryptographic Failures), A03 (Injection)
 - **CWE-77:** Command Injection vulnerabilities present
 - **CWE-798:** Hardcoded credentials in default configuration
-- **PCI-DSS:** If handling payment data, requires additional controls
+- **PCI-DSS:** If handling regulated financial data, additional controls would be required
 - **GDPR:** User data handling requires privacy controls
 
 ---

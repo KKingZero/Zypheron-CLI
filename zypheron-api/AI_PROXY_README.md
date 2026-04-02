@@ -250,7 +250,7 @@ When Redis is enabled:
 ### Client Errors (4xx)
 - **400 Bad Request**: Invalid request format
 - **401 Unauthorized**: Invalid API key
-- **402 Payment Required**: Quota exceeded
+- **402 Quota Exceeded**: Usage limit exceeded
 - **429 Too Many Requests**: Rate limit exceeded
 
 ### Server Errors (5xx)

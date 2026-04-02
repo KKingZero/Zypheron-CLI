@@ -1,6 +1,6 @@
 """Database connection and session management.
 
-Supports SQLite for development and PostgreSQL (Supabase) for production.
+Supports SQLite by default and optional self-hosted PostgreSQL.
 """
 
 from collections.abc import AsyncGenerator

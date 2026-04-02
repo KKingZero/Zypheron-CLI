@@ -228,15 +228,18 @@ func runAITest(cmd *cobra.Command, args []string) error {
 
 	fmt.Print(ui.InfoMsg("Waiting for response..."))
 
-	response, err := bridge.Chat(messages, aiProvider, "", 0.7, 200)
+	response, err := runRuntimeChatTurn(bridge, messages, aiProvider, "", 0.7, 200, "", true)
 	if err != nil {
 		return fmt.Errorf("AI test failed: %w", err)
+	}
+	if response.TaskStatus == "aborted" || response.TaskStatus == "failed" {
+		return fmt.Errorf("AI test did not complete successfully: %s", response.Content)
 	}
 
 	fmt.Print("\r" + ui.Success.Sprint("✓ Response received    ") + "\n")
 	fmt.Println()
 
-	fmt.Printf("%s %s\n", ui.Accent.Sprint("🤖 AI:"), response)
+	fmt.Printf("%s %s\n", ui.Accent.Sprint("🤖 AI:"), response.Content)
 	fmt.Println()
 
 	ui.Success.Println("✓ AI Engine test successful!")

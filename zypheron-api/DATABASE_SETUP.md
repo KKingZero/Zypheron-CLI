@@ -107,8 +107,8 @@ The following tables are created by SQLAlchemy:
 
 1. **users** - User accounts and authentication
    - Email/password and GitHub OAuth support
-   - Subscription tiers (free, starter, pro, enterprise)
-   - Timestamps and status flags
+   - User metadata and status flags
+   - Timestamps and activity fields
 
 2. **devices** - Registered devices per user
    - Device fingerprinting
@@ -134,10 +134,10 @@ The following tables are created by SQLAlchemy:
 6. **token_usage** - AI token consumption tracking
    - Per-request token counts
    - Provider and model tracking
-   - Cost calculation
+   - Usage accounting
 
-7. **user_quota** - Monthly token quotas
-   - Quota limits by tier
+7. **user_quota** - Usage quotas
+   - Limit tracking
    - Reset tracking
    - Overage monitoring
 

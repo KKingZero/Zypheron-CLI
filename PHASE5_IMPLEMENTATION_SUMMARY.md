@@ -592,8 +592,8 @@ html_report = reporter.export_report(soc2_report.report_id, format='html')
 - Covers Security, Availability, Confidentiality, Processing Integrity, Privacy
 
 ### PCI-DSS v4.0
-- Payment Card Industry Data Security Standard version 4.0
-- Mandatory for organizations handling payment card data
+- PCI-DSS version 4.0
+- Relevant only for environments handling regulated financial card data
 - 12 requirements covering network security to incident response
 
 ---

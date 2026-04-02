@@ -19,30 +19,27 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "Zypheron API"
-    app_version: str = "0.1.0"
+    app_version: str = "2.0.0"
     debug: bool = False
     environment: Literal["development", "staging", "production"] = "development"
 
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
-    frontend_url: str = "http://localhost:3000"  # Web app URL for device code verification
+    frontend_url: str = "http://localhost:3000"
     cors_allowed_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
             "http://localhost:5173",
-            "https://zypheron.net",
-            "https://app.zypheron.net",
-            "https://api.zypheron.net",
         ],
-        description="Explicit allowed origins for CORS in non-development environments",
+        description="Explicit allowed origins for local and self-hosted frontends",
     )
 
-    # Database - SQLite for dev, Supabase/Postgres for production
+    # Database - SQLite by default, optional self-hosted PostgreSQL
     database_type: Literal["sqlite", "postgresql"] = "sqlite"
     database_url: str = "sqlite+aiosqlite:///./zypheron.db"
 
-    # PostgreSQL (Local Development or Self-hosted)
+    # PostgreSQL (optional self-hosted)
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "zypheron"
@@ -50,20 +47,19 @@ class Settings(BaseSettings):
     postgres_db: str = "zypheron"
     postgres_url_override: str | None = None  # Override auto-generated URL if needed
 
-    # Supabase (for production)
+    # Legacy hosted database settings retained for compatibility with older configs
     supabase_url: str | None = None
     supabase_key: str | None = None
     supabase_service_key: str | None = None
 
-    # Redis (Upstash recommended for serverless)
-    # Format: redis://default:PASSWORD@HOST:PORT or rediss:// for TLS
+    # Redis (optional for caching and rate limiting)
     redis_url: str | None = None
     redis_enabled: bool = False
-    redis_ssl: bool = True  # Upstash uses TLS by default
-    redis_host: str = "localhost"  # Redis host (if not using redis_url)
-    redis_port: int = 6379  # Redis port (if not using redis_url)
-    redis_password: str | None = None  # Redis password (if not using redis_url)
-    redis_db: int = 0  # Redis database number
+    redis_ssl: bool = False
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_password: str | None = None
+    redis_db: int = 0
 
     # JWT Authentication
     # SECURITY: JWT secret must be set via environment variable in production
@@ -117,7 +113,7 @@ class Settings(BaseSettings):
     cache_ttl_vuln_desc: int = 86400  # 24 hours for vulnerability descriptions (CVE lookups)
     cache_ttl_general: int = 21600  # 6 hours for general security info
 
-    # Stripe Payment Integration
+    # Legacy Stripe settings retained for compatibility with older configs
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
     stripe_publishable_key: str | None = None
@@ -131,7 +127,7 @@ class Settings(BaseSettings):
     stripe_price_id_enterprise_annual: str | None = None
     stripe_payment_grace_period_days: int = 3
 
-    # Pricing (in cents for Stripe)
+    # Legacy pricing values retained for compatibility with older configs
     price_starter_monthly: int = 2900  # $29
     price_starter_annual: int = 26100  # $261 (25% off $348)
     price_pro_monthly: int = 14900  # $149
@@ -143,16 +139,16 @@ class Settings(BaseSettings):
     # Metrics endpoint security
     metrics_secret_token: str | None = None  # Bearer token for /metrics access
 
-    # Allowed redirect domains for Stripe checkout/portal
+    # Legacy redirect allowlist retained for older hosted flows
     allowed_redirect_domains: list[str] = Field(
-        default_factory=lambda: ["zypheron.com", "localhost"],
-        description="Allowed domains for Stripe redirect URLs",
+        default_factory=lambda: ["localhost"],
+        description="Allowed redirect domains for optional local web flows",
     )
 
     # GitHub OAuth Integration
     github_client_id: str | None = None
     github_client_secret: str | None = None
-    base_url: str = "https://api.zypheron.net"  # API base URL for OAuth callback
+    base_url: str = "http://localhost:8000"
 
     # BYOK (Bring Your Own Key) Encryption
     # SECURITY: Encryption keys for BYOK API key storage
@@ -225,8 +221,8 @@ class Settings(BaseSettings):
 
         Priority:
         1. postgres_url_override (if set)
-        2. Supabase credentials (for production)
-        3. Local PostgreSQL settings (for development)
+        2. Legacy hosted database credentials
+        3. Local PostgreSQL settings
         """
         # Allow manual override
         if self.postgres_url_override:

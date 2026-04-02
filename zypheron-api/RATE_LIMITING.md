@@ -219,7 +219,7 @@ done
 
 1. **Upstash** (Serverless, Edge-optimized)
    - Global replication
-   - Pay-per-request pricing
+   - Per-request usage accounting
    - TLS by default
    - Perfect for serverless deployments
 

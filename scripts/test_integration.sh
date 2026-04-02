@@ -167,9 +167,9 @@ start_api_server() {
 
     # Check if virtual environment exists
     if [ ! -d ".venv" ]; then
-        print_error "Virtual environment not found in ${API_DIR}/.venv"
-        print_info "Run: cd ${API_DIR} && python -m venv .venv && source .venv/bin/activate && pip install -e ."
-        exit 1
+        print_warning "Virtual environment not found in ${API_DIR}/.venv"
+        print_info "Attempting locked setup with scripts/setup_api_test_env.sh ..."
+        "${SCRIPTS_DIR}/setup_api_test_env.sh"
     fi
 
     # Start API server in background

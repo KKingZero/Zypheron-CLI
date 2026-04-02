@@ -1,6 +1,4 @@
-"""
-AI Provider Manager - Orchestrates multiple AI providers
-"""
+"""AI Provider Manager - Orchestrates multiple AI providers."""
 
 from typing import Optional, List, AsyncIterator
 from loguru import logger
@@ -14,6 +12,29 @@ from .deepseek import DeepSeekProvider
 from .grok import GrokProvider
 from .ollama import OllamaProvider
 from core.config import config
+
+
+PROVIDER_ALIASES = {
+    "anthropic": AIProvider.CLAUDE,
+    "claude": AIProvider.CLAUDE,
+    "openai": AIProvider.OPENAI,
+    "google": AIProvider.GEMINI,
+    "gemini": AIProvider.GEMINI,
+    "kimi": AIProvider.KIMI,
+    "deepseek": AIProvider.DEEPSEEK,
+    "grok": AIProvider.GROK,
+    "xai": AIProvider.GROK,
+    "ollama": AIProvider.OLLAMA,
+}
+
+
+def normalize_provider_name(provider_name: Optional[str]) -> str:
+    """Normalize user-facing provider aliases to internal provider names."""
+    normalized = (provider_name or "").strip().lower()
+    if not normalized:
+        normalized = str(config.DEFAULT_PROVIDER or "").strip().lower()
+    provider_enum = PROVIDER_ALIASES.get(normalized)
+    return provider_enum.value if provider_enum else normalized
 
 
 class AIProviderManager:
@@ -119,9 +140,8 @@ class AIProviderManager:
         Raises:
             ValueError: If provider not found or not configured
         """
-        if provider_name is None:
-            provider_name = config.DEFAULT_PROVIDER
-        
+        provider_name = normalize_provider_name(provider_name)
+
         try:
             provider_enum = AIProvider(provider_name.lower())
         except ValueError:

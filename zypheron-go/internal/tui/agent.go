@@ -52,19 +52,19 @@ type AgentQuestion struct {
 
 // AgentPlan represents the AI's execution plan
 type AgentPlan struct {
-	Objective  string         `json:"objective"`
-	Target     string         `json:"target"`
-	ToolCalls  []ToolCall     `json:"tool_calls"`
-	Questions  []AgentQuestion `json:"questions,omitempty"`
-	Reasoning  string         `json:"reasoning"`
+	Objective string          `json:"objective"`
+	Target    string          `json:"target"`
+	ToolCalls []ToolCall      `json:"tool_calls"`
+	Questions []AgentQuestion `json:"questions,omitempty"`
+	Reasoning string          `json:"reasoning"`
 }
 
 // AgentResult holds the final result from the agent
 type AgentResult struct {
-	Summary      string           `json:"summary"`
-	Findings     []AgentFinding   `json:"findings"`
-	AttackPaths  []AttackPath     `json:"attack_paths"`
-	Recommendations []string      `json:"recommendations"`
+	Summary         string         `json:"summary"`
+	Findings        []AgentFinding `json:"findings"`
+	AttackPaths     []AttackPath   `json:"attack_paths"`
+	Recommendations []string       `json:"recommendations"`
 }
 
 // AgentFinding represents a discovered vulnerability or issue
@@ -98,17 +98,17 @@ type AttackPath struct {
 
 // Agent manages the AI-driven multi-tool workflow
 type Agent struct {
-	ID           string
-	Bridge       *aibridge.AIBridge
-	State        AgentState
-	Plan         *AgentPlan
-	Results      map[string]*tools.ToolResult // keyed by tool call ID
-	CVEResults   map[string][]*browser.CVEResult // CVE lookup results keyed by query
-	CurrentTool  string
-	Messages     []aibridge.Message // Conversation history
-	UserQuery    string
-	Provider     string
-	ModelName    string
+	ID          string
+	Bridge      *aibridge.AIBridge
+	State       AgentState
+	Plan        *AgentPlan
+	Results     map[string]*tools.ToolResult    // keyed by tool call ID
+	CVEResults  map[string][]*browser.CVEResult // CVE lookup results keyed by query
+	CurrentTool string
+	Messages    []aibridge.Message // Conversation history
+	UserQuery   string
+	Provider    string
+	ModelName   string
 
 	// Cancellation support
 	ctx    context.Context
@@ -395,10 +395,14 @@ Only include questions for critical decisions. Keep tool_calls focused and pract
 		Content: fmt.Sprintf("Target: %s\n\nRequest: %s", target, a.UserQuery),
 	})
 
-	response, err := a.Bridge.Chat(a.Messages, a.Provider, a.ModelName, 0.3, 2000)
+	detailed, err := a.Bridge.ChatDetailed(a.Messages, a.Provider, a.ModelName, 0.3, 2000, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plan: %w", err)
 	}
+	if detailed.ApprovalRequest != nil {
+		return nil, fmt.Errorf("agent planning requires runtime approval and cannot continue in JSON mode")
+	}
+	response := detailed.Content
 
 	// Parse JSON response
 	var plan AgentPlan
@@ -535,10 +539,14 @@ Respond ONLY with valid JSON:
 		Content: fmt.Sprintf("Scan results:\n```json\n%s\n```\n\n%s", string(resultsJSON), analysisPrompt),
 	})
 
-	response, err := a.Bridge.Chat(a.Messages, a.Provider, a.ModelName, 0.3, 3000)
+	detailed, err := a.Bridge.ChatDetailed(a.Messages, a.Provider, a.ModelName, 0.3, 3000, "")
 	if err != nil {
 		return nil, err
 	}
+	if detailed.ApprovalRequest != nil {
+		return nil, fmt.Errorf("agent analysis requires runtime approval and cannot continue in JSON mode")
+	}
+	response := detailed.Content
 
 	var result AgentResult
 	jsonStr := extractJSON(response)

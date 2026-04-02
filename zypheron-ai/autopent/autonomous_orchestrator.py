@@ -19,6 +19,7 @@ Integrates all Phase 1 components:
 
 import asyncio
 import logging
+import sys
 import uuid
 from typing import Optional, Dict, List, Any
 from datetime import datetime
@@ -30,6 +31,9 @@ from .approval_manager import ApprovalManager, ApprovalDecision
 from .credential_vault import CredentialVault, CredentialType, CredentialSource
 from .interactive_prompt import InteractivePrompt
 from .session_state import SessionStateManager
+from .tool_executor import ToolExecutor
+from tasks.store import TaskStore
+from contracts.runtime import AuditEvent, PolicyMode, TaskRecord, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +46,15 @@ class OrchestratorStatus(Enum):
     PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
+    ABORTED = "aborted"
+
+
+class StepOutcome(Enum):
+    """Execution result for a single autopent step."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    SKIPPED = "skipped"
     ABORTED = "aborted"
 
 
@@ -86,6 +99,8 @@ class AutonomousOrchestrator:
         self.credential_vault = credential_vault or CredentialVault()
         self.prompt = InteractivePrompt()
         self.state_manager = SessionStateManager()
+        self.task_store = TaskStore()
+        self.task_id = f"autopent-{self.session_id}"
 
         # Enable autonomous mode in approval manager if requested
         if autonomous_mode:
@@ -114,6 +129,13 @@ class AutonomousOrchestrator:
         logger.info(f"   Target: {initial_target}")
         if resume_mode:
             logger.info(f"   Restored: {self.actions_executed} actions, {self.actions_successful} successful")
+        self._sync_task(TaskStatus.PAUSED if resume_mode else TaskStatus.QUEUED)
+        self._emit_event("autopent_initialized", {
+            "objective": self.objective,
+            "target": self.initial_target,
+            "resume_mode": self.resume_mode,
+            "autonomous_mode": self.autonomous_mode,
+        })
 
     async def execute(self) -> Dict[str, Any]:
         """
@@ -123,6 +145,7 @@ class AutonomousOrchestrator:
             Results dictionary
         """
         self.status = OrchestratorStatus.RUNNING
+        self._sync_task(TaskStatus.RUNNING)
 
         try:
             # Display beta warning banner
@@ -144,22 +167,37 @@ class AutonomousOrchestrator:
                 print(self.attack_graph.visualize_graph())
 
             # Phase 2: Attack Path Execution
-            await self._phase_execution()
+            execution_status = await self._phase_execution()
 
+            self.status = execution_status
+            final_task_status = {
+                OrchestratorStatus.COMPLETED: TaskStatus.COMPLETED,
+                OrchestratorStatus.FAILED: TaskStatus.FAILED,
+                OrchestratorStatus.ABORTED: TaskStatus.ABORTED,
+            }.get(execution_status, TaskStatus.FAILED)
+            self._sync_task(final_task_status)
+            terminal_event = {
+                OrchestratorStatus.COMPLETED: "autopent_completed",
+                OrchestratorStatus.FAILED: "autopent_failed",
+                OrchestratorStatus.ABORTED: "autopent_aborted",
+            }.get(execution_status, "autopent_failed")
+            self._emit_event(terminal_event, {"status": self.status.value})
             # Phase 3: Reporting
             results = await self._phase_reporting()
-
-            self.status = OrchestratorStatus.COMPLETED
             return results
 
         except KeyboardInterrupt:
             logger.warning("⚠️  Operation interrupted by user")
             self.status = OrchestratorStatus.ABORTED
+            self._sync_task(TaskStatus.ABORTED)
+            self._emit_event("autopent_aborted", {"status": self.status.value})
             return await self._generate_partial_results()
 
         except Exception as e:
             logger.error(f"❌ Orchestrator failed: {e}", exc_info=True)
             self.status = OrchestratorStatus.FAILED
+            self._sync_task(TaskStatus.FAILED, {"error": str(e)})
+            self._emit_event("autopent_failed", {"error": str(e)})
             return await self._generate_partial_results()
 
     async def validate_credentials(self) -> int:
@@ -190,6 +228,7 @@ class AutonomousOrchestrator:
     async def _phase_discovery(self):
         """Phase 1: Discover attack paths and build graph"""
         logger.info("🔍 Phase 1: Discovery & Planning")
+        self._emit_event("phase_started", {"phase": "discovery"})
 
         # TODO: Integrate with actual reconnaissance tools
         # For now, we'll simulate discovery
@@ -207,19 +246,27 @@ class AutonomousOrchestrator:
         logger.info(f"🤖 AI Recommendation: {decision.recommendation}")
         logger.info(f"   Reasoning: {decision.reasoning}")
 
-    async def _phase_execution(self):
+    async def _phase_execution(self) -> OrchestratorStatus:
         """Phase 2: Execute attack path"""
         logger.info("⚡ Phase 2: Attack Path Execution")
+        self._emit_event("phase_started", {"phase": "execution"})
 
         # Get optimal path
         optimal_path = self.attack_graph.get_optimal_path_to_objective()
 
         if not optimal_path:
             logger.warning("No viable path to objective found")
-            return
+            self._emit_event("execution_failed", {
+                "reason": "no viable path to objective found",
+                "objective": self.objective,
+            })
+            return OrchestratorStatus.FAILED
 
         self.total_steps = len(optimal_path)
         logger.info(f"📊 Executing {self.total_steps} steps to reach objective\n")
+        self._emit_event("execution_plan", {"total_steps": self.total_steps})
+        had_unrecovered_failure = False
+        aborted = False
 
         # Execute each step in the path
         for i, edge in enumerate(optimal_path, 1):
@@ -228,28 +275,44 @@ class AutonomousOrchestrator:
             # Check if user requested abort
             if self.approval_manager.should_abort():
                 logger.warning("⚠️  Operation aborted by user")
+                aborted = True
                 break
 
             # Execute the step
-            success = await self._execute_step(edge, i, self.total_steps)
+            outcome = await self._execute_step(edge, i, self.total_steps)
 
-            if success:
+            if outcome == StepOutcome.SUCCEEDED:
                 self.actions_successful += 1
-            else:
+                self._sync_task(TaskStatus.RUNNING)
+            elif outcome == StepOutcome.FAILED:
                 self.actions_failed += 1
+                self._sync_task(TaskStatus.RUNNING)
 
                 # Handle failure
                 recovered = await self._handle_step_failure(edge)
                 if not recovered:
                     logger.warning(f"Unable to recover from failure, stopping execution")
+                    had_unrecovered_failure = True
                     break
+            elif outcome == StepOutcome.ABORTED:
+                logger.warning("Stopping execution after operator abort")
+                aborted = True
+                break
+            else:
+                self._sync_task(TaskStatus.RUNNING)
+
+        if aborted:
+            return OrchestratorStatus.ABORTED
+        if had_unrecovered_failure:
+            return OrchestratorStatus.FAILED
+        return OrchestratorStatus.COMPLETED
 
     async def _execute_step(
         self,
         edge: GraphEdge,
         step_num: int,
         total_steps: int
-    ) -> bool:
+    ) -> StepOutcome:
         """
         Execute a single attack step
 
@@ -259,9 +322,16 @@ class AutonomousOrchestrator:
             total_steps: Total number of steps
 
         Returns:
-            True if successful, False otherwise
+            Step outcome classification
         """
         # Display progress
+        self._emit_event("step_started", {
+            "step_num": step_num,
+            "total_steps": total_steps,
+            "edge_id": edge.edge_id,
+            "description": edge.description,
+            "tool": edge.tool,
+        })
         self.prompt.display_progress(
             step_num,
             total_steps,
@@ -269,19 +339,49 @@ class AutonomousOrchestrator:
             "running"
         )
 
-        # Check if approval required
-        if self.approval_manager.requires_approval(edge):
+        shared_policy_decision = self._get_tool_executor().get_shared_policy_decision(edge)
+
+        # Check if approval required through the legacy autopent path only when the
+        # edge is not already governed by the shared tool contract.
+        if shared_policy_decision is None and self.approval_manager.requires_approval(edge):
             approved = await self._request_approval(edge)
             if not approved:
                 logger.info(f"⏭️  Step skipped (not approved): {edge.description}")
-                return False
+                self._emit_event("step_skipped", {
+                    "edge_id": edge.edge_id,
+                    "reason": "not approved",
+                    "description": edge.description,
+                })
+                if self.approval_manager.should_abort():
+                    return StepOutcome.ABORTED
+                return StepOutcome.SKIPPED
 
         # Check if credentials required
         if edge.requires_credentials and edge.credential_id:
             cred_approved = await self._request_credential_use(edge)
             if not cred_approved:
                 logger.info(f"⏭️  Step skipped (credential denied): {edge.description}")
-                return False
+                self._emit_event("step_skipped", {
+                    "edge_id": edge.edge_id,
+                    "reason": "credential denied",
+                    "description": edge.description,
+                })
+                return StepOutcome.SKIPPED
+
+        shared_tool_allowed, shared_approval_granted = await self._ensure_shared_tool_authorized(
+            edge,
+            policy_decision=shared_policy_decision,
+        )
+        if not shared_tool_allowed:
+            logger.info(f"⏭️  Step skipped (shared tool not approved): {edge.description}")
+            self._emit_event("step_skipped", {
+                "edge_id": edge.edge_id,
+                "reason": "shared tool not approved",
+                "description": edge.description,
+            })
+            if self.approval_manager.should_abort():
+                return StepOutcome.ABORTED
+            return StepOutcome.SKIPPED
 
         # Execute the attack step
         try:
@@ -289,7 +389,7 @@ class AutonomousOrchestrator:
 
             # TODO: Integrate with actual tool execution
             # For now, simulate execution
-            result = await self._simulate_step_execution(edge)
+            result = await self._simulate_step_execution(edge, shared_approval_granted=shared_approval_granted)
 
             # Mark as attempted in graph
             self.attack_graph.mark_edge_attempted(
@@ -306,12 +406,18 @@ class AutonomousOrchestrator:
                     "success"
                 )
                 logger.info(f"✓ Step succeeded: {edge.description}")
+                self._emit_event("step_completed", {
+                    "edge_id": edge.edge_id,
+                    "success": True,
+                    "description": edge.description,
+                    "tool": edge.tool,
+                })
 
                 # Process any discovered credentials
                 if 'credentials' in result:
                     await self._process_discovered_credentials(result['credentials'])
 
-                return True
+                return StepOutcome.SUCCEEDED
             else:
                 self.prompt.display_progress(
                     step_num,
@@ -320,11 +426,82 @@ class AutonomousOrchestrator:
                     "failed"
                 )
                 logger.warning(f"✗ Step failed: {edge.description}")
-                return False
+                self._emit_event("step_completed", {
+                    "edge_id": edge.edge_id,
+                    "success": False,
+                    "description": edge.description,
+                    "tool": edge.tool,
+                })
+                return StepOutcome.FAILED
 
         except Exception as e:
             logger.error(f"❌ Step execution error: {e}")
-            return False
+            self._emit_event("step_error", {
+                "edge_id": edge.edge_id,
+                "description": edge.description,
+                "error": str(e),
+            })
+            return StepOutcome.FAILED
+
+    async def _ensure_shared_tool_authorized(
+        self,
+        edge: GraphEdge,
+        policy_decision=None,
+    ) -> tuple[bool, bool]:
+        """Prompt for approval when the shared tool contract requires it."""
+        tool_executor = self._get_tool_executor()
+        if policy_decision is None:
+            policy_decision = tool_executor.get_shared_policy_decision(edge)
+        if policy_decision is None or not policy_decision.requires_approval:
+            return True, False
+
+        self.status = OrchestratorStatus.WAITING_APPROVAL
+        self._sync_task(TaskStatus.WAITING_APPROVAL)
+        self.user_interventions += 1
+        request = self.approval_manager.create_approval_request(
+            edge,
+            ai_recommendation=policy_decision.reason,
+        )
+        request_id = request.action_id
+        self._sync_task(TaskStatus.WAITING_APPROVAL, metadata={
+            "pending_approval_request": {
+                "request_id": request_id,
+                "tool_name": edge.tool,
+                "reason": policy_decision.reason,
+                "risk_category": getattr(policy_decision.approval_request, "risk_category", None).value
+                if getattr(policy_decision, "approval_request", None) is not None
+                else "medium",
+                "approval_kind": "shared_tool",
+            },
+        })
+        self._emit_event("approval_required", {
+            "edge_id": edge.edge_id,
+            "description": edge.description,
+            "tool": edge.tool,
+            "target": edge.target_id,
+            "reason": policy_decision.reason,
+            "source": "shared_tool_policy",
+            "request_id": request_id,
+        })
+        decision = await self._resolve_action_approval(request)
+        self.approval_manager.record_approval(request, decision)
+
+        self.status = OrchestratorStatus.RUNNING
+        self._sync_task(TaskStatus.RUNNING, metadata={
+            "pending_approval_request": None,
+            "pending_approval_response": None,
+        })
+        self._emit_event("approval_decision", {
+            "edge_id": edge.edge_id,
+            "decision": decision.value,
+            "source": "shared_tool_policy",
+            "request_id": request_id,
+        })
+        if decision == ApprovalDecision.APPROVE_SESSION:
+            shared_mapping = tool_executor._map_edge_to_shared_tool(edge)
+            if shared_mapping:
+                self.task_store.add_session_approval(self.session_id, shared_mapping[0])
+        return decision in [ApprovalDecision.APPROVE_ONCE, ApprovalDecision.APPROVE_SESSION], True
 
     async def _request_approval(self, edge: GraphEdge) -> bool:
         """
@@ -337,6 +514,7 @@ class AutonomousOrchestrator:
             True if approved, False otherwise
         """
         self.status = OrchestratorStatus.WAITING_APPROVAL
+        self._sync_task(TaskStatus.WAITING_APPROVAL)
         self.user_interventions += 1
 
         # Get AI recommendation
@@ -359,13 +537,37 @@ class AutonomousOrchestrator:
             ai_recommendation=ai_decision.reasoning
         )
 
-        # Prompt user
-        decision = self.prompt.prompt_for_approval(request)
+        self._emit_event("approval_required", {
+            "edge_id": edge.edge_id,
+            "description": edge.description,
+            "tool": edge.tool,
+            "target": edge.target_id,
+            "request_id": request.action_id,
+        })
+        self._sync_task(TaskStatus.WAITING_APPROVAL, metadata={
+            "pending_approval_request": {
+                "request_id": request.action_id,
+                "tool_name": edge.tool,
+                "reason": ai_decision.reasoning,
+                "risk_category": request.risk_level,
+                "approval_kind": "edge",
+            },
+        })
+        decision = await self._resolve_action_approval(request)
 
         # Record decision
         self.approval_manager.record_approval(request, decision)
 
         self.status = OrchestratorStatus.RUNNING
+        self._sync_task(TaskStatus.RUNNING, metadata={
+            "pending_approval_request": None,
+            "pending_approval_response": None,
+        })
+        self._emit_event("approval_decision", {
+            "edge_id": edge.edge_id,
+            "decision": decision.value,
+            "request_id": request.action_id,
+        })
 
         return decision in [ApprovalDecision.APPROVE_ONCE, ApprovalDecision.APPROVE_SESSION]
 
@@ -387,6 +589,7 @@ class AutonomousOrchestrator:
             return True
 
         self.status = OrchestratorStatus.WAITING_APPROVAL
+        self._sync_task(TaskStatus.WAITING_APPROVAL)
         self.user_interventions += 1
 
         # Create use request
@@ -400,13 +603,37 @@ class AutonomousOrchestrator:
         if not request:
             return False
 
-        # Prompt user
-        approved = self.prompt.prompt_for_credential_use(
-            request,
-            self.credential_vault
-        )
+        request_id = f"credential-{edge.edge_id}-{edge.credential_id}"
+        self._sync_task(TaskStatus.WAITING_APPROVAL, metadata={
+            "pending_approval_request": {
+                "request_id": request_id,
+                "tool_name": edge.tool,
+                "reason": f"Use credential {edge.credential_id} against {edge.target_id}",
+                "risk_category": "medium",
+                "approval_kind": "credential",
+            },
+        })
+        self._emit_event("approval_required", {
+            "edge_id": edge.edge_id,
+            "credential_id": edge.credential_id,
+            "tool": edge.tool,
+            "target": edge.target_id,
+            "request_id": request_id,
+            "reason": f"Credential use requires approval for {edge.target_id}",
+        })
+        approved = await self._resolve_credential_approval(request, request_id)
 
         self.status = OrchestratorStatus.RUNNING
+        self._sync_task(TaskStatus.RUNNING, metadata={
+            "pending_approval_request": None,
+            "pending_approval_response": None,
+        })
+        self._emit_event("credential_approval_decision", {
+            "edge_id": edge.edge_id,
+            "credential_id": edge.credential_id,
+            "approved": approved,
+            "request_id": request_id,
+        })
 
         return approved
 
@@ -431,12 +658,49 @@ class AutonomousOrchestrator:
             self.attack_graph
         )
 
-        # Prompt user for decision
-        user_choice = self.prompt.prompt_for_error_decision(
-            error=f"Attack step failed: {failed_edge.description}",
-            ai_decision=ai_decision,
-            alternatives=ai_decision.alternatives
-        )
+        if sys.stdin.isatty():
+            user_choice = self.prompt.prompt_for_error_decision(
+                error=f"Attack step failed: {failed_edge.description}",
+                ai_decision=ai_decision,
+                alternatives=ai_decision.alternatives
+            )
+        else:
+            self.status = OrchestratorStatus.WAITING_APPROVAL
+            self._sync_task(TaskStatus.WAITING_APPROVAL)
+            request_id = f"recovery-{failed_edge.edge_id}"
+            self._sync_task(TaskStatus.WAITING_APPROVAL, metadata={
+                "pending_approval_request": {
+                    "request_id": request_id,
+                    "tool_name": failed_edge.tool,
+                    "reason": ai_decision.reasoning,
+                    "risk_category": "medium",
+                    "approval_kind": "failure_recovery",
+                },
+            })
+            self._emit_event("recovery_decision_required", {
+                "edge_id": failed_edge.edge_id,
+                "description": failed_edge.description,
+                "request_id": request_id,
+                "recommendation": ai_decision.recommendation,
+                "alternatives": ai_decision.alternatives,
+                "reason": ai_decision.reasoning,
+            })
+            external = await self._wait_for_external_approval(request_id, max_polls=40)
+            self.status = OrchestratorStatus.RUNNING
+            self._sync_task(TaskStatus.RUNNING, metadata={
+                "pending_approval_request": None,
+                "pending_approval_response": None,
+            })
+            if external is None:
+                logger.warning("No external recovery decision received; aborting execution")
+                return False
+            decision_map = {
+                ApprovalDecision.APPROVE_ONCE: "retry",
+                ApprovalDecision.APPROVE_SESSION: "alternative",
+                ApprovalDecision.DENY: "abort",
+                ApprovalDecision.ABORT: "abort",
+            }
+            user_choice = decision_map.get(external, "abort")
 
         if user_choice == "abort":
             self.approval_manager.abort_requested = True
@@ -483,6 +747,7 @@ class AutonomousOrchestrator:
     async def _phase_reporting(self) -> Dict[str, Any]:
         """Phase 3: Generate final report"""
         logger.info("📊 Phase 3: Reporting")
+        self._emit_event("phase_started", {"phase": "reporting"})
 
         # Generate summary
         summary = {
@@ -559,17 +824,63 @@ class AutonomousOrchestrator:
             discovered_by="sqlmap"
         )
 
-    async def _simulate_step_execution(self, edge: GraphEdge) -> Dict[str, Any]:
+        objective_lower = self.objective.lower()
+        if "admin" in objective_lower:
+            admin_node = GraphNode(
+                node_id="access_admin",
+                node_type=NodeType.ACCESS,
+                name="admin access",
+                metadata={"access_level": AccessLevel.ADMIN.value},
+            )
+            self.attack_graph.add_node(admin_node)
+            self.attack_graph.add_edge(
+                GraphEdge(
+                    edge_id="privesc_admin",
+                    source_id="vuln_sql_injection",
+                    target_id="access_admin",
+                    technique="T1068",
+                    tool="sqlmap",
+                    description="Escalate to admin using SQL injection foothold",
+                    complexity="medium",
+                    detection_likelihood="high",
+                    success_probability=0.7,
+                )
+            )
+
+        if "database" in objective_lower:
+            database_node = GraphNode(
+                node_id="asset_database",
+                node_type=NodeType.ASSET,
+                name="database server",
+                metadata={"asset_type": "database"},
+            )
+            self.attack_graph.add_node(database_node)
+            self.attack_graph.add_edge(
+                GraphEdge(
+                    edge_id="pivot_database",
+                    source_id="vuln_sql_injection",
+                    target_id="asset_database",
+                    technique="T1210",
+                    tool="nmap",
+                    description="Pivot to database server after exploiting SQL injection",
+                    complexity="medium",
+                    detection_likelihood="high",
+                    success_probability=0.6,
+                )
+            )
+
+    async def _simulate_step_execution(self, edge: GraphEdge, shared_approval_granted: bool = False) -> Dict[str, Any]:
         """Execute step using real tools or simulation"""
         # Try real tool execution first
         try:
-            from .tool_executor import ToolExecutor
-
-            if not hasattr(self, '_tool_executor'):
-                self._tool_executor = ToolExecutor()
-
             # Execute with real tools
-            tool_result = await self._tool_executor.execute_edge(edge)
+            tool_result = await self._get_tool_executor().execute_edge(
+                edge,
+                approval_granted=shared_approval_granted,
+            )
+
+            if tool_result.parsed_data.get('approval_required'):
+                raise RuntimeError(tool_result.error or "approval required")
 
             result = {
                 'success': tool_result.success,
@@ -587,9 +898,9 @@ class AutonomousOrchestrator:
 
         except ImportError:
             logger.warning("Tool executor not available, using simulation")
-
         except Exception as e:
-            logger.warning(f"Tool execution failed, using simulation: {e}")
+            logger.error(f"Tool execution failed: {e}")
+            raise
 
         # Fallback to simulation
         import random
@@ -615,9 +926,73 @@ class AutonomousOrchestrator:
 
         return result
 
+    def _get_tool_executor(self) -> ToolExecutor:
+        """Lazily create the shared tool executor with the current policy mode."""
+        if not hasattr(self, '_tool_executor'):
+            policy_mode = PolicyMode.AUTONOMOUS_LAB if self.autonomous_mode else PolicyMode.INTERACTIVE_SAFE
+            self._tool_executor = ToolExecutor(
+                policy_mode=policy_mode,
+                session_id=self.session_id,
+                task_id=self.task_id,
+            )
+        return self._tool_executor
+
+    async def _resolve_action_approval(self, request) -> ApprovalDecision:
+        """Resolve an action approval through external runtime events or local prompt."""
+        max_polls = 40 if not sys.stdin.isatty() else 4
+        external = await self._wait_for_external_approval(request.action_id, max_polls=max_polls)
+        if external is not None:
+            return external
+        if sys.stdin.isatty():
+            return self.prompt.prompt_for_approval(request)
+        return ApprovalDecision.ABORT
+
+    async def _resolve_credential_approval(self, request, request_id: str) -> bool:
+        """Resolve credential approval through external runtime events or local prompt."""
+        max_polls = 40 if not sys.stdin.isatty() else 4
+        external = await self._wait_for_external_approval(request_id, is_credential=True, max_polls=max_polls)
+        if external is not None:
+            return external
+        if sys.stdin.isatty():
+            return self.prompt.prompt_for_credential_use(request, self.credential_vault)
+        return False
+
+    async def _wait_for_external_approval(
+        self,
+        request_id: str,
+        is_credential: bool = False,
+        max_polls: Optional[int] = 4,
+    ):
+        """
+        Wait briefly for an external runtime approval decision before falling back to local input.
+        """
+        poll_count = 0
+        while max_polls is None or poll_count < max_polls:
+            task = self.task_store.get_task(self.task_id)
+            if task:
+                pending = task.metadata.get("pending_approval_response") or {}
+                if pending.get("request_id") == request_id:
+                    decision = str(pending.get("decision", "")).strip().lower()
+                    task.metadata.pop("pending_approval_response", None)
+                    self.task_store.upsert_task(task)
+                    if is_credential:
+                        return decision in {"approve_once", "approve_session"}
+                    if decision == "approve_once":
+                        return ApprovalDecision.APPROVE_ONCE
+                    if decision == "approve_session":
+                        return ApprovalDecision.APPROVE_SESSION
+                    if decision == "deny":
+                        return ApprovalDecision.DENY
+                    if decision == "abort":
+                        return ApprovalDecision.ABORT
+            poll_count += 1
+            await asyncio.sleep(0.25)
+        return None
+
     def save_session(self):
         """Save current session state (user-initiated)"""
         logger.info("💾 Saving session...")
+        self._emit_event("session_save_requested", {"session_id": self.session_id})
 
         self.state_manager.save_session(
             self.session_id,
@@ -632,6 +1007,42 @@ class AutonomousOrchestrator:
         )
 
         logger.info("✓ Session saved successfully")
+        self._emit_event("session_saved", {"session_id": self.session_id})
+
+    def _sync_task(self, status: TaskStatus, metadata: Optional[Dict[str, Any]] = None):
+        """Persist the current autopent task state to the shared task store."""
+        record = TaskRecord(
+            task_id=self.task_id,
+            kind="autopent",
+            status=status,
+            session_id=self.session_id,
+            input_summary=f"{self.objective} on {self.initial_target}",
+            provider="",
+            model="",
+            metadata={
+                "objective": self.objective,
+                "target": self.initial_target,
+                "orchestrator_status": self.status.value,
+                "actions_executed": self.actions_executed,
+                "actions_successful": self.actions_successful,
+                "actions_failed": self.actions_failed,
+                **{
+                    k: v for k, v in (metadata or {}).items()
+                    if v is not None
+                },
+            },
+        )
+        self.task_store.upsert_task(record)
+
+    def _emit_event(self, event_type: str, payload: Optional[Dict[str, Any]] = None):
+        """Append an autopent event to the shared audit log."""
+        self.task_store.append_event(
+            AuditEvent(
+                task_id=self.task_id,
+                event_type=event_type,
+                payload=payload or {},
+            )
+        )
 
     def _display_beta_banner(self):
         """Display beta warning banner for autopent features"""

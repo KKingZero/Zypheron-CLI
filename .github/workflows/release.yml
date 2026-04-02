@@ -40,6 +40,17 @@ jobs:
           pip install -e ".[test]"
           pytest
 
+      - name: Run API tests from lockfile
+        run: |
+          ./scripts/setup_api_test_env.sh --allow-online
+          source zypheron-api/.venv/bin/activate
+          cd zypheron-api
+          pytest -v
+
+      - name: Run local smoke test
+        run: |
+          ./scripts/local_smoke_test.sh
+
   release:
     name: Build And Publish Release
     needs: test

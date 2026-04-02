@@ -91,6 +91,7 @@ func runInteractiveChat(bridge *aibridge.AIBridge) error {
 	fmt.Println()
 
 	reader := bufio.NewReader(os.Stdin)
+	sessionID := ""
 	conversationHistory := []aibridge.Message{
 		{
 			Role: "system",
@@ -131,21 +132,24 @@ always emphasize ethical hacking practices and legal boundaries.`,
 		fmt.Println()
 		fmt.Print(ui.Accent.Sprint("🤖 AI: "))
 
-				response, err := bridge.Chat(conversationHistory, chatProvider, "", chatTemperature, 2048)
+		response, err := runRuntimeChatTurn(bridge, conversationHistory, chatProvider, "", chatTemperature, 2048, sessionID, true)
 		if err != nil {
 			fmt.Println(ui.Error(fmt.Sprintf("Error: %s", err)))
 			fmt.Println()
 			continue
 		}
+		if response.SessionID != "" {
+			sessionID = response.SessionID
+		}
 
 		// Display response
-		fmt.Println(response)
+		fmt.Println(response.Content)
 		fmt.Println()
 
 		// Add AI response to history
 		conversationHistory = append(conversationHistory, aibridge.Message{
 			Role:    "assistant",
-			Content: response,
+			Content: response.Content,
 		})
 	}
 
@@ -170,14 +174,14 @@ Provide clear, actionable security advice.`,
 
 	fmt.Print(ui.InfoMsg("Thinking..."))
 
-		response, err := bridge.Chat(messages, chatProvider, "", chatTemperature, 2048)
+	response, err := runRuntimeChatTurn(bridge, messages, chatProvider, "", chatTemperature, 2048, "", true)
 	if err != nil {
 		return fmt.Errorf("AI chat failed: %w", err)
 	}
 
 	fmt.Print("\r" + ui.Success.Sprint("✓ Response received") + "\n")
 	fmt.Println()
-	fmt.Printf("%s %s\n", ui.Accent.Sprint("🤖 AI:"), response)
+	fmt.Printf("%s %s\n", ui.Accent.Sprint("🤖 AI:"), response.Content)
 	fmt.Println()
 
 	return nil

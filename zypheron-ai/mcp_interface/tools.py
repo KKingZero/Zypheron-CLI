@@ -8,12 +8,17 @@ native security tool execution infrastructure.
 import logging
 import subprocess
 import json
+import asyncio
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 from mcp_interface.client import ZypheronClient
 from mcp_interface.colors import ZypheronColors, colorize, format_tool_output
 from mcp_interface.security import SecureCommandExecutor, InputValidator, CommandInjectionError
+from contracts.runtime import PolicyMode
+from core.policy import authorize_tool_call
+from tools.base import ExecutionContext
+from tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +160,6 @@ class ZypheronToolExecutor:
                 return {
                     'success': False,
                     'error': 'Empty command',
-                    'command': command
                 }
             
             tool_name = parts[0]
@@ -173,7 +177,7 @@ class ZypheronToolExecutor:
             
             response = {
                 'success': result.get('success', False),
-                'command': command,
+                'tool': tool_name,
                 'stdout': result.get('stdout', ''),
                 'stderr': result.get('stderr', ''),
                 'return_code': result.get('return_code', -1)
@@ -191,14 +195,12 @@ class ZypheronToolExecutor:
             logger.error(format_tool_output('shell', 'security_error', str(e)))
             return {
                 'success': False,
-                'command': command,
                 'error': f'Security validation failed: {str(e)}',
                 'security_error': True
             }
         except subprocess.TimeoutExpired:
             return {
                 'success': False,
-                'command': command,
                 'error': f'Command timeout after {timeout} seconds',
                 'timeout': True
             }
@@ -206,7 +208,6 @@ class ZypheronToolExecutor:
             logger.error(format_tool_output('shell', 'error', str(e)))
             return {
                 'success': False,
-                'command': command,
                 'error': str(e)
             }
 
@@ -237,6 +238,86 @@ class ZypheronToolExecutor:
         except Exception as e:
             logger.debug(f"Error checking tool {tool_name}: {e}")
             return False
+
+    def execute_shared_tool(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        session_id: str = "mcp-session",
+        task_id: str = "mcp-task",
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Execute a shared runtime tool when one exists.
+
+        Returns None if the shared registry has no such tool.
+        """
+        tool = tool_registry.get(tool_name)
+        if tool is None:
+            return None
+
+        try:
+            decision = authorize_tool_call(
+                tool_spec=tool.spec,
+                policy_mode=PolicyMode.GUIDED_AUTO,
+                reason=f"mcp requested {tool_name}",
+                arguments=arguments,
+            )
+            if decision.requires_approval and decision.approval_request is not None:
+                return {
+                    "success": False,
+                    "tool": tool_name,
+                    "error": "Approval required before this shared tool can run.",
+                    "approval_required": True,
+                    "approval_request": decision.approval_request.to_dict(),
+                    "shared": True,
+                }
+            if not decision.allowed:
+                return {
+                    "success": False,
+                    "tool": tool_name,
+                    "error": decision.reason or "Shared tool blocked by policy.",
+                    "shared": True,
+                }
+
+            result = asyncio.run(
+                tool.execute(
+                    arguments,
+                    ExecutionContext(
+                        session_id=session_id,
+                        task_id=task_id,
+                        policy_mode=PolicyMode.GUIDED_AUTO.value,
+                        metadata={"source": "mcp"},
+                    ),
+                )
+            )
+            return {
+                "success": result.success,
+                "tool": tool_name,
+                "stdout": result.content,
+                "stderr": result.error or "",
+                "data": result.data,
+                "shared": True,
+            }
+        except Exception as e:
+            logger.error(format_tool_output(tool_name, 'error', str(e)))
+            return {
+                "success": False,
+                "tool": tool_name,
+                "error": str(e),
+                "shared": True,
+            }
+
+    def list_shared_tools(self) -> List[Dict[str, Any]]:
+        """Return shared registry metadata for MCP surfacing."""
+        return [
+            {
+                "name": spec.name,
+                "description": spec.description,
+                "risk_category": spec.risk_category.value,
+                "requires_approval": spec.requires_approval,
+            }
+            for spec in tool_registry.specs()
+        ]
 
     def get_tool_version(self, tool_name: str) -> Optional[str]:
         """
@@ -288,15 +369,17 @@ class ZypheronToolExecutor:
         if 'return_code' in raw_results:
             formatted['return_code'] = raw_results['return_code']
         
-        if 'command' in raw_results:
-            formatted['command'] = raw_results['command']
-        
         # Add error details if present
         if 'error' in raw_results:
             formatted['error_message'] = raw_results['error']
+
+        if 'approval_required' in raw_results:
+            formatted['approval_required'] = raw_results['approval_required']
+
+        if 'approval_request' in raw_results:
+            formatted['approval_request'] = raw_results['approval_request']
         
         if raw_results.get('timeout'):
             formatted['timeout'] = True
         
         return formatted
-

@@ -9,7 +9,10 @@ import logging
 from typing import List, Dict, Any, Optional, TypeVar, Type
 from enum import Enum
 
-import instructor
+try:
+    import instructor
+except ImportError:  # pragma: no cover - exercised in dynamic runtime smoke tests
+    instructor = None
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 from pydantic import BaseModel
@@ -72,10 +75,15 @@ class AIDecisionEngine:
                 logger.info(f"AI Decision Engine using: {provider}")
                 return
 
-        raise RuntimeError("No AI providers available for decision engine")
+        logger.warning("No AI providers available for decision engine; using heuristic fallback mode")
+        self.current_provider = None
 
     def _init_instructor_clients(self):
         """Initialize instructor-wrapped clients for all available providers"""
+        if instructor is None:
+            logger.warning("Instructor is not installed; structured AI decisions will use fallback mode")
+            return
+
         # Claude (Anthropic)
         if AIProvider.CLAUDE.value in self.available_providers:
             try:
@@ -218,6 +226,8 @@ class AIDecisionEngine:
         retries = 0
 
         while retries <= max_retries:
+            if provider is None:
+                return self._default_response(response_model, user_prompt)
             if provider not in self._instructor_clients:
                 # Fallback to raw parsing if no instructor client
                 logger.warning(f"No instructor client for {provider}, using fallback")
@@ -273,32 +283,44 @@ class AIDecisionEngine:
         user_prompt: str
     ) -> T:
         """Fallback to raw query + manual parsing when instructor isn't available"""
-        messages = [
-            AIMessage(role="system", content=system_prompt),
-            AIMessage(role="user", content=user_prompt + "\n\nRespond in valid JSON format."),
-        ]
-
-        response = await ai_manager.chat(
-            messages=messages,
-            provider=self.current_provider,
-            temperature=0.6,
-            max_tokens=1000,
+        logger.warning(
+            "Structured provider unavailable; using deterministic fallback for %s",
+            response_model.__name__,
         )
+        return self._default_response(response_model, user_prompt)
 
-        # Try to parse as JSON
-        import json
-        try:
-            data = json.loads(response.content)
-            return response_model(**data)
-        except (json.JSONDecodeError, Exception) as e:
-            logger.warning(f"Failed to parse response as {response_model.__name__}: {e}")
-            # Return a default instance
+    def _default_response(self, response_model: Type[T], source_text: str) -> T:
+        """Return a deterministic fallback response when AI structuring is unavailable."""
+        if response_model is AIDecision:
             return response_model(
-                recommendation="unable_to_parse",
-                reasoning=response.content[:500],
-                alternatives=[],
+                recommendation="follow_optimal_path",
+                reasoning=(source_text or "Falling back to deterministic attack-path heuristics.")[:500],
+                alternatives=["gather_more_intel", "try_alternative_path"],
                 confidence=0.5,
+                risk_level=RiskLevel.MEDIUM,
             )
+        if response_model is ReasoningChain:
+            return response_model(
+                steps=[
+                    ThoughtStep(
+                        thought="Structured reasoning provider was unavailable.",
+                        action="Use deterministic fallback analysis.",
+                        observation="Proceed with the highest-probability known path.",
+                    )
+                ],
+                final_answer=(source_text or "Fallback reasoning applied.")[:500],
+                confidence=0.4,
+                key_insights=["AI decision engine is operating in fallback mode."],
+            )
+        if response_model is ErrorRecovery:
+            return response_model(
+                action="alternative",
+                reasoning=(source_text or "Use an alternative approach after a failed step.")[:500],
+                retry_with_changes=None,
+                alternative_approach="try_alternative_path",
+                should_abort=False,
+            )
+        return response_model.model_validate({})
 
     # =========================================================================
     # Decision Methods

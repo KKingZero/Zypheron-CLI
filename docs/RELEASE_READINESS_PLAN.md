@@ -3,28 +3,27 @@
 This plan captures the remaining repository polish items that should be handled
 after the contributor metadata and `goreleaser` configuration are in place.
 
-## 1. Align versioning before the next public release
+## 1. Align versioning for `v2.0.0`
 
 Current state:
 
-- The CLI entrypoint reports `1.0.0` in `zypheron-go/cmd/zypheron/main.go`.
-- The updater fallback also reports `1.0.0` in `zypheron-go/internal/updater/updater.go`.
-- The `zypheron-go/Makefile` still builds with `VERSION := 1.0.0`.
+- The active CLI build path is already set to `2.0.0`.
+- Some docs and status snapshots still reference `1.x` or an undecided next release.
+- API package metadata still reports `0.1.0`, which is confusing during `v2.0.0` release prep.
 
 Recommended execution order:
 
-1. Decide the next public release number and tag format.
+1. Use `v2.0.0` as the next public release tag.
 2. Update the version in:
    - `zypheron-go/cmd/zypheron/main.go`
    - `zypheron-go/internal/updater/updater.go`
    - `zypheron-go/Makefile`
+   - `zypheron-api/pyproject.toml`
+   - `zypheron-api/app/core/config.py`
+   - `zypheron-api/app/__init__.py`
 3. Grep for stale version references in install/docs/release files and update the user-facing ones.
 4. Build at least one local binary and verify `zypheron --version` returns the intended release number.
-5. Create a signed tag such as `v3.0.0` only after the above is consistent.
-
-Decision needed:
-
-- Confirm whether the next intended public release is `v3.0.0` or a smaller increment.
+5. Create the `v2.0.0` tag only after the above is consistent.
 
 ## 2. Triage the remaining Go TODO backlog
 
@@ -102,3 +101,13 @@ Recommended follow-up:
 1. Expand ownership rules if collaborators join.
 2. Replace the single-user mapping with teams once the GitHub org structure exists.
 3. Add required reviews in branch protection so `CODEOWNERS` has an actual effect.
+
+## 5. Keep the release local-first
+
+The active release assumptions for `v2.0.0` are:
+
+- no external hosted database requirement
+- local CLI usage is the primary supported path
+- optional API/Redis/Prometheus services must be documented as optional
+
+Before tagging `v2.0.0`, confirm the active docs and defaults reflect that model.

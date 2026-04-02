@@ -149,8 +149,8 @@ Successfully implemented an Ollama provider for the Zypheron AI proxy, enabling 
 
 5. **Token Counting**
    - Uses Ollama's `prompt_eval_count` and `eval_count`
-   - Tracked as "free" tokens (no cost)
-   - Enables usage analytics without billing
+   - Tracked as local tokens with no provider spend
+   - Enables usage analytics without external-cost accounting
 
 6. **Metadata Tracking**
    - Records inference timing (load, prompt eval, generation)
@@ -231,7 +231,7 @@ Common models (full list at https://ollama.ai/library):
 ### 3. Rate Limiting
 - Same rate limits apply as cloud providers
 - Prevents abuse of local resources
-- Configurable per subscription tier
+- Configurable through runtime settings
 
 ### 4. Caching
 - Responses can be cached like cloud providers

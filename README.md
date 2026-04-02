@@ -36,6 +36,8 @@ It combines:
 
 This repository is the open source CLI. It is intended for authorized security testing, research, and operator workflow automation.
 
+Zypheron is free and open source. This repository should be treated as a local-first security CLI and self-hostable tooling project.
+
 ## Install
 
 There are two primary install paths.

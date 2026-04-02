@@ -5,6 +5,7 @@ This module provides defense against command injection, path traversal,
 and other input-based attacks.
 """
 
+import os
 import re
 import shlex
 import subprocess
@@ -72,6 +73,12 @@ class InputValidator:
     
     # Dangerous characters that should never appear in security tool arguments
     DANGEROUS_CHARS = ['&', '|', ';', '`', '$', '(', ')', '<', '>', '\n', '\r']
+    ALLOWED_WORDLIST_DIRS = (
+        Path("/usr/share/wordlists"),
+        Path("/usr/local/share/wordlists"),
+        Path.home() / ".local" / "share" / "zypheron" / "wordlists",
+        Path.home() / ".zypheron" / "wordlists",
+    )
     
     @classmethod
     def validate_tool_name(cls, tool_name: str) -> bool:
@@ -187,10 +194,32 @@ class InputValidator:
         # Ensure path doesn't escape allowed directories
         try:
             resolved = Path(file_path).resolve()
-            # Additional checks can be added here for allowed directories
-            return True
+            if not resolved.is_file():
+                return False
+            for allowed_dir in cls.ALLOWED_WORDLIST_DIRS:
+                try:
+                    resolved.relative_to(allowed_dir.resolve())
+                    return True
+                except ValueError:
+                    continue
+            return False
         except Exception:
             return False
+
+    @classmethod
+    def validate_bounded_int(
+        cls,
+        value: Any,
+        *,
+        minimum: int,
+        maximum: int,
+    ) -> bool:
+        """Validate an integer falls within a safe inclusive range."""
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return False
+        return minimum <= parsed <= maximum
     
     @classmethod
     def sanitize_for_logging(cls, value: str, redact: bool = False) -> str:
@@ -352,6 +381,16 @@ class SecureCommandExecutor:
             tool_name = cmd[0]
             if not self.validator.validate_tool_name(tool_name):
                 raise CommandInjectionError(f"Invalid tool name: {tool_name}")
+            for arg in cmd[1:]:
+                if not isinstance(arg, str):
+                    raise CommandInjectionError(f"Non-string argument: {type(arg)}")
+                if len(arg) > 4096:
+                    raise CommandInjectionError(f"Argument too long: {len(arg)} chars")
+                if any(char in arg for char in self.validator.DANGEROUS_CHARS):
+                    raise CommandInjectionError(
+                        f"Dangerous characters in argument: "
+                        f"{self.validator.sanitize_for_logging(arg)}"
+                    )
         
         try:
             # Execute first command
@@ -413,4 +452,3 @@ class SecureCommandExecutor:
                 'success': False,
                 'error': str(e)
             }
-

@@ -357,9 +357,9 @@ Ollama requests are tracked but marked as **free** (no cost):
 
 ### Rate Limiting
 
-Ollama requests are subject to the same rate limits as cloud providers:
-- Free tier: 10 requests/minute
-- Paid tiers: Higher limits
+Ollama requests are subject to the same rate limiting controls as other providers:
+- Local defaults remain conservative
+- Limits can be adjusted by configuration
 
 ### Caching
 

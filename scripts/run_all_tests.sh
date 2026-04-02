@@ -216,22 +216,27 @@ run_python_tests() {
 
     # Check for virtual environment
     if [ ! -d ".venv" ]; then
-        print_error "Virtual environment not found in ${API_DIR}/.venv"
-        print_info "Run: cd ${API_DIR} && python -m venv .venv && source .venv/bin/activate && pip install -e .[test]"
-        record_test_result "Python Tests" 1 "0s"
-        return 1
+        print_warning "Virtual environment not found in ${API_DIR}/.venv"
+        print_info "Attempting locked test environment setup..."
+        if ! "${SCRIPTS_DIR}/setup_api_test_env.sh"; then
+            print_error "Offline setup failed. Provide zypheron-api/wheelhouse or run ${SCRIPTS_DIR}/setup_api_test_env.sh --allow-online"
+            record_test_result "Python Tests" 1 "0s"
+            return 1
+        fi
     fi
 
     source .venv/bin/activate
 
     # Check if pytest is installed
     if ! python -m pytest --version &> /dev/null; then
-        print_warning "pytest not installed, installing test dependencies..."
-        pip install pytest pytest-cov pytest-asyncio httpx &> /dev/null || {
-            print_error "Failed to install test dependencies"
+        print_warning "pytest not installed in the API virtualenv"
+        print_info "Rebuilding test environment from requirements.lock..."
+        if ! "${SCRIPTS_DIR}/setup_api_test_env.sh"; then
+            print_error "Failed to provision locked API test environment"
             record_test_result "Python Tests" 1 "0s"
             return 1
-        }
+        fi
+        source .venv/bin/activate
     fi
 
     # Run tests

@@ -78,34 +78,27 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
             Scan results with discovered services and versions
         """
         try:
-            # Validate inputs
-            if not validator.validate_target(target):
+            if additional_args.strip():
                 return {
                     'success': False,
-                    'error': f'Invalid target: {target}',
-                    'tool': 'nmap'
+                    'error': 'additional_args is no longer supported for nmap_scan; use the typed shared arguments only',
+                    'tool': 'nmap',
                 }
-            
-            if ports and not validator.validate_port_spec(ports):
+            shared_result = executor.execute_shared_tool(
+                "nmap_scan",
+                {
+                    "target": target,
+                    "scan_type": scan_type,
+                    "ports": ports,
+                },
+            )
+            if shared_result is None:
                 return {
                     'success': False,
-                    'error': f'Invalid port specification: {ports}',
-                    'tool': 'nmap'
+                    'error': 'Shared nmap runtime is unavailable',
+                    'tool': 'nmap',
                 }
-            
-            # Build safe arguments list
-            args = ['nmap', target]
-            if scan_type:
-                args.append(scan_type)
-            if ports:
-                args.extend(['-p', ports])
-            if additional_args:
-                # Parse additional args safely
-                import shlex
-                args.extend(shlex.split(additional_args))
-            
-            result = executor.secure_executor.execute_tool(args[0], args[1:])
-            return executor.format_results(result, 'nmap')
+            return executor.format_results(shared_result, 'nmap')
             
         except CommandInjectionError as e:
             return {
@@ -131,6 +124,19 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
             Fast scan results with open ports
         """
         try:
+            shared_result = executor.execute_shared_tool(
+                "rustscan_fast_scan",
+                {
+                    "target": target,
+                    "ports": ports,
+                    "ulimit": ulimit,
+                    "batch_size": batch_size,
+                    "timeout": timeout,
+                },
+            )
+            if shared_result is not None:
+                return executor.format_results(shared_result, 'rustscan')
+
             # Validate inputs
             if not validator.validate_target(target):
                 return {
@@ -175,8 +181,36 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             Masscan results with discovered open ports
         """
-        cmd = f"masscan {target} -p{ports} --rate {rate}"
-        result = executor.execute_raw_command(cmd, timeout=600)
+        try:
+            if not executor.validator.validate_target(target):
+                return {
+                    'success': False,
+                    'error': f'Invalid target: {target}',
+                    'tool': 'masscan',
+                }
+            if not executor.validator.validate_port_range(ports):
+                return {
+                    'success': False,
+                    'error': f'Invalid port specification: {ports}',
+                    'tool': 'masscan',
+                }
+            if not executor.validator.validate_bounded_int(rate, minimum=1, maximum=100000):
+                return {
+                    'success': False,
+                    'error': 'rate must be between 1 and 100000 packets/second',
+                    'tool': 'masscan',
+                }
+            result = executor.secure_executor.execute_tool(
+                'masscan',
+                [target, f'-p{ports}', '--rate', str(rate)],
+                timeout=600,
+            )
+        except CommandInjectionError as e:
+            return {
+                'success': False,
+                'error': f'Security validation failed: {str(e)}',
+                'tool': 'masscan',
+            }
         return executor.format_results(result, 'masscan')
     
     @mcp.tool()
@@ -192,12 +226,26 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             Discovered subdomains and DNS information
         """
-        cmd = f"amass {mode} -d {domain}"
-        if additional_args:
-            cmd += f" {additional_args}"
-        
-        result = executor.execute_raw_command(cmd, timeout=600)
-        return executor.format_results(result, 'amass')
+        if additional_args.strip():
+            return {
+                'success': False,
+                'error': 'additional_args is no longer supported for amass_enum; use the typed shared arguments only',
+                'tool': 'amass',
+            }
+        shared_result = executor.execute_shared_tool(
+            "amass_enum",
+            {
+                "domain": domain,
+                "mode": mode,
+            },
+        )
+        if shared_result is None:
+            return {
+                'success': False,
+                'error': 'Shared amass runtime is unavailable',
+                'tool': 'amass',
+            }
+        return executor.format_results(shared_result, 'amass')
     
     @mcp.tool()
     def subfinder_scan(domain: str, silent: bool = True, all_sources: bool = False) -> Dict[str, Any]:
@@ -212,6 +260,17 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             List of discovered subdomains
         """
+        shared_result = executor.execute_shared_tool(
+            "subfinder_scan",
+            {
+                "domain": domain,
+                "silent": silent,
+                "all_sources": all_sources,
+            },
+        )
+        if shared_result is not None:
+            return executor.format_results(shared_result, 'subfinder')
+
         cmd = f"subfinder -d {domain}"
         if silent:
             cmd += " -silent"
@@ -241,12 +300,27 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             Discovered directories, files, or DNS records
         """
-        cmd = f"gobuster {mode} -u {url} -w {wordlist}"
-        if additional_args:
-            cmd += f" {additional_args}"
-        
-        result = executor.execute_raw_command(cmd, timeout=600)
-        return executor.format_results(result, 'gobuster')
+        if additional_args.strip():
+            return {
+                'success': False,
+                'error': 'additional_args is no longer supported for gobuster_scan; use the typed shared arguments only',
+                'tool': 'gobuster',
+            }
+        shared_result = executor.execute_shared_tool(
+            "gobuster_scan",
+            {
+                "url": url,
+                "mode": mode,
+                "wordlist": wordlist,
+            },
+        )
+        if shared_result is None:
+            return {
+                'success': False,
+                'error': 'Shared gobuster runtime is unavailable',
+                'tool': 'gobuster',
+            }
+        return executor.format_results(shared_result, 'gobuster')
     
     @mcp.tool()
     def nuclei_scan(target: str, severity: str = "", tags: str = "", 
@@ -263,6 +337,18 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             Discovered vulnerabilities with details
         """
+        shared_result = executor.execute_shared_tool(
+            "nuclei_scan",
+            {
+                "target": target,
+                "severity": severity,
+                "tags": tags,
+                "template": template,
+            },
+        )
+        if shared_result is not None:
+            return executor.format_results(shared_result, 'nuclei')
+
         cmd = f"nuclei -u {target}"
         if severity:
             cmd += f" -severity {severity}"
@@ -286,12 +372,25 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             Web server vulnerabilities and misconfigurations
         """
-        cmd = f"nikto -h {target}"
-        if additional_args:
-            cmd += f" {additional_args}"
-        
-        result = executor.execute_raw_command(cmd, timeout=600)
-        return executor.format_results(result, 'nikto')
+        if additional_args.strip():
+            return {
+                'success': False,
+                'error': 'additional_args is no longer supported for nikto_scan; use the typed shared arguments only',
+                'tool': 'nikto',
+            }
+        shared_result = executor.execute_shared_tool(
+            "nikto_scan",
+            {
+                "target": target,
+            },
+        )
+        if shared_result is None:
+            return {
+                'success': False,
+                'error': 'Shared nikto runtime is unavailable',
+                'tool': 'nikto',
+            }
+        return executor.format_results(shared_result, 'nikto')
     
     @mcp.tool()
     def sqlmap_scan(url: str, data: str = "", additional_args: str = "") -> Dict[str, Any]:
@@ -306,14 +405,26 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             SQL injection vulnerabilities and exploitation results
         """
-        cmd = f"sqlmap -u {url} --batch"
-        if data:
-            cmd += f" --data='{data}'"
-        if additional_args:
-            cmd += f" {additional_args}"
-        
-        result = executor.execute_raw_command(cmd, timeout=900)
-        return executor.format_results(result, 'sqlmap')
+        if additional_args.strip():
+            return {
+                'success': False,
+                'error': 'additional_args is no longer supported for sqlmap_scan; use the typed shared arguments only',
+                'tool': 'sqlmap',
+            }
+        shared_result = executor.execute_shared_tool(
+            "sqlmap_scan",
+            {
+                "url": url,
+                "data": data,
+            },
+        )
+        if shared_result is None:
+            return {
+                'success': False,
+                'error': 'Shared sqlmap runtime is unavailable',
+                'tool': 'sqlmap',
+            }
+        return executor.format_results(shared_result, 'sqlmap')
     
     @mcp.tool()
     def wpscan_analyze(url: str, additional_args: str = "") -> Dict[str, Any]:
@@ -351,30 +462,23 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
             HTTP probe results with technology stack
         """
         try:
-            # Validate target
-            if not validator.validate_target(target):
+            shared_result = executor.execute_shared_tool(
+                "httpx_probe",
+                {
+                    "target": target,
+                    "probe": probe,
+                    "tech_detect": tech_detect,
+                    "status_code": status_code,
+                    "threads": threads,
+                },
+            )
+            if shared_result is None:
                 return {
                     'success': False,
-                    'error': f'Invalid target: {target}',
+                    'error': 'Shared httpx runtime is unavailable',
                     'tool': 'httpx'
                 }
-            
-            # Build httpx command with piping (echo | httpx)
-            echo_cmd = ['echo', target]
-            httpx_args = ['httpx', '-threads', str(threads)]
-            if not probe:
-                httpx_args.append('-no-probe')
-            if tech_detect:
-                httpx_args.append('-tech-detect')
-            if status_code:
-                httpx_args.append('-status-code')
-            
-            # Use secure piping
-            result = executor.secure_executor.execute_with_piping(
-                [echo_cmd, httpx_args],
-                timeout=300
-            )
-            return executor.format_results(result, 'httpx')
+            return executor.format_results(shared_result, 'httpx')
             
         except CommandInjectionError as e:
             return {
@@ -420,12 +524,27 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             Fuzzing results with discovered endpoints
         """
-        cmd = f"ffuf -u {url} -w {wordlist}"
-        if additional_args:
-            cmd += f" {additional_args}"
-        
-        result = executor.execute_raw_command(cmd, timeout=600)
-        return executor.format_results(result, 'ffuf')
+        if additional_args.strip():
+            return {
+                'success': False,
+                'error': 'additional_args is no longer supported for ffuf_scan; use the typed shared arguments only',
+                'tool': 'ffuf',
+            }
+        shared_result = executor.execute_shared_tool(
+            "ffuf_scan",
+            {
+                "url": url,
+                "wordlist": wordlist,
+                "mode": mode,
+            },
+        )
+        if shared_result is None:
+            return {
+                'success': False,
+                'error': 'Shared ffuf runtime is unavailable',
+                'tool': 'ffuf',
+            }
+        return executor.format_results(shared_result, 'ffuf')
     
     # ============================================================================
     # BINARY ANALYSIS & REVERSE ENGINEERING TOOLS
@@ -631,8 +750,14 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             Complete list of available tools with versions
         """
-        result = executor.execute_tool('zypheron', ['tools', 'list'])
-        return result
+        shared_tools = executor.list_shared_tools()
+        legacy = executor.execute_tool('zypheron', ['tools', 'list'])
+        return {
+            'success': legacy.get('success', True),
+            'shared_tools': shared_tools,
+            'legacy': legacy,
+            'tool_count': len(shared_tools),
+        }
     
     @mcp.tool()
     def check_tool_status(tool_name: str) -> Dict[str, Any]:
@@ -645,6 +770,19 @@ def setup_mcp_server(zypheron_client: ZypheronClient) -> FastMCP:
         Returns:
             Tool availability and version information
         """
+        shared_result = executor.execute_shared_tool(
+            "check_tool_status",
+            {"tool_name": tool_name},
+        )
+        if shared_result is not None:
+            data = shared_result.get("data", {})
+            return {
+                'tool': data.get('tool', tool_name),
+                'available': data.get('available', False),
+                'version': executor.get_tool_version(tool_name) if data.get('available') else None,
+                'shared': True,
+            }
+
         available = executor.check_tool_availability(tool_name)
         version = executor.get_tool_version(tool_name) if available else None
         
@@ -707,4 +845,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

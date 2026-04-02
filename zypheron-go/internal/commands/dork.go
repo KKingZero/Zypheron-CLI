@@ -234,14 +234,17 @@ func enhanceQueryWithAI(query string, engine string) (string, error) {
 
 	prompt := buildDorkEnhancementPrompt(query, engine)
 
-	resp, err := bridge.Chat([]aibridge.Message{
+	resp, err := runRuntimeChatTurn(bridge, []aibridge.Message{
 		{Role: "user", Content: prompt},
-	}, provider, "", 0.2, 120)
+	}, provider, "", 0.2, 120, "", true)
 	if err != nil {
 		return "", err
 	}
+	if resp.TaskStatus == "aborted" || resp.TaskStatus == "failed" {
+		return "", fmt.Errorf("AI enhancement did not complete successfully: %s", resp.Content)
+	}
 
-	enhanced := strings.TrimSpace(resp)
+	enhanced := strings.TrimSpace(resp.Content)
 	sanitized, err := sanitizeAIDorkQuery(enhanced)
 	if err != nil {
 		return "", err

@@ -59,7 +59,7 @@ Zypheron is a sophisticated, multi-layered AI-powered penetration testing platfo
 │  └─────────────┘  └──────────────┘  └─────────────────┘    │
 │         ↓               ↓                     ↓              │
 │  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
-│  │  PostgreSQL │  │   Stripe     │  │   WebSocket     │    │
+│  │  PostgreSQL │  │ Optional API │  │   WebSocket     │    │
 │  │   Models    │  │  Integration │  │   (Scan Events) │    │
 │  └─────────────┘  └──────────────┘  └─────────────────┘    │
 └──────────────────────────────────────────────────────────────┘

@@ -3,6 +3,7 @@ Secure API Key Storage using OS keyring
 """
 
 import keyring
+from keyring.errors import PasswordDeleteError
 import os
 from typing import Optional
 from loguru import logger
@@ -77,7 +78,7 @@ def delete_api_key(provider: str) -> bool:
         keyring.delete_password(SERVICE_NAME, provider)
         logger.info(f"Deleted API key for provider: {provider}")
         return True
-    except keyring.errors.PasswordDeleteError:
+    except PasswordDeleteError:
         logger.warning(f"No API key found for provider: {provider}")
         return False
     except Exception as e:

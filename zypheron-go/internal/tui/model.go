@@ -82,12 +82,20 @@ type Model struct {
 	confirmedModelIdx int
 	pendingModelIdx   int
 
+	// Runtime approval prompt for shared tool execution
+	approvalPrompt      components.ApprovalPromptModel
+	showApprovalPrompt  bool
+	pendingApprovalTask string
+	pendingApprovalReq  string
+
 	// AI processing state
 	aiProcessing bool
 	cancelAI     chan struct{}
 
 	// Chat conversation history (maintains context between messages)
-	chatHistory []aibridge.Message
+	chatHistory       []aibridge.Message
+	runtimeSessionID  string
+	lastRuntimeTaskID string
 
 	// Session stats
 	sessionStart int64 // Unix timestamp
@@ -95,9 +103,11 @@ type Model struct {
 	findingCount int
 
 	// Bash command execution
-	workingDir     string               // Current working directory for $ commands
-	bashHistory    []string             // History of bash commands for pentest context
-	activeBashCmds map[string]*exec.Cmd // Track running bash commands
+	workingDir       string               // Current working directory for $ commands
+	bashHistory      []string             // History of bash commands for pentest context
+	activeBashCmds   map[string]*exec.Cmd // Track running bash commands
+	runtimeEventSeen map[string]bool
+	runtimeTaskState map[string]string
 
 	width    int
 	height   int
@@ -189,6 +199,8 @@ func NewModel() Model {
 		workingDir:        cwd,
 		bashHistory:       make([]string, 0),
 		activeBashCmds:    make(map[string]*exec.Cmd),
+		runtimeEventSeen:  make(map[string]bool),
+		runtimeTaskState:  make(map[string]string),
 		confirmedModelIdx: ms.SelectedIndex(),
 		pendingModelIdx:   -1,
 	}
@@ -201,12 +213,18 @@ func (m Model) Init() tea.Cmd {
 		m.summary.Init(),
 		m.modelSelector.Init(),
 		m.scanProgress.Init(),
+		pollRuntimeTasks(m.bridge, "", ""),
 	)
 }
 
 // Msg types for AI
 type AIResponseMsg struct {
-	Content string
+	Content         string
+	SessionID       string
+	TaskID          string
+	TaskStatus      string
+	ProgressEvents  []map[string]interface{}
+	ApprovalRequest map[string]interface{}
 }
 
 type AIErrorMsg struct {
@@ -214,6 +232,24 @@ type AIErrorMsg struct {
 }
 
 type AICancelledMsg struct{}
+type RuntimeTasksMsg struct {
+	Tasks  []map[string]interface{}
+	Events map[string][]map[string]interface{}
+}
+type RuntimeTaskErrorMsg struct {
+	Err error
+}
+type ApprovalResultMsg struct {
+	Content         string
+	SessionID       string
+	TaskID          string
+	TaskStatus      string
+	ProgressEvents  []map[string]interface{}
+	ApprovalRequest map[string]interface{}
+}
+type ApprovalErrorMsg struct {
+	Err error
+}
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
@@ -268,6 +304,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.showAPIKeyPrompt {
 			var cmd tea.Cmd
 			m.apiKeyPrompt, cmd = m.apiKeyPrompt.Update(msg)
+			return m, cmd
+		}
+
+		if m.showApprovalPrompt {
+			var cmd tea.Cmd
+			m.approvalPrompt, cmd = m.approvalPrompt.Update(msg)
 			return m, cmd
 		}
 
@@ -372,7 +414,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = stateDashboard
 	case AIResponseMsg:
 		m.aiProcessing = false
-		_ = m.summary.SetStatus("Ready", "How can I help you today?", "IDLE", false)
+		if msg.SessionID != "" {
+			m.runtimeSessionID = msg.SessionID
+		}
+		if msg.TaskID != "" {
+			m.lastRuntimeTaskID = msg.TaskID
+		}
+		if msg.TaskStatus == "waiting_approval" {
+			_ = m.summary.SetStatus("Approval", "Runtime is waiting for approval", "TASK", false)
+		} else {
+			_ = m.summary.SetStatus("Ready", "How can I help you today?", "IDLE", false)
+		}
+		for _, event := range msg.ProgressEvents {
+			eventType, _ := event["status"].(string)
+			message, _ := event["message"].(string)
+			if eventType != "" || message != "" {
+				m.console.AppendLog(styles.MutedStyle.Render(fmt.Sprintf("[Runtime] %s %s", eventType, message)))
+			}
+		}
+		if msg.ApprovalRequest != nil {
+			m.openApprovalPrompt(msg.TaskID, msg.ApprovalRequest)
+			return m, nil
+		}
 		m.console.AppendLog("\n" + styles.AIResponseStyle.Render(msg.Content) + "\n")
 		// Add AI response to conversation history for context
 		m.chatHistory = append(m.chatHistory, aibridge.Message{
@@ -389,6 +452,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_ = m.summary.SetStatus("Error", "AI Request Failed", "ERROR", false)
 		m.console.AppendLog(styles.ErrorStyle.Render(fmt.Sprintf("\nError: %v\n", msg.Err)))
 		return m, nil
+	case RuntimeTasksMsg:
+		m.handleRuntimeTasks(msg)
+		return m, pollRuntimeTasks(m.bridge, m.runtimeSessionID, m.lastRuntimeTaskID)
+	case RuntimeTaskErrorMsg:
+		if !m.aiProcessing && !m.agentActive && !m.scanActive {
+			_ = m.summary.SetStatus("Runtime", "Task sync failed", "TASK", false)
+		}
+		return m, pollRuntimeTasks(m.bridge, m.runtimeSessionID, m.lastRuntimeTaskID)
 
 	// Sudo Prompt Messages
 	case components.SudoAuthSuccessMsg:
@@ -437,6 +508,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.console.AppendLog(styles.WarningStyle.Render("Model change cancelled"))
 		return m, nil
 
+	case components.ApprovalSubmittedMsg:
+		m.showApprovalPrompt = false
+		m.pendingApprovalTask = msg.TaskID
+		m.pendingApprovalReq = msg.RequestID
+		m.aiProcessing = true
+		spinnerCmd := m.summary.SetStatus("Approval", "Submitting runtime decision", "TASK", true)
+		return m, tea.Batch(spinnerCmd, submitTaskApprovalCmd(m.bridge, msg.TaskID, msg.RequestID, msg.Decision))
+
+	case components.ApprovalCancelledMsg:
+		m.showApprovalPrompt = false
+		m.pendingApprovalTask = m.approvalPrompt.TaskID
+		m.pendingApprovalReq = m.approvalPrompt.RequestID
+		m.console.AppendLog(styles.WarningStyle.Render("Runtime approval prompt dismissed"))
+		return m, nil
+
 	case apiKeyStoredMsg:
 		m.showAPIKeyPrompt = false
 		if m.pendingModelIdx >= 0 {
@@ -452,6 +538,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showAPIKeyPrompt = true
 		m.apiKeyPrompt.SetError(msg.Err.Error())
 		m.console.AppendLog(styles.ErrorStyle.Render(fmt.Sprintf("API key validation failed: %v", msg.Err)))
+		return m, nil
+
+	case ApprovalResultMsg:
+		m.aiProcessing = false
+		m.pendingApprovalTask = ""
+		m.pendingApprovalReq = ""
+		if msg.SessionID != "" {
+			m.runtimeSessionID = msg.SessionID
+		}
+		if msg.TaskID != "" {
+			m.lastRuntimeTaskID = msg.TaskID
+		}
+		if msg.ApprovalRequest != nil {
+			m.openApprovalPrompt(msg.TaskID, msg.ApprovalRequest)
+			_ = m.summary.SetStatus("Approval", "Runtime is waiting for approval", "TASK", false)
+			return m, nil
+		}
+		for _, event := range msg.ProgressEvents {
+			eventType, _ := event["status"].(string)
+			message, _ := event["message"].(string)
+			if eventType != "" || message != "" {
+				m.console.AppendLog(styles.MutedStyle.Render(fmt.Sprintf("[Runtime] %s %s", eventType, message)))
+			}
+		}
+		if msg.Content != "" {
+			m.console.AppendLog("\n" + styles.AIResponseStyle.Render(msg.Content) + "\n")
+			m.chatHistory = append(m.chatHistory, aibridge.Message{
+				Role:    "assistant",
+				Content: msg.Content,
+			})
+		}
+		_ = m.summary.SetStatus("Ready", "How can I help you today?", "IDLE", false)
+		return m, nil
+
+	case ApprovalErrorMsg:
+		m.aiProcessing = false
+		m.showApprovalPrompt = false
+		_ = m.summary.SetStatus("Error", "Approval submission failed", "ERROR", false)
+		m.console.AppendLog(styles.ErrorStyle.Render(fmt.Sprintf("\nApproval error: %v\n", msg.Err)))
 		return m, nil
 
 	// Scan Progress Messages
@@ -964,6 +1089,168 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func pollRuntimeTasks(bridge *aibridge.AIBridge, sessionID string, taskID string) tea.Cmd {
+	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+		if strings.TrimSpace(sessionID) == "" && strings.TrimSpace(taskID) == "" {
+			return RuntimeTasksMsg{Tasks: []map[string]interface{}{}, Events: map[string][]map[string]interface{}{}}
+		}
+		filterTaskID := taskID
+		if strings.TrimSpace(sessionID) != "" {
+			filterTaskID = ""
+		}
+		tasks, err := bridge.ListTasks(10, sessionID, filterTaskID)
+		if err != nil {
+			return RuntimeTaskErrorMsg{Err: err}
+		}
+		events := make(map[string][]map[string]interface{})
+		for _, task := range tasks {
+			taskID, _ := task["task_id"].(string)
+			if taskID == "" {
+				continue
+			}
+			taskEvents, err := bridge.GetTaskEvents(taskID)
+			if err == nil {
+				events[taskID] = taskEvents
+			}
+		}
+		return RuntimeTasksMsg{Tasks: tasks, Events: events}
+	})
+}
+
+func submitTaskApprovalCmd(bridge *aibridge.AIBridge, taskID, requestID, decision string) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := bridge.SubmitTaskApproval(taskID, requestID, decision)
+		if err != nil {
+			return ApprovalErrorMsg{Err: err}
+		}
+		return ApprovalResultMsg{
+			Content:         resp.Content,
+			SessionID:       resp.SessionID,
+			TaskID:          resp.TaskID,
+			TaskStatus:      resp.TaskStatus,
+			ProgressEvents:  resp.ProgressEvents,
+			ApprovalRequest: resp.ApprovalRequest,
+		}
+	}
+}
+
+func (m *Model) openApprovalPrompt(taskID string, request map[string]interface{}) {
+	toolName, _ := request["tool_name"].(string)
+	reason, _ := request["reason"].(string)
+	riskCategory, _ := request["risk_category"].(string)
+	requestID, _ := request["request_id"].(string)
+	if strings.TrimSpace(taskID) == "" || strings.TrimSpace(requestID) == "" {
+		return
+	}
+	m.approvalPrompt = components.NewApprovalPrompt(
+		toolName,
+		reason,
+		riskCategory,
+		requestID,
+		taskID,
+		m.width,
+		m.height,
+	)
+	m.pendingApprovalTask = taskID
+	m.pendingApprovalReq = requestID
+	m.showApprovalPrompt = true
+	m.console.AppendLog(styles.WarningStyle.Render(
+		fmt.Sprintf("[Approval Required] %s - %s", toolName, reason),
+	))
+}
+
+func (m *Model) handleRuntimeTasks(msg RuntimeTasksMsg) {
+	activeTaskCount := 0
+	visibleTaskIDs := make(map[string]bool)
+	for _, task := range msg.Tasks {
+		taskID, _ := task["task_id"].(string)
+		kind, _ := task["kind"].(string)
+		status, _ := task["status"].(string)
+		inputSummary, _ := task["input_summary"].(string)
+
+		if taskID == "" {
+			continue
+		}
+		visibleTaskIDs[taskID] = true
+		if status != "completed" && status != "failed" && status != "aborted" {
+			activeTaskCount++
+		}
+
+		lastStatus, seen := m.runtimeTaskState[taskID]
+		if !seen {
+			m.runtimeTaskState[taskID] = status
+			m.console.AppendLog(styles.MutedStyle.Render(
+				fmt.Sprintf("[Runtime] %s %s started: %s", kind, taskID, inputSummary),
+			))
+		} else if lastStatus != status {
+			m.runtimeTaskState[taskID] = status
+			m.console.AppendLog(styles.MutedStyle.Render(
+				fmt.Sprintf("[Runtime] %s %s -> %s", kind, taskID, status),
+			))
+		}
+
+		for _, event := range msg.Events[taskID] {
+			eventType, _ := event["event_type"].(string)
+			createdAt, _ := event["created_at"].(string)
+			eventKey := fmt.Sprintf("%s|%s|%s", taskID, eventType, createdAt)
+			if m.runtimeEventSeen[eventKey] {
+				continue
+			}
+			m.runtimeEventSeen[eventKey] = true
+
+			payload, _ := event["payload"].(map[string]interface{})
+			rendered := fmt.Sprintf("[Runtime:%s] %s", taskID, eventType)
+			if len(payload) > 0 {
+				if description, ok := payload["description"].(string); ok && description != "" {
+					rendered = fmt.Sprintf("%s - %s", rendered, description)
+				} else if phase, ok := payload["phase"].(string); ok && phase != "" {
+					rendered = fmt.Sprintf("%s - %s", rendered, phase)
+				}
+			}
+			m.console.AppendLog(styles.MutedStyle.Render(rendered))
+			requestID, _ := payload["request_id"].(string)
+			if eventType == "approval_required" && !m.showApprovalPrompt {
+				if strings.TrimSpace(requestID) != "" && taskID == m.pendingApprovalTask && requestID == m.pendingApprovalReq {
+					continue
+				}
+				m.openApprovalPrompt(taskID, payload)
+			}
+		}
+
+		if !m.showApprovalPrompt && status == "waiting_approval" {
+			if metadata, ok := task["metadata"].(map[string]interface{}); ok {
+				if pending, ok := metadata["pending_approval_request"].(map[string]interface{}); ok {
+					requestID, _ := pending["request_id"].(string)
+					if strings.TrimSpace(requestID) != "" && taskID == m.pendingApprovalTask && requestID == m.pendingApprovalReq {
+						continue
+					}
+					m.openApprovalPrompt(taskID, pending)
+				}
+			}
+		}
+	}
+
+	for taskID := range m.runtimeTaskState {
+		if !visibleTaskIDs[taskID] {
+			delete(m.runtimeTaskState, taskID)
+		}
+	}
+	for eventKey := range m.runtimeEventSeen {
+		prefix := strings.SplitN(eventKey, "|", 2)[0]
+		if !visibleTaskIDs[prefix] {
+			delete(m.runtimeEventSeen, eventKey)
+		}
+	}
+
+	if !m.aiProcessing && !m.agentActive && !m.scanActive {
+		if activeTaskCount > 0 {
+			_ = m.summary.SetStatus("Runtime", fmt.Sprintf("%d shared task(s) active", activeTaskCount), "TASK", true)
+		} else if len(msg.Tasks) > 0 {
+			m.summary.ResetToIdle()
+		}
+	}
+}
+
 func (m *Model) handleCommand(cmd string) tea.Cmd {
 	// Echo to console
 	m.console.AppendLog(styles.UserStyle.Render("> " + cmd))
@@ -1368,6 +1655,7 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 	cancelCh := m.cancelAI
 	messages := make([]aibridge.Message, len(m.chatHistory))
 	copy(messages, m.chatHistory)
+	sessionID := m.runtimeSessionID
 
 	aiCmd := func() tea.Msg {
 		provider := views.ModelToProvider(modelName)
@@ -1380,11 +1668,18 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 		resultCh := make(chan tea.Msg, 1)
 
 		go func() {
-			resp, err := m.bridge.Chat(messages, provider, engineModel, 0.7, 1500)
+			resp, err := m.bridge.ChatDetailed(messages, provider, engineModel, 0.7, 1500, sessionID)
 			if err != nil {
 				resultCh <- AIErrorMsg{Err: err}
 			} else {
-				resultCh <- AIResponseMsg{Content: resp}
+				resultCh <- AIResponseMsg{
+					Content:         resp.Content,
+					SessionID:       resp.SessionID,
+					TaskID:          resp.TaskID,
+					TaskStatus:      resp.TaskStatus,
+					ProgressEvents:  resp.ProgressEvents,
+					ApprovalRequest: resp.ApprovalRequest,
+				}
 			}
 		}()
 
@@ -1740,19 +2035,22 @@ User's description: ` + description
 		}
 
 		engineModel := views.ModelToEngineModel(modelName)
-		resp, err := bridge.Chat(messages, provider, engineModel, 0.7, 2000)
+		resp, err := bridge.ChatDetailed(messages, provider, engineModel, 0.7, 2000, "")
 		if err != nil {
 			return AgentCreationErrorMsg{Err: err}
+		}
+		if resp.ApprovalRequest != nil {
+			return AgentCreationErrorMsg{Err: fmt.Errorf("agent creation requires runtime approval and cannot continue in JSON mode")}
 		}
 
 		// Parse the JSON response
 		// Find JSON in response (in case AI adds extra text)
-		jsonStart := strings.Index(resp, "{")
-		jsonEnd := strings.LastIndex(resp, "}")
+		jsonStart := strings.Index(resp.Content, "{")
+		jsonEnd := strings.LastIndex(resp.Content, "}")
 		if jsonStart == -1 || jsonEnd == -1 || jsonEnd <= jsonStart {
 			return AgentCreationErrorMsg{Err: fmt.Errorf("AI did not return valid JSON")}
 		}
-		jsonStr := resp[jsonStart : jsonEnd+1]
+		jsonStr := resp.Content[jsonStart : jsonEnd+1]
 
 		var agentConfig agents.AgentConfig
 		if err := json.Unmarshal([]byte(jsonStr), &agentConfig); err != nil {
@@ -2117,6 +2415,10 @@ func (m Model) View() string {
 
 	if m.showAPIKeyPrompt {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.apiKeyPrompt.View())
+	}
+
+	if m.showApprovalPrompt {
+		return m.approvalPrompt.View()
 	}
 
 	// Show scan progress when active, otherwise show console

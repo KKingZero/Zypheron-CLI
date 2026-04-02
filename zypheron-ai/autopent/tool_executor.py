@@ -14,6 +14,10 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 
 from .attack_path_graph import GraphEdge
+from contracts.runtime import PolicyMode
+from core.policy import authorize_tool_call, PolicyDecision
+from tools.base import ExecutionContext
+from tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +41,16 @@ class ToolExecutor:
     and parses their output for vulnerability discovery
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        policy_mode: PolicyMode = PolicyMode.INTERACTIVE_SAFE,
+        session_id: str = "autopent-session",
+        task_id: str = "autopent-task",
+    ):
         self.tool_paths = self._detect_tools()
+        self.policy_mode = policy_mode
+        self.session_id = session_id
+        self.task_id = task_id
 
     def _detect_tools(self) -> Dict[str, str]:
         """Detect available security tools"""
@@ -71,7 +83,7 @@ class ToolExecutor:
         logger.info(f"Detected {len(tools)} security tools")
         return tools
 
-    async def execute_edge(self, edge: GraphEdge) -> ToolResult:
+    async def execute_edge(self, edge: GraphEdge, approval_granted: bool = False) -> ToolResult:
         """
         Execute an attack edge (step) using appropriate tool
 
@@ -82,6 +94,10 @@ class ToolExecutor:
             ToolResult with execution outcome
         """
         tool = edge.tool.lower()
+
+        shared_result = await self._execute_shared_tool(edge, approval_granted=approval_granted)
+        if shared_result is not None:
+            return shared_result
 
         # Route to appropriate executor
         if 'nmap' in tool or 'scan' in edge.description.lower():
@@ -99,6 +115,110 @@ class ToolExecutor:
         else:
             # Generic execution
             return await self._execute_generic(edge)
+
+    def get_shared_policy_decision(self, edge: GraphEdge) -> Optional[PolicyDecision]:
+        """Return the shared-tool policy decision for an edge, if mapped."""
+        shared_mapping = self._map_edge_to_shared_tool(edge)
+        if not shared_mapping:
+            return None
+
+        tool_name, arguments = shared_mapping
+        shared_tool = tool_registry.get(tool_name)
+        if shared_tool is None:
+            return None
+        approval_granted = False
+        try:
+            from tasks.store import TaskStore
+            approval_granted = TaskStore().has_session_approval(self.session_id, shared_tool.spec.name)
+        except Exception:
+            approval_granted = False
+
+        return authorize_tool_call(
+            tool_spec=shared_tool.spec,
+            policy_mode=self.policy_mode,
+            reason=f"autopent selected {tool_name} for {edge.description}",
+            arguments=arguments,
+            approval_granted=approval_granted,
+        )
+
+    async def _execute_shared_tool(self, edge: GraphEdge, approval_granted: bool = False) -> Optional[ToolResult]:
+        """Try to execute the edge through the shared typed tool registry first."""
+        shared_mapping = self._map_edge_to_shared_tool(edge)
+        if not shared_mapping:
+            return None
+
+        tool_name, arguments = shared_mapping
+        shared_tool = tool_registry.get(tool_name)
+        if shared_tool is None:
+            return None
+        if not approval_granted:
+            try:
+                from tasks.store import TaskStore
+                approval_granted = TaskStore().has_session_approval(self.session_id, shared_tool.spec.name)
+            except Exception:
+                approval_granted = False
+
+        decision = authorize_tool_call(
+            tool_spec=shared_tool.spec,
+            policy_mode=self.policy_mode,
+            reason=f"autopent selected {tool_name} for {edge.description}",
+            arguments=arguments,
+            approval_granted=approval_granted,
+        )
+        if decision.requires_approval and decision.approval_request is not None:
+            return ToolResult(
+                success=False,
+                tool=tool_name,
+                output="",
+                parsed_data={
+                    "approval_required": True,
+                    "approval_request": decision.approval_request.to_dict(),
+                },
+                error="Approval required before shared tool execution",
+                exit_code=2,
+            )
+        if not decision.allowed:
+            return ToolResult(
+                success=False,
+                tool=tool_name,
+                output="",
+                parsed_data={"policy_blocked": True},
+                error=decision.reason or "Shared tool blocked by policy",
+                exit_code=1,
+            )
+
+        result = await shared_tool.execute(
+            arguments,
+            ExecutionContext(
+                session_id=self.session_id,
+                task_id=self.task_id,
+                policy_mode=self.policy_mode.value,
+                metadata={"source": "autopent", "edge_id": edge.edge_id},
+            ),
+        )
+        return ToolResult(
+            success=result.success,
+            tool=tool_name,
+            output=result.content,
+            parsed_data=result.data,
+            error=result.error,
+            exit_code=0 if result.success else 1,
+        )
+
+    def _map_edge_to_shared_tool(self, edge: GraphEdge) -> Optional[tuple[str, Dict[str, Any]]]:
+        """Map an attack edge to a shared typed tool when supported."""
+        tool = edge.tool.lower()
+        desc = edge.description.lower()
+
+        if "nmap" in tool or "scan" in desc:
+            return ("nmap_scan", {"target": edge.target_id, "scan_type": "-sV"})
+        if "sqlmap" in tool or "sql" in desc:
+            return ("sqlmap_scan", {"url": edge.target_id})
+        if "nikto" in tool:
+            return ("nikto_scan", {"target": edge.target_id})
+        if "nuclei" in tool:
+            return ("nuclei_scan", {"target": edge.target_id})
+        return None
 
     async def _execute_nmap(self, edge: GraphEdge) -> ToolResult:
         """Execute nmap scan"""

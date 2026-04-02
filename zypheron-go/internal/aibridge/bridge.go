@@ -182,6 +182,28 @@ type Message struct {
 	Content string `json:"content"`
 }
 
+// ChatResponse contains the full runtime envelope for chat turns.
+type ChatResponse struct {
+	Content         string
+	Provider        string
+	Model           string
+	TokensUsed      int
+	SessionID       string
+	TaskID          string
+	TaskStatus      string
+	ProgressEvents  []map[string]interface{}
+	ApprovalRequest map[string]interface{}
+}
+
+type ApprovalResponse struct {
+	Content         string
+	SessionID       string
+	TaskID          string
+	TaskStatus      string
+	ProgressEvents  []map[string]interface{}
+	ApprovalRequest map[string]interface{}
+}
+
 // Vulnerability represents a security vulnerability
 type Vulnerability struct {
 	ID               string   `json:"id"`
@@ -720,6 +742,15 @@ func (b *AIBridge) GetPoolStats() map[string]interface{} {
 
 // Chat sends a chat request to the AI engine.
 func (b *AIBridge) Chat(messages []Message, provider string, model string, temperature float64, maxTokens int) (string, error) {
+	resp, err := b.ChatDetailed(messages, provider, model, temperature, maxTokens, "")
+	if err != nil {
+		return "", err
+	}
+	return resp.Content, nil
+}
+
+// ChatDetailed sends a chat request and returns the full runtime envelope.
+func (b *AIBridge) ChatDetailed(messages []Message, provider string, model string, temperature float64, maxTokens int, sessionID string) (*ChatResponse, error) {
 	params := map[string]interface{}{
 		"messages":    messages,
 		"provider":    provider,
@@ -729,18 +760,64 @@ func (b *AIBridge) Chat(messages []Message, provider string, model string, tempe
 	if strings.TrimSpace(model) != "" {
 		params["model"] = model
 	}
+	if strings.TrimSpace(sessionID) != "" {
+		params["session_id"] = sessionID
+	}
 
 	resp, err := b.SendRequest("chat", params)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	content, ok := resp.Result["content"].(string)
 	if !ok {
-		return "", fmt.Errorf("invalid response format")
+		return nil, fmt.Errorf("invalid response format")
 	}
 
-	return content, nil
+	detailed := &ChatResponse{
+		Content:    content,
+		Provider:   asString(resp.Result["provider"]),
+		Model:      asString(resp.Result["model"]),
+		TokensUsed: asInt(resp.Result["tokens_used"]),
+		SessionID:  asString(resp.Result["session_id"]),
+		TaskID:     asString(resp.Result["task_id"]),
+		TaskStatus: asString(resp.Result["task_status"]),
+	}
+	if events, ok := resp.Result["progress_events"].([]interface{}); ok {
+		detailed.ProgressEvents = asMapSlice(events)
+	}
+	if approval, ok := resp.Result["approval_request"].(map[string]interface{}); ok {
+		detailed.ApprovalRequest = approval
+	}
+	return detailed, nil
+}
+
+func asString(value interface{}) string {
+	if v, ok := value.(string); ok {
+		return v
+	}
+	return ""
+}
+
+func asInt(value interface{}) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func asMapSlice(values []interface{}) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, len(values))
+	for _, raw := range values {
+		if mapped, ok := raw.(map[string]interface{}); ok {
+			result = append(result, mapped)
+		}
+	}
+	return result
 }
 
 // AnalyzeScan analyzes scan output with AI
@@ -908,6 +985,87 @@ func (b *AIBridge) Health() (map[string]interface{}, error) {
 	}
 
 	return resp.Result, nil
+}
+
+// ListTasks returns recent runtime tasks from the Python engine.
+func (b *AIBridge) ListTasks(limit int, sessionID string, taskID string) ([]map[string]interface{}, error) {
+	params := map[string]interface{}{
+		"limit": limit,
+	}
+	if strings.TrimSpace(sessionID) != "" {
+		params["session_id"] = sessionID
+	}
+	if strings.TrimSpace(taskID) != "" {
+		params["task_id"] = taskID
+	}
+
+	resp, err := b.SendRequest("task_list", params)
+	if err != nil {
+		return nil, err
+	}
+
+	var tasks []map[string]interface{}
+	if taskData, ok := resp.Result["tasks"].([]interface{}); ok {
+		for _, raw := range taskData {
+			if taskMap, ok := raw.(map[string]interface{}); ok {
+				tasks = append(tasks, taskMap)
+			}
+		}
+	}
+	return tasks, nil
+}
+
+// GetTask fetches a single runtime task.
+func (b *AIBridge) GetTask(taskID string) (map[string]interface{}, error) {
+	resp, err := b.SendRequest("task_get", map[string]interface{}{"task_id": taskID})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Result, nil
+}
+
+// GetTaskEvents fetches audit events for a runtime task.
+func (b *AIBridge) GetTaskEvents(taskID string) ([]map[string]interface{}, error) {
+	resp, err := b.SendRequest("task_events", map[string]interface{}{"task_id": taskID})
+	if err != nil {
+		return nil, err
+	}
+
+	var events []map[string]interface{}
+	if eventData, ok := resp.Result["events"].([]interface{}); ok {
+		for _, raw := range eventData {
+			if eventMap, ok := raw.(map[string]interface{}); ok {
+				events = append(events, eventMap)
+			}
+		}
+	}
+	return events, nil
+}
+
+// SubmitTaskApproval applies an approval decision to a waiting runtime task.
+func (b *AIBridge) SubmitTaskApproval(taskID string, requestID string, decision string) (*ApprovalResponse, error) {
+	resp, err := b.SendRequest("task_approve", map[string]interface{}{
+		"task_id":    taskID,
+		"request_id": requestID,
+		"decision":   decision,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ApprovalResponse{
+		Content:    asString(resp.Result["content"]),
+		SessionID:  asString(resp.Result["session_id"]),
+		TaskID:     asString(resp.Result["task_id"]),
+		TaskStatus: asString(resp.Result["task_status"]),
+	}
+	if events, ok := resp.Result["progress_events"].([]interface{}); ok {
+		result.ProgressEvents = asMapSlice(events)
+	}
+	if approval, ok := resp.Result["approval_request"].(map[string]interface{}); ok {
+		result.ApprovalRequest = approval
+	}
+	return result, nil
 }
 
 // StoreAPIKey stores an API key in the system keyring

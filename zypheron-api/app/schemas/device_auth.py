@@ -22,7 +22,7 @@ class DeviceCodeRequest(BaseModel):
                 "os": "Linux",
                 "os_version": "6.14.0-37-generic",
                 "hostname": "dev-machine",
-                "cli_version": "1.0.0",
+                "cli_version": "2.0.0",
             }
         ],
     )

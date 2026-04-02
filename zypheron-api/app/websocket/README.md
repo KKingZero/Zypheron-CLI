@@ -480,7 +480,7 @@ Key metrics to monitor:
 ### License Validation Failed (4002)
 - Check user has active license
 - Verify `websocket_streaming` feature is enabled for tier
-- Refresh license data from Stripe
+- Refresh runtime authorization data from the API
 
 ### Rate Limited (4003)
 - Reduce message frequency

@@ -46,10 +46,10 @@ Your API key is now stored securely in your system keyring (Keychain on macOS, C
 
 ### Recommendations
 
-- **Best Overall**: Anthropic Claude (Sonnet 4) - Most capable
-- **Most Affordable**: DeepSeek - Best price/quality ratio
-- **Best for Code**: OpenAI GPT-4 or Claude
-- **Best Free**: Google Gemini or Ollama (local)
+- **Best Overall**: Anthropic Claude - Strong general capability
+- **Best for Code**: OpenAI GPT or Claude
+- **Best Local Option**: Ollama
+- **Best Low-Friction Option**: Gemini or Ollama
 - **Privacy First**: Ollama (runs locally, no cloud)
 
 ---
@@ -271,7 +271,7 @@ ls -la zypheron-ai/.env
 
 **For general use**: Anthropic Claude (Sonnet 4)
 - Most capable
-- Good pricing
+- Strong model/value balance
 - Excellent for security tasks
 
 **For cost-sensitive projects**: DeepSeek
