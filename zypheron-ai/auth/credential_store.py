@@ -277,15 +277,15 @@ class CredentialStore:
             keyring_key = f"{credential_id}_password"
             try:
                 keyring.delete_password(self.SERVICE_NAME, keyring_key)
-            except:
+            except Exception:
                 pass
-            
+
             # Delete additional secrets
             for secret_key in ['api_key', 'client_secret']:
                 keyring_key = f"{credential_id}_{secret_key}"
                 try:
                     keyring.delete_password(self.SERVICE_NAME, keyring_key)
-                except:
+                except Exception:
                     pass
             
             # Remove from credentials dict

@@ -3,7 +3,6 @@ package licensing
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -52,8 +51,8 @@ func (m *LicenseMiddleware) RequireTokens(tokens int64) *LicenseMiddleware {
 //   cmd.PreRunE = licensing.NewLicenseMiddleware().RequireFeature(licensing.FeatureAutopent).PreRunE()
 func (m *LicenseMiddleware) PreRunE() func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		// Dev mode bypass for testing
-		if isDevModeEnabled() || os.Getenv("ZYPHERON_DEV") != "" || os.Getenv("ZYPHERON_DEV_MODE") == "1" {
+		// Dev mode bypass — only available in devmode builds
+		if isDevModeEnabled() {
 			return nil
 		}
 

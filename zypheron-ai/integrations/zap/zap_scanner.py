@@ -175,7 +175,7 @@ class ZAPScanner:
                     logger.info("AJAX spider completed")
                     break
                 await asyncio.sleep(3)
-            except:
+            except Exception:
                 break
     
     async def _wait_for_active_scan(

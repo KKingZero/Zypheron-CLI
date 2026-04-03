@@ -44,7 +44,7 @@ class AgentConnection:
         """Close connection"""
         try:
             await self.websocket.close()
-        except:
+        except Exception:
             pass
 
 
@@ -127,7 +127,7 @@ class NetworkManager:
         for agent_id, conn in self.connections.items():
             try:
                 await conn.close()
-            except:
+            except Exception:
                 pass
         
         self.connections.clear()

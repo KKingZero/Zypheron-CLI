@@ -158,7 +158,7 @@ class ScanAgent:
             ip = s.getsockname()[0]
             s.close()
             return ip
-        except:
+        except (OSError, socket.error):
             return "127.0.0.1"
     
     async def _send_heartbeat(self):

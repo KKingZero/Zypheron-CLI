@@ -36,7 +36,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24'
       
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
@@ -60,21 +60,28 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
       
       - name: Install Bandit
         run: pip install bandit[toml]
       
-      - name: Run Bandit Security Scanner
+      - name: Run Bandit on zypheron-ai
         run: |
           cd zypheron-ai
-          bandit -r . -f json -o bandit-results.json || true
-      
+          bandit -r . -f json -o bandit-results.json --exclude ./venv,./mcp-venv || true
+
+      - name: Run Bandit on zypheron-api
+        run: |
+          cd zypheron-api
+          bandit -r app/ -f json -o bandit-results.json || true
+
       - name: Display Bandit results
         if: always()
         run: |
           cd zypheron-ai
-          bandit -r . -f screen || true
+          bandit -r . -f screen --exclude ./venv,./mcp-venv || true
+          cd ../zypheron-api
+          bandit -r app/ -f screen || true
 
   dependency-check:
     name: Dependency Security Audit
@@ -87,7 +94,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
       
       - name: Check Python dependencies for vulnerabilities
         run: |
@@ -98,7 +105,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24'
       
       - name: Check Go dependencies for vulnerabilities
         run: |

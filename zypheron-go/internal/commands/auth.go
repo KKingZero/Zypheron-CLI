@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -210,7 +211,9 @@ func runBrowserLogin() error {
 				fmt.Printf("  Email: %s\n", ui.Accent.Sprint(resp.Email))
 
 				// Register device
-				if _, err := client.RegisterDevice(); err == nil {
+				if _, err := client.RegisterDevice(); err != nil {
+					fmt.Fprintf(os.Stderr, "  %s\n", ui.Muted.Sprint("Warning: device registration failed: "+err.Error()))
+				} else {
 					fmt.Printf("  Device: %s\n", ui.Muted.Sprint("Registered"))
 				}
 
@@ -284,7 +287,9 @@ func runEmailLogin() error {
 	fmt.Printf("  Plan:  %s\n", utils.Capitalize(resp.User.Tier))
 
 	// Register device
-	if _, err := client.RegisterDevice(); err == nil {
+	if _, err := client.RegisterDevice(); err != nil {
+		fmt.Fprintf(os.Stderr, "  %s\n", ui.Muted.Sprint("Warning: device registration failed: "+err.Error()))
+	} else {
 		fmt.Println(ui.Muted.Sprint("  Device registered"))
 	}
 

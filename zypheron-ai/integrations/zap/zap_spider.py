@@ -146,7 +146,7 @@ class ZAPSpider:
                     status = self.api.zap.ajaxSpider.status
                     if status == 'stopped':
                         break
-            except:
+            except Exception:
                 break
             
             await asyncio.sleep(3)

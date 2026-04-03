@@ -102,7 +102,7 @@ func (m *LicenseManager) HasFeature(feature Feature) bool {
 
 // RequireFeature returns an error if feature is not available
 func (m *LicenseManager) RequireFeature(feature Feature) error {
-	if isDevModeEnabled() || os.Getenv("ZYPHERON_DEV") != "" || os.Getenv("ZYPHERON_DEV_MODE") == "1" {
+	if isDevModeEnabled() {
 		return nil
 	}
 	if m.HasFeature(feature) {
@@ -128,7 +128,7 @@ func (m *LicenseManager) HasTokens(required int64) bool {
 
 // DeductTokens reduces token balance (call after successful AI operation)
 func (m *LicenseManager) DeductTokens(tokens int64, usage TokenUsage) error {
-	if isDevModeEnabled() || os.Getenv("ZYPHERON_DEV") != "" || os.Getenv("ZYPHERON_DEV_MODE") == "1" {
+	if isDevModeEnabled() {
 		return nil
 	}
 	m.mu.Lock()

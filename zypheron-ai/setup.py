@@ -30,7 +30,7 @@ setup(
         "aiohttp>=3.9.0",
         "loguru>=0.7.0",
     ],
-    python_requires=">=3.9",
+    python_requires=">=3.11",
     extras_require={
         "test": [
             "pytest>=7.4.0",

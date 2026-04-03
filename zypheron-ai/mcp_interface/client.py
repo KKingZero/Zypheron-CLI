@@ -118,7 +118,7 @@ class ZypheronClient:
             try:
                 error_detail = e.response.json()
                 return {"error": error_detail, "success": False}
-            except:
+            except (ValueError, KeyError):
                 return {"error": f"HTTP {e.response.status_code}", "success": False}
         except Exception as e:
             logger.error(f"Unexpected error: {e}")

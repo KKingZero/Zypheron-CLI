@@ -88,7 +88,7 @@ class BurpAPI:
                 logger.info(f"Burp Suite {version.get('burp_version')} available")
                 return True
             return False
-        except:
+        except Exception:
             return False
     
     def create_task(

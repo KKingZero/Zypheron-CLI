@@ -148,7 +148,7 @@ class MemoryManager:
                         })
                         if len(matches) >= limit:
                             break
-                except:
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                     continue
         return matches
 

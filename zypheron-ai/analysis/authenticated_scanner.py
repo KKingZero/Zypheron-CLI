@@ -917,7 +917,7 @@ class AuthenticatedScanner:
             # Simple comparison - in production use more sophisticated diff
             return resp1.text != resp2.text
             
-        except:
+        except (requests.RequestException, ValueError):
             return False
     
     def generate_report(self) -> Dict[str, Any]:

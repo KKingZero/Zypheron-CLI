@@ -215,7 +215,7 @@ class SafeExecutor:
             # Clean up
             try:
                 os.unlink(script_path)
-            except:
+            except OSError:
                 pass
     
     def get_execution_history(self, limit: int = 10) -> List[ExecutionContext]:
