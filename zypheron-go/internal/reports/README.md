@@ -1,65 +1,94 @@
 # Reports Package
 
-The reports package provides JSON export functionality for Zypheron scan sessions in the OSS release. It is designed for advanced users who need programmatic access to scan results, while richer report presentation stays aligned with Zypheron's AI-native tooling direction.
+JSON export for Zypheron scan sessions. Designed for programmatic access to scan results and automation pipelines.
 
 ## Features
 
-- **JSON Export Only**: Clean, structured JSON output suitable for parsing and automation
-- **Minimal Dependencies**: Relies only on standard library and session package
-- **Default Output Location**: `~/.zypheron/reports/`
-- **Comprehensive Report Data**: Includes metadata, findings, vulnerabilities, and summaries
+- JSON-only export (structured, parseable output)
+- Minimal dependencies (standard library + session package)
+- Default output: `~/.zypheron/reports/`
+- Comprehensive report data: metadata, findings, vulnerabilities, summaries
 
-## Usage
-
-### Basic Export
+## Quick Start
 
 ```go
-import (
-    "github.com/KKingZero/Cobra-AI/zypheron-go/internal/reports"
-    "github.com/KKingZero/Cobra-AI/zypheron-go/internal/session"
-)
+import "github.com/KKingZero/Cobra-AI/zypheron-go/internal/reports"
 
-// Create or load a session
-sess := session.NewSession("192.168.1.100", session.ScanTypeNmap)
-
-// Export to specific path
-err := reports.ExportJSON(sess, "/path/to/report.json")
-if err != nil {
-    log.Fatal(err)
-}
+// Export with auto-naming to default directory
+err := reports.GenerateReport(session, "")
+// Saves to: ~/.zypheron/reports/report_<id>_<timestamp>.json
 ```
 
-### Generate Report with Auto-naming
+## API Reference
+
+### ExportJSON
 
 ```go
-// Generates report with automatic filename in default directory
-// Format: report_<sessionid>_<timestamp>.json
-// Location: ~/.zypheron/reports/
-err := reports.GenerateReport(sess, "")
-if err != nil {
-    log.Fatal(err)
-}
-
-// Or specify custom directory (filename still auto-generated)
-err := reports.GenerateReport(sess, "/custom/directory")
-if err != nil {
-    log.Fatal(err)
-}
+func ExportJSON(sess *session.Session, outputPath string) error
 ```
 
-### Get Default Report Path
+Exports a session to JSON at the specified path. Creates parent directories as needed.
+
+**Parameters:**
+- `sess` -- session to export (must not be nil)
+- `outputPath` -- full file path for the report
+
+**Errors:** nil session, JSON marshal failure, directory creation failure, write failure.
+
+### GenerateReport
 
 ```go
-defaultPath, err := reports.GetDefaultReportPath()
-if err != nil {
-    log.Fatal(err)
+func GenerateReport(sess *session.Session, outputPath string) error
+```
+
+Exports a session with automatic filename generation (`report_<sessionid>_<timestamp>.json`).
+
+**Parameters:**
+- `sess` -- session to export (must not be nil)
+- `outputPath` -- directory path, or empty string for default (`~/.zypheron/reports/`)
+
+### GetDefaultReportPath
+
+```go
+func GetDefaultReportPath() (string, error)
+```
+
+Returns the default report directory: `~/.zypheron/reports`.
+
+## Data Structures
+
+```go
+type Report struct {
+    Metadata        ReportMetadata            `json:"metadata"`
+    Summary         ReportSummary             `json:"summary"`
+    Findings        []session.Finding         `json:"findings"`
+    Vulnerabilities []session.Vulnerability   `json:"vulnerabilities"`
+    RawOutput       string                    `json:"raw_output,omitempty"`
+    AIAnalysis      string                    `json:"ai_analysis,omitempty"`
+    Notes           string                    `json:"notes,omitempty"`
 }
-// Returns: /home/user/.zypheron/reports
+
+type ReportMetadata struct {
+    SessionID string    `json:"session_id"`
+    Target    string    `json:"target"`
+    Tool      string    `json:"tool"`
+    Timestamp time.Time `json:"timestamp"`
+    Duration  string    `json:"duration"`
+    Status    string    `json:"status"`
+}
+
+type ReportSummary struct {
+    TotalFindings        int `json:"total_findings"`
+    TotalVulnerabilities int `json:"total_vulnerabilities"`
+    CriticalCount        int `json:"critical_count"`
+    HighCount            int `json:"high_count"`
+    MediumCount          int `json:"medium_count"`
+    LowCount             int `json:"low_count"`
+    InfoCount            int `json:"info_count"`
+}
 ```
 
 ## JSON Report Structure
-
-The exported JSON report contains the following structure:
 
 ```json
 {
@@ -85,10 +114,8 @@ The exported JSON report contains the following structure:
       "id": "uuid",
       "type": "port",
       "title": "Open Port 22",
-      "description": "SSH port is open",
       "severity": "info",
-      "timestamp": "2026-01-18T10:00:00Z",
-      "details": {}
+      "timestamp": "2026-01-18T10:00:00Z"
     }
   ],
   "vulnerabilities": [
@@ -96,142 +123,184 @@ The exported JSON report contains the following structure:
       "id": "uuid",
       "cve_id": "CVE-2023-1234",
       "title": "SQL Injection",
-      "description": "SQL injection in login form",
       "severity": "critical",
       "cvss_score": 9.8,
       "port": 80,
       "service": "http",
       "exploit_available": true,
-      "remediation": "Use parameterized queries",
-      "references": ["https://example.com/advisory"]
+      "remediation": "Use parameterized queries"
     }
-  ],
-  "raw_output": "Full raw output from scan tool...",
-  "ai_analysis": "AI-generated analysis if available",
-  "notes": "User notes"
+  ]
 }
 ```
 
-## API Reference
+## Usage Examples
 
-### ExportJSON
-
-```go
-func ExportJSON(sess *session.Session, outputPath string) error
-```
-
-Exports a session to JSON format at the specified path.
-
-**Parameters:**
-- `sess`: The session to export (must not be nil)
-- `outputPath`: Full path including filename where report will be saved
-
-**Returns:**
-- `error`: nil on success, error describing failure otherwise
-
-**Errors:**
-- Session is nil
-- Failed to marshal JSON
-- Failed to create output directory
-- Failed to write file
-
-### GenerateReport
+### Export After Scan
 
 ```go
-func GenerateReport(sess *session.Session, outputPath string) error
+sess := session.NewSession("192.168.1.100", session.ScanTypeNmap)
+// ... perform scan ...
+sess.Complete()
+
+if err := reports.GenerateReport(sess, ""); err != nil {
+    log.Printf("Warning: Failed to export report: %v", err)
+}
 ```
 
-Wrapper function that exports a session with automatic filename generation.
-
-**Parameters:**
-- `sess`: The session to export (must not be nil)
-- `outputPath`: Directory path (empty string for default `~/.zypheron/reports/`)
-
-**Returns:**
-- `error`: nil on success, error describing failure otherwise
-
-**Behavior:**
-- If `outputPath` is empty: uses `~/.zypheron/reports/`
-- If `outputPath` is a directory: generates filename in that directory
-- Filename format: `report_<sessionid>_<timestamp>.json`
-
-### GetDefaultReportPath
+### Custom Output Path
 
 ```go
-func GetDefaultReportPath() (string, error)
+err := reports.ExportJSON(sess, "/var/log/zypheron/scan_report.json")
 ```
 
-Returns the default report directory path.
+### Batch Export
 
-**Returns:**
-- `string`: Path to default reports directory (`~/.zypheron/reports`)
-- `error`: Error if unable to determine home directory
+```go
+manager, _ := session.NewSessionManager()
+summaries, _ := manager.ListSessions()
+
+for _, summary := range summaries {
+    sess, err := manager.Load(summary.SessionID)
+    if err != nil {
+        continue
+    }
+    reports.GenerateReport(sess, "")
+}
+```
+
+### CLI Integration (Cobra)
+
+```go
+var exportCmd = &cobra.Command{
+    Use:   "export [session-id]",
+    Short: "Export scan report to JSON",
+    Args:  cobra.ExactArgs(1),
+    RunE: func(cmd *cobra.Command, args []string) error {
+        manager, _ := session.NewSessionManager()
+        sess, err := manager.Load(args[0])
+        if err != nil {
+            return fmt.Errorf("session not found: %s", args[0])
+        }
+
+        outputPath, _ := cmd.Flags().GetString("output")
+        if outputPath == "" {
+            return reports.GenerateReport(sess, "")
+        }
+        return reports.ExportJSON(sess, outputPath)
+    },
+}
+```
+
+### Parse Exported Reports
+
+```bash
+# With jq
+cat report.json | jq '.summary'
+cat report.json | jq '.vulnerabilities[] | select(.severity=="critical")'
+```
+
+```go
+data, _ := os.ReadFile("report.json")
+var report reports.Report
+json.Unmarshal(data, &report)
+
+for _, vuln := range report.Vulnerabilities {
+    if vuln.Severity == "critical" {
+        fmt.Printf("CRITICAL: %s (CVSS %.1f)\n", vuln.Title, vuln.CVSSScore)
+    }
+}
+```
 
 ## Error Handling
-
-All functions return descriptive errors that can be checked and handled:
 
 ```go
 err := reports.ExportJSON(sess, outputPath)
 if err != nil {
     switch {
     case strings.Contains(err.Error(), "session cannot be nil"):
-        log.Println("Invalid session provided")
+        // Invalid session
     case strings.Contains(err.Error(), "failed to create output directory"):
-        log.Println("Permission denied or invalid path")
+        // Permission denied or invalid path
     case strings.Contains(err.Error(), "failed to write"):
-        log.Println("Disk full or permission issue")
-    default:
-        log.Printf("Unexpected error: %v", err)
+        // Disk full or write error
     }
 }
+```
+
+## Auto-Export After Scan
+
+Add automatic report generation to scan commands:
+
+```go
+func runScan(cmd *cobra.Command, args []string) error {
+    // ... scan execution ...
+    sess.Complete()
+
+    if autoExport {
+        if err := reports.GenerateReport(sess, ""); err != nil {
+            fmt.Fprintf(os.Stderr, "Warning: Failed to export report: %v\n", err)
+        } else {
+            defaultPath, _ := reports.GetDefaultReportPath()
+            fmt.Printf("Report saved to: %s\n", defaultPath)
+        }
+    }
+    return nil
+}
+```
+
+## Configuration Integration
+
+Add report settings to `~/.zypheron/config.yaml`:
+
+```yaml
+reports:
+  auto_export: true
+  output_directory: ~/.zypheron/reports
+  include_raw_output: true
+```
+
+## Parallel Export
+
+For large numbers of sessions:
+
+```go
+var wg sync.WaitGroup
+for _, id := range sessionIDs {
+    wg.Add(1)
+    go func(id string) {
+        defer wg.Done()
+        sess, _ := manager.Load(id)
+        reports.GenerateReport(sess, "")
+    }(id)
+}
+wg.Wait()
 ```
 
 ## File Permissions
 
-- Report directories are created with `0755` permissions
-- Report files are written with `0644` permissions (read/write for owner, read for others)
+- Report directories: `0755`
+- Report files: `0644`
 
-## Advanced Usage
+## File Locations
 
-### Programmatic Report Processing
-
-Since reports are in JSON format, they can be easily parsed and processed:
-
-```go
-import (
-    "encoding/json"
-    "os"
-)
-
-type Report struct {
-    Metadata        ReportMetadata       `json:"metadata"`
-    Summary         ReportSummary        `json:"summary"`
-    Vulnerabilities []Vulnerability      `json:"vulnerabilities"`
-}
-
-data, _ := os.ReadFile("report.json")
-var report Report
-json.Unmarshal(data, &report)
-
-// Process vulnerabilities
-for _, vuln := range report.Vulnerabilities {
-    if vuln.Severity == "critical" {
-        // Handle critical vulnerabilities
-    }
-}
+```
+~/.zypheron/
++-- sessions/          # Session storage
++-- reports/           # Exported reports
+    +-- report_<id>_<timestamp>.json
 ```
 
-## Design Philosophy
+## Testing
 
-This package follows these principles:
+```bash
+go test -v ./internal/reports/
+go test -cover ./internal/reports/
+```
 
-1. **Simplicity**: JSON-only export keeps the codebase minimal and maintainable
-2. **Automation-Friendly**: Structured JSON output is easy to parse and integrate with other tools
-3. **Security-Conscious**: Restrictive file permissions protect sensitive scan data
-4. **Convention Over Configuration**: Sensible defaults minimize configuration needs
-5. **Error Transparency**: Clear error messages aid in debugging and troubleshooting
+## Dependencies
 
-## Future Considerations
+- Standard library: `encoding/json`, `fmt`, `os`, `path/filepath`, `time`
+- Internal: `github.com/KKingZero/Cobra-AI/zypheron-go/internal/session`
 
-For users requiring additional export formats (HTML, Markdown, PDF), consider the enterprise version or implement custom formatters using the JSON output as a base.
+No external dependencies.

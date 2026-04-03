@@ -45,7 +45,7 @@ bash ./setup-hybrid.sh
 - [../docs/INSTALL.md](../docs/INSTALL.md)
 - [../docs/SETUP_AND_USE.md](../docs/SETUP_AND_USE.md)
 - [../docs/AI_GUIDE.md](../docs/AI_GUIDE.md)
-- [../docs/GO_GUIDE.md](../docs/GO_GUIDE.md)
+- [../docs/CLI_REFERENCE.md](../docs/CLI_REFERENCE.md)
 
 ## Notes
 

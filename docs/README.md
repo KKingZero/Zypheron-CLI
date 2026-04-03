@@ -1,36 +1,50 @@
 # Zypheron Documentation
 
-This directory contains the active user-facing documentation for Zypheron CLI.
-
-## Start Here
+## Getting Started
 
 | Document | Description |
-|---|---|
-| [INSTALL.md](INSTALL.md) | Current install paths, requirements, and post-install checks |
-| [SETUP_AND_USE.md](SETUP_AND_USE.md) | First-time setup and day-to-day CLI usage |
-| [AI_GUIDE.md](AI_GUIDE.md) | AI engine, provider setup, and model behavior |
+|----------|-------------|
+| [INSTALL.md](INSTALL.md) | Install from source or release binary |
+| [SETUP_AND_USE.md](SETUP_AND_USE.md) | First-time config and daily workflows |
+| [API_KEY_SETUP.md](../API_KEY_SETUP.md) | Configure AI provider keys |
 
-## Reference
-
-| Document | Description |
-|---|---|
-| [GO_GUIDE.md](GO_GUIDE.md) | Broad Go CLI command reference |
-| [MCP_INTEGRATION.md](MCP_INTEGRATION.md) | MCP integration for external AI clients |
-| [TOOL_CHAINS.md](TOOL_CHAINS.md) | Toolchain-oriented workflows |
-| [CLI_GUIDE.md](CLI_GUIDE.md) | Additional CLI usage material |
-
-## Project Docs
+## CLI Reference
 
 | Document | Description |
-|---|---|
-| [../README.md](../README.md) | Main project README |
-| [../CHANGELOG.md](../CHANGELOG.md) | Release history |
-| [../HELP.md](../HELP.md) | Troubleshooting |
-| [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | Community guidelines |
+|----------|-------------|
+| [CLI_REFERENCE.md](CLI_REFERENCE.md) | Commands, flags, and examples |
+| [TOOL_CHAINS.md](TOOL_CHAINS.md) | Tool chain workflows |
+| [MCP_INTEGRATION.md](MCP_INTEGRATION.md) | MCP for external AI clients |
 
-## Notes
+## AI Engine
 
-- Some files in `docs/archive/` are historical and may not reflect the current product state.
-- Some older planning files in the repository are historical and may not reflect the current OSS direction.
-- For the current install flow, prefer [INSTALL.md](INSTALL.md) and the root [README.md](../README.md).
-- For command truth, prefer `zypheron --help` and `zypheron <command> --help` for your current build.
+| Document | Description |
+|----------|-------------|
+| [AI_GUIDE.md](AI_GUIDE.md) | Provider setup, model config, Ollama |
+
+## API Service (Self-Hosted)
+
+| Document | Description |
+|----------|-------------|
+| [API Overview](../zypheron-api/README.md) | Quick start, setup, testing |
+| [Database](../zypheron-api/DATABASE.md) | SQLite/Postgres setup and migration |
+| [Auth](../zypheron-api/AUTH.md) | Device auth, OAuth, BYOK |
+| [AI Proxy](../zypheron-api/AI_PROXY.md) | AI proxy setup and security |
+| [Redis](../zypheron-api/REDIS.md) | Redis setup and config |
+| [Rate Limiting](../zypheron-api/RATE_LIMITING.md) | Rate limiting configuration |
+| [Key Rotation](../zypheron-api/KEY_ROTATION.md) | Encryption key rotation |
+| [Ollama](../zypheron-api/OLLAMA.md) | Ollama provider for the API |
+
+## Project
+
+| Document | Description |
+|----------|-------------|
+| [Changelog](CHANGELOG.md) | Release history |
+| [Troubleshooting](../HELP.md) | Common issues and fixes |
+| [Security Policy](../SECURITY.md) | Vulnerability reporting |
+| [Code of Conduct](../CODE_OF_CONDUCT.md) | Community guidelines |
+
+---
+
+For command truth, use `zypheron --help` and `zypheron <command> --help`.
+Historical docs are in `archive/` subdirectories.

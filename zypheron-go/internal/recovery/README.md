@@ -1,44 +1,43 @@
 # Recovery Package
 
-Robust error recovery and resilience patterns for the Zypheron CLI.
+Production-grade error recovery and resilience patterns for the Zypheron CLI.
 
-## Overview
-
-The recovery package provides production-grade error handling mechanisms:
+## Features
 
 - **Panic Recovery**: Graceful panic handling with stack trace logging
 - **Retry Mechanism**: Exponential backoff retry for transient failures
 - **Circuit Breaker**: Fail-fast pattern for external service failures
-- **Error Logging**: Centralized error logging to `~/.zypheron/logs/errors.log`
+- **Error Logging**: Centralized logging to `~/.zypheron/logs/errors.log`
+- **Thread-Safe**: All operations safe for concurrent use
 
-## Features
+## Quick Start
 
-### 1. Panic Recovery
-
-Wraps functions to catch panics and prevent application crashes.
+### Panic Recovery
 
 ```go
+import "github.com/KKingZero/Cobra-AI/zypheron-go/internal/recovery"
+
+// Simple recovery
 recovery.Recover(func() {
-    // Potentially panicking code
     riskyOperation()
 })
+
+// Middleware pattern (returns error instead of panicking)
+wrapped := recovery.RecoveryMiddleware(func() error {
+    return riskyOperation()
+})
+if err := wrapped(); err != nil {
+    log.Printf("Operation failed: %v", err)
+}
 ```
 
-**Security features:**
-- Stack trace captured and logged
-- Panic details sanitized before logging
-- No sensitive data exposed to stdout
-- Thread-safe logging with atomic file operations
-
-### 2. Retry Mechanism
-
-Executes functions with automatic retry and exponential backoff.
+### Retry with Exponential Backoff
 
 ```go
 config := recovery.RetryConfig{
-    MaxRetries:   5,
-    InitialDelay: 500 * time.Millisecond,
-    MaxDelay:     10 * time.Second,
+    MaxRetries:   3,
+    InitialDelay: 100 * time.Millisecond,
+    MaxDelay:     5 * time.Second,
     Multiplier:   2.0,
     OnRetry: func(attempt int, err error) {
         log.Printf("Retry %d: %v", attempt, err)
@@ -50,28 +49,13 @@ err := recovery.WithRetry(func() error {
 }, config)
 ```
 
-**Use cases:**
-- AI API calls (DeepSeek, OpenAI, etc.)
-- Network requests (HTTP, DNS lookups)
-- Database queries
-- File I/O operations
-- Temporary service unavailability
-
-**Security features:**
-- Capped maximum retries (prevents infinite loops)
-- Capped maximum delay (prevents resource exhaustion)
-- Retry attempts logged for auditing
-- Input validation and sanitization
-
-### 3. Circuit Breaker
-
-Implements the circuit breaker pattern to prevent cascading failures.
+### Circuit Breaker
 
 ```go
 cb := recovery.NewCircuitBreaker(recovery.CircuitBreakerConfig{
     Name:      "external-api",
     Threshold: 5,                // Open after 5 failures
-    Timeout:   30 * time.Second, // Retry after 30 seconds
+    Timeout:   30 * time.Second, // Retry after 30s
     OnStateChange: func(from, to recovery.CircuitState) {
         log.Printf("Circuit: %s -> %s", from, to)
     },
@@ -82,408 +66,186 @@ err := cb.Execute(func() error {
 })
 
 if errors.Is(err, recovery.ErrCircuitOpen) {
-    // Service is down, use fallback
-    useCachedData()
+    useCachedData() // Fallback
 }
 ```
 
-**Circuit States:**
-- **Closed**: Normal operation, requests pass through
-- **Open**: Service failing, requests fail immediately (fail-fast)
-- **Half-Open**: Testing if service has recovered
+**Circuit states:**
+- **Closed** -- normal operation, requests pass through
+- **Open** -- service failing, requests fail immediately
+- **Half-Open** -- testing if service has recovered
 
-**Use cases:**
-- External vulnerability databases
-- AI service endpoints
-- Metasploit RPC connections
-- Third-party security APIs
-- Slow or unreliable services
-
-**Security features:**
-- Thread-safe state management (atomic operations)
-- Bounded failure counting
-- Automatic recovery testing
-- State transitions logged
-- Prevents cascade failures
-
-### 4. Recovery Middleware
-
-Wraps functions with both panic recovery and error handling.
+### Combined: Retry + Circuit Breaker
 
 ```go
-handler := recovery.RecoveryMiddleware(func() error {
-    return executeCommand()
+cb := recovery.NewCircuitBreaker(recovery.CircuitBreakerConfig{
+    Name: "ai-api", Threshold: 3, Timeout: 30 * time.Second,
 })
 
-if err := handler(); err != nil {
-    log.Printf("Command failed: %v", err)
-}
-```
-
-**Use cases:**
-- CLI command handlers
-- HTTP request handlers
-- Background job processors
-- Event handlers in TUI
-
-## Architecture
-
-### Error Logging
-
-All errors and panics are logged to `~/.zypheron/logs/errors.log` with timestamps:
-
-```
-[2024-01-18 10:30:45 UTC] PANIC RECOVERED: runtime error: nil pointer dereference
-Stack Trace:
-goroutine 1 [running]:
-...
-```
-
-**Log file permissions:**
-- Directory: `0755` (rwxr-xr-x)
-- Log file: `0644` (rw-r--r--)
-
-### Thread Safety
-
-All components are fully thread-safe:
-- Atomic operations for state management
-- Mutex-protected critical sections
-- Lock-free reads where possible
-- No data races (verified with `-race` flag)
-
-### Security Considerations
-
-#### Input Validation
-- Retry count capped at 100 (prevents DoS)
-- Delay values capped at 5 minutes (prevents resource exhaustion)
-- Circuit threshold capped at 1000 (prevents excessive memory usage)
-- All file paths validated as absolute (prevents directory traversal)
-
-#### Panic Handling
-- Stack traces contain no sensitive data (safe to log)
-- Panic messages sanitized before logging
-- No user-controlled panic messages
-- Atomic file operations prevent log corruption
-
-#### Circuit Breaker
-- Lock-free state reads for performance
-- Bounded failure counting
-- Automatic timeout to prevent indefinite open state
-- State transitions logged for security auditing
-
-## Integration with Zypheron
-
-### TUI Integration
-
-The recovery package complements the existing TUI recovery system:
-
-- `/internal/tui/recovery/recovery.go` - TUI-specific (Bubble Tea programs)
-- `/internal/recovery/recovery.go` - General purpose (all components)
-
-Use both for comprehensive protection:
-
-```go
-// TUI program with full protection
-program := tea.NewProgram(model)
-err := tuirecovery.RecoverableRun(program)
-
-// Internal TUI updates with panic recovery
-recovery.Recover(func() {
-    updateProgressBar()
-    updateScanResults()
-})
-```
-
-### AI Bridge Integration
-
-Protect AI service calls with retry and circuit breaker:
-
-```go
-// Create circuit breaker for AI service
-aiCircuit := recovery.NewCircuitBreaker(recovery.CircuitBreakerConfig{
-    Name:      "ai-service",
-    Threshold: 3,
-    Timeout:   20 * time.Second,
-})
-
-// Retry configuration for transient failures
 retryConfig := recovery.RetryConfig{
-    MaxRetries:   5,
-    InitialDelay: 500 * time.Millisecond,
-    MaxDelay:     10 * time.Second,
-    Multiplier:   2.0,
+    MaxRetries: 2, InitialDelay: 200 * time.Millisecond,
+    MaxDelay: 2 * time.Second, Multiplier: 2.0,
 }
 
-// Combined protection
-err := recovery.WithRetry(func() error {
-    return aiCircuit.Execute(func() error {
-        return aibridge.CallAI(request)
-    })
-}, retryConfig)
+err := cb.Execute(func() error {
+    return recovery.WithRetry(func() error {
+        return callAIService()
+    }, retryConfig)
+})
 ```
 
-### Tool Execution Integration
+## Use Cases in Zypheron
 
-Wrap security tool execution to prevent crashes:
+### Tool Execution
 
 ```go
-// Protect tool execution
 recovery.Recover(func() {
     executor.RunTool("nmap", args)
 })
-
-// With error handling
-wrapped := recovery.RecoveryMiddleware(func() error {
-    return executor.RunTool("sqlmap", args)
-})
-
-if err := wrapped(); err != nil {
-    log.Printf("Tool execution failed: %v", err)
-}
 ```
 
-## Performance
-
-### Benchmarks
-
-```
-BenchmarkRecover-8                  5000000    250 ns/op
-BenchmarkCircuitBreakerClosed-8    10000000    120 ns/op
-BenchmarkCircuitBreakerOpen-8      20000000     60 ns/op
-```
-
-**Performance characteristics:**
-- Panic recovery: ~250ns overhead
-- Circuit breaker (closed): ~120ns overhead
-- Circuit breaker (open): ~60ns overhead (fail-fast)
-- Lock-free reads for circuit state
-- Minimal allocation overhead
-
-### Memory Usage
-
-- Circuit breaker: ~200 bytes per instance
-- Retry configuration: ~100 bytes
-- No heap allocations in hot path (closed circuit)
-- Atomic operations prevent lock contention
-
-## Error Types
-
-### Circuit Breaker Errors
+### AI Service Calls
 
 ```go
-// Circuit is open
-var ErrCircuitOpen = errors.New("circuit breaker is open")
+aiCircuit := recovery.NewCircuitBreaker(recovery.CircuitBreakerConfig{
+    Name: "deepseek-api", Threshold: 5, Timeout: 60 * time.Second,
+})
 
-// Check for circuit open
-if errors.Is(err, recovery.ErrCircuitOpen) {
-    // Use fallback mechanism
-}
+err := aiCircuit.Execute(func() error {
+    return recovery.WithRetry(func() error {
+        return aibridge.Query(prompt)
+    }, recovery.RetryConfig{
+        MaxRetries: 3, InitialDelay: 500 * time.Millisecond,
+        MaxDelay: 10 * time.Second, Multiplier: 2.0,
+    })
+})
 ```
 
-### Integration with Zypheron Errors
-
-Works seamlessly with `/internal/errors/errors.go`:
+### Database Operations
 
 ```go
 err := recovery.WithRetry(func() error {
-    return errors.NetworkError("connection failed")
-}, config)
-
-// Check error type
-if errors.IsType(err, errors.ErrorTypeNetwork) {
-    // Handle network error
-}
+    return db.SaveScanResults(results)
+}, recovery.RetryConfig{
+    MaxRetries: 5, InitialDelay: 100 * time.Millisecond,
+    MaxDelay: 2 * time.Second, Multiplier: 2.0,
+})
 ```
 
 ## Configuration
 
 ### Log Directory
 
-Configure custom log directory:
-
 ```go
-recovery.SetLogDirectory("/var/log/zypheron")
+recovery.SetLogDirectory("/var/log/zypheron")  // Must be absolute path
 ```
 
-**Security notes:**
-- Only accepts absolute paths
-- Relative paths silently rejected (prevents directory traversal)
-- Directory created with 0755 permissions
-- Thread-safe configuration
+Default: `~/.zypheron/logs/errors.log`
+
+### Recommended Retry Configs
+
+| Use Case | MaxRetries | InitialDelay | MaxDelay |
+|----------|-----------|--------------|----------|
+| Network operations | 3 | 100ms | 2s |
+| AI API calls | 5 | 500ms | 10s |
+| Database queries | 3 | 50ms | 1s |
 
 ### Circuit Breaker Tuning
 
-Recommended configurations:
+| Use Case | Threshold | Timeout |
+|----------|-----------|---------|
+| Fast-failing APIs | 3 | 10s |
+| Slow/flaky services | 10 | 60s |
+| Critical services | 5 | 30s |
 
-**Fast-failing APIs:**
+## Circuit Breaker API
+
 ```go
-config := recovery.CircuitBreakerConfig{
-    Threshold: 3,
-    Timeout:   10 * time.Second,
+state := cb.GetState()       // StateClosed, StateOpen, StateHalfOpen
+failures := cb.GetFailures() // Current failure count
+cb.Reset()                   // Manual reset
+```
+
+## Security Properties
+
+### Resource Limits
+- Max retries capped at 100
+- Max delay capped at 5 minutes
+- Circuit threshold capped at 1000
+- Log directory must be absolute path (prevents directory traversal)
+
+### Panic Handling
+- Stack traces logged but sanitized
+- No sensitive data in panic messages
+- Atomic file operations prevent log corruption
+
+### Thread Safety
+- Atomic operations for state management
+- Mutex-protected critical sections
+- No data races (verified with `-race` flag)
+
+### File Permissions
+- Log directories: `0755`
+- Log files: `0644`
+
+## Error Types
+
+```go
+// Circuit breaker open
+var ErrCircuitOpen = errors.New("circuit breaker is open")
+
+if errors.Is(err, recovery.ErrCircuitOpen) {
+    // Use fallback
 }
 ```
 
-**Slow/flaky services:**
+Compatible with Zypheron's error types (`internal/errors/errors.go`):
+
 ```go
-config := recovery.CircuitBreakerConfig{
-    Threshold: 10,
-    Timeout:   60 * time.Second,
+if errors.IsType(err, errors.ErrorTypeNetwork) {
+    // Handle network error
 }
 ```
 
-**Critical services:**
-```go
-config := recovery.CircuitBreakerConfig{
-    Threshold: 5,
-    Timeout:   30 * time.Second,
-    OnStateChange: func(from, to recovery.CircuitState) {
-        // Send alert on state change
-        monitoring.Alert("Service health changed")
-    },
-}
-```
+## TUI Integration
 
-### Retry Tuning
+The general-purpose recovery package complements the TUI-specific recovery:
 
-**Network operations:**
-```go
-config := recovery.RetryConfig{
-    MaxRetries:   3,
-    InitialDelay: 100 * time.Millisecond,
-    MaxDelay:     2 * time.Second,
-    Multiplier:   2.0,
-}
-```
+- `internal/tui/recovery/recovery.go` -- Bubble Tea programs
+- `internal/recovery/recovery.go` -- general purpose (this package)
 
-**AI API calls:**
-```go
-config := recovery.RetryConfig{
-    MaxRetries:   5,
-    InitialDelay: 500 * time.Millisecond,
-    MaxDelay:     10 * time.Second,
-    Multiplier:   2.0,
-}
-```
+## Best Practices
 
-**Database queries:**
-```go
-config := recovery.RetryConfig{
-    MaxRetries:   3,
-    InitialDelay: 50 * time.Millisecond,
-    MaxDelay:     1 * time.Second,
-    Multiplier:   2.0,
-}
-```
+**Panic Recovery**: Use for potentially panicking code. Do not use in tight loops (performance). Do not use as primary error handling.
+
+**Retry**: Use for transient failures only. Always use exponential backoff. Set reasonable limits. Do not retry permanent failures.
+
+**Circuit Breaker**: Use for external services. Always implement fallbacks. Monitor state changes. Do not nest circuit breakers.
+
+**Combined**: Place circuit breaker outside retry. Implement graceful degradation.
+
+## Performance
+
+| Operation | Overhead |
+|-----------|----------|
+| Panic recovery | ~250ns |
+| Circuit breaker (closed) | ~120ns |
+| Circuit breaker (open) | ~60ns |
+
+Circuit breaker instance: ~200 bytes. No heap allocations in hot path.
 
 ## Testing
-
-Run tests with race detection:
 
 ```bash
 go test -v -race ./internal/recovery/...
 ```
 
-**Test coverage:**
-- Panic recovery: ✓
-- Retry logic: ✓
-- Circuit breaker states: ✓
-- Thread safety: ✓
-- Input validation: ✓
-- Error logging: ✓
-- Edge cases: ✓
-
-## Examples
-
-See `example_usage.go` for comprehensive usage examples:
-- AI service integration
-- Network request retry
-- Vulnerability database circuit breaker
-- Metasploit RPC protection
-- TUI update safety
-- Tool execution wrapping
-- Graceful degradation patterns
-
-## Best Practices
-
-### 1. Panic Recovery
-
-**DO:**
-- Use for potentially panicking code
-- Log panics for debugging
-- Continue execution after recovery
-
-**DON'T:**
-- Ignore recovered panics
-- Use as primary error handling
-- Recover panics in tight loops (performance impact)
-
-### 2. Retry Mechanism
-
-**DO:**
-- Use for transient failures
-- Implement exponential backoff
-- Set reasonable retry limits
-- Log retry attempts
-
-**DON'T:**
-- Retry on permanent failures
-- Use for local operations
-- Set excessive retry counts
-- Retry without backoff
-
-### 3. Circuit Breaker
-
-**DO:**
-- Use for external services
-- Monitor circuit state
-- Implement fallback mechanisms
-- Tune threshold and timeout
-
-**DON'T:**
-- Use for local operations
-- Ignore ErrCircuitOpen
-- Set threshold too low (false opens)
-- Set timeout too short (prevents recovery)
-
-### 4. Combined Patterns
-
-**DO:**
-- Combine retry + circuit breaker for critical paths
-- Use circuit breaker outside retry
-- Implement graceful degradation
-- Monitor and alert on state changes
-
-**DON'T:**
-- Nest circuit breakers
-- Retry when circuit is open
-- Ignore circuit state in monitoring
+See `example_usage.go` and `integration_example.go` for comprehensive examples.
 
 ## Troubleshooting
 
-### High retry counts
-- Check if error is permanent (don't retry)
-- Verify service availability
-- Reduce MaxRetries
-- Implement circuit breaker
+**High retry counts**: Check if error is permanent (do not retry). Reduce MaxRetries. Add a circuit breaker.
 
-### Circuit stuck open
-- Verify service is actually down
-- Check timeout configuration
-- Review threshold settings
-- Monitor service health
+**Circuit stuck open**: Verify service availability. Check timeout configuration. Review threshold settings.
 
-### Excessive logging
-- Review log rotation
-- Reduce retry counts
-- Implement log sampling
-- Check for panic loops
-
-### Performance issues
-- Profile retry delays
-- Check circuit breaker overhead
-- Verify no lock contention
-- Review panic recovery usage
-
-## License
-
-Part of the Zypheron CLI project.
+**Excessive logging**: Review log rotation. Reduce retry counts. Check for panic loops.

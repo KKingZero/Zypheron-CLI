@@ -58,6 +58,23 @@ The release installer:
 - verifies checksums when local checksum tools are available
 - installs the `zypheron` binary into the target directory
 
+## Cross-Platform Builds
+
+If building from source for a different platform:
+
+```bash
+cd zypheron-go
+
+# Linux AMD64
+GOOS=linux GOARCH=amd64 go build -o zypheron-linux-amd64 ./cmd/zypheron
+
+# macOS ARM64 (M1/M2)
+GOOS=darwin GOARCH=arm64 go build -o zypheron-darwin-arm64 ./cmd/zypheron
+
+# Windows AMD64
+GOOS=windows GOARCH=amd64 go build -o zypheron-windows-amd64.exe ./cmd/zypheron
+```
+
 ## System Requirements
 
 Minimum requirements:

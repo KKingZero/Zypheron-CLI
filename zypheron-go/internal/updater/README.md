@@ -213,7 +213,7 @@ All errors are non-fatal - the app continues if update check fails.
 
 The updater uses GitHub's REST API v3:
 
-- Endpoint: `https://api.github.com/repos/KKingZero/Cobra-AI/releases/latest`
+- Endpoint: `https://api.github.com/repos/KKingZero/Zypheron-CLI/releases/latest`
 - Auth: Optional via `GITHUB_TOKEN` environment variable
 - Rate limit: 60/hour (unauthenticated), 5000/hour (authenticated)
 - Timeout: 10 seconds

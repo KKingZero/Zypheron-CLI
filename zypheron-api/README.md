@@ -1,106 +1,147 @@
 # Zypheron API
 
-FastAPI service components for Zypheron.
-
-This service should be treated as local-first and self-hostable by default. It exists to support the OSS CLI, not as a hosted commercial product layer.
-
-## Current Scope
-
-The active API scope is:
-
-- authentication and session flows
-- device registration
-- AI proxy and provider key handling
-- token and usage tracking for runtime visibility
-- monitoring and health endpoints
-- real-time scan updates over WebSocket
-
-Optional infrastructure:
-
-- SQLite by default
-- PostgreSQL optional
-- Redis optional
-- Prometheus optional
+FastAPI backend for Zypheron. Local-first and self-hostable by default. Supports the OSS CLI with authentication, device registration, AI proxy, token tracking, and real-time scan updates.
 
 ## Quick Start
 
 ```bash
+cd zypheron-api
 cp .env.example .env
-python3 -m venv .venv
-source .venv/bin/activate
-../scripts/setup_api_test_env.sh --allow-online
+openssl rand -hex 32  # Generate JWT secret, add to .env as JWT_SECRET_KEY
+```
+
+Set minimum environment variables in `.env`:
+
+```bash
+DEBUG=true
+ENVIRONMENT=development
+JWT_SECRET_KEY=<your-generated-secret>
+DATABASE_TYPE=sqlite
+DATABASE_URL=sqlite+aiosqlite:///./zypheron.db
+```
+
+Install and run:
+
+```bash
+# With Poetry
+poetry install
+./run.sh
+
+# Or with pip
+pip install -e .
 uvicorn app.main:app --reload
 ```
 
-Useful endpoints:
+Verify:
 
-- API: `http://localhost:8000`
-- Docs: `http://localhost:8000/docs`
-- Health: `http://localhost:8000/health`
-- AI health: `http://localhost:8000/ai/health`
+```bash
+curl http://localhost:8000/health
+```
+
+- API docs: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- Health: http://localhost:8000/health
 
 ## API Areas
 
-### Authentication
+### Authentication (`/auth`)
 
-- `/auth/register`
-- `/auth/login`
-- `/auth/logout`
-- `/auth/me`
-- GitHub OAuth endpoints when configured
+- `POST /auth/register` - Create account
+- `POST /auth/login` - Login, receive JWT
+- `POST /auth/logout` - Invalidate session
+- `GET /auth/me` - Current user info
+- `GET /auth/github` - GitHub OAuth flow
+- Device code flow for CLI authentication
 
-### Devices
+### Devices (`/devices`)
 
-- register, list, update, delete, heartbeat
+- Register, list, update, delete, heartbeat
 
-### AI
+### AI Proxy (`/ai`)
 
-- proxied chat completion
-- BYOK provider key storage
-- provider key listing and deletion
+- `POST /ai/chat` - Proxied chat completion (streaming supported)
+- `GET /ai/providers` - List available providers
+- `POST /ai/validate-key` - Validate BYOK key
+- `GET /ai/health` - Provider health status
 
-### Tokens and usage
+### BYOK (`/byok`)
 
-- usage summary
-- remaining quota
-- usage history
+- Store, list, validate, delete user API keys
+
+### Tokens & Usage (`/tokens`)
+
+- Usage summary, remaining quota, usage history
 
 ### Monitoring
 
-- `/health`
-- `/metrics`
+- `GET /health` - Health check
+- `GET /metrics` - Prometheus metrics (when configured)
 
 ### WebSocket
 
-- real-time scan updates
+- `WS /ws/scans/{user_id}` - Real-time scan updates
 
-## Notes
+## Infrastructure
 
-- Some legacy API paths may still exist in the repository for historical reasons, but they are not part of the intended OSS product direction.
-- Prefer the CLI/runtime docs in the repo root and `docs/` for the main product path.
+| Component | Default | Optional |
+|-----------|---------|----------|
+| Database | SQLite | PostgreSQL, Supabase |
+| Cache / Rate Limiting | None | Redis |
+| Metrics | None | Prometheus |
+
+## Prerequisites
+
+- Python 3.11+
+- Poetry or pip
+- SQLite (included, no setup)
+- Docker (optional, for PostgreSQL/Redis)
 
 ## Testing
 
 ```bash
-../scripts/setup_api_test_env.sh --allow-online
-source .venv/bin/activate
-pytest -v
+# Run all tests
+poetry run pytest
+
+# Run specific test files
+poetry run pytest tests/test_auth.py
+poetry run pytest tests/test_devices.py
+poetry run pytest tests/test_tokens.py
 ```
+
+### Smoke Test
+
+1. Start the server
+2. `curl http://localhost:8000/health`
+3. Register a user via `/auth/register`
+4. Login and check `/auth/me`
+5. Register a device
+6. Verify `/tokens/usage` works for the authenticated user
 
 ## Security
 
-Implemented protections include:
+- Redirect validation and error sanitization
+- JWT with configurable expiry
+- Rate limiting (Redis-backed, tier-based)
+- Fernet encryption for stored provider keys
+- API key scrubbing in logs and error messages
+- Input validation (size limits, type checking)
+- Optional metrics auth
 
-- redirect validation
-- webhook idempotency helpers where still needed
-- error sanitization
-- JWT expiry
-- rate limiting when Redis is enabled
-- encryption for stored provider keys
-- optional metrics auth
+## Documentation
+
+| File | Topic |
+|------|-------|
+| [DATABASE.md](DATABASE.md) | SQLite/PostgreSQL setup, migration, management |
+| [REDIS.md](REDIS.md) | Redis setup, configuration, common commands |
+| [AI_PROXY.md](AI_PROXY.md) | AI proxy setup, providers, load balancing |
+| [AUTH.md](AUTH.md) | Device auth, GitHub OAuth, BYOK setup |
+| [RATE_LIMITING.md](RATE_LIMITING.md) | Global and per-provider rate limits |
+| [KEY_ROTATION.md](KEY_ROTATION.md) | Encryption key rotation procedure |
+| [OLLAMA.md](OLLAMA.md) | Local LLM provider setup |
+| [app/websocket/README.md](app/websocket/README.md) | WebSocket implementation |
 
 ## See Also
 
-- [../README.md](../README.md)
-- [../docs/AI_GUIDE.md](../docs/AI_GUIDE.md)
-- [../docs/INSTALL.md](../docs/INSTALL.md)
+- [../README.md](../README.md) - Project root
+- [../docs/AI_GUIDE.md](../docs/AI_GUIDE.md) - AI usage guide
+- [../docs/INSTALL.md](../docs/INSTALL.md) - Installation guide

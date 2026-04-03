@@ -33,6 +33,7 @@ Please include the following in your report:
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 2.x.x   | :white_check_mark: |
 | 1.x.x   | :white_check_mark: |
 | < 1.0   | :x:                |
 
@@ -165,7 +166,7 @@ We thank the following researchers for responsibly disclosing security issues:
 
 - **Security Issues**: security@zypheron.io
 - **General Questions**: team@zypheron.io
-- **GitHub**: https://github.com/KKingZero/Cobra-AI
+- **GitHub**: https://github.com/KKingZero/Zypheron-CLI
 
 ---
 

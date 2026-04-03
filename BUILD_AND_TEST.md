@@ -14,7 +14,7 @@ Required:
 
 Recommended for runtime validation:
 
-- a working Python virtual environment under `zypheron-ai/.venv`
+- a working Python virtual environment under `zypheron-ai/venv`
 - local model runtime such as Ollama, or hosted provider keys
 - local security tools you intend to exercise, such as `nmap`, `httpx`, `sqlmap`, `nuclei`, `nikto`
 
@@ -44,8 +44,8 @@ Or manually:
 
 ```bash
 cd zypheron-ai
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
 ```
 
 ## Global Install
@@ -83,7 +83,7 @@ Targeted runtime and integration tests:
 
 ```bash
 cd zypheron-ai
-.venv/bin/python -m pytest -o addopts='' \
+venv/bin/python -m pytest -o addopts='' \
   tests/test_query_engine.py \
   tests/test_server.py \
   tests/test_mcp_shared_tools.py \
@@ -103,7 +103,7 @@ go test -exec /bin/true ./internal/aibridge ./internal/commands ./internal/tui/.
 
 ```bash
 cd zypheron-ai
-.venv/bin/python -m compileall autopent mcp_interface tools/registry.py
+venv/bin/python -m compileall autopent mcp_interface tools/registry.py
 ```
 
 ## Dynamic Smoke Tests
@@ -138,7 +138,7 @@ Direct Python runner:
 
 ```bash
 cd zypheron-ai
-.venv/bin/python autopent/run_autopent.py \
+venv/bin/python autopent/run_autopent.py \
   --target 127.0.0.1 \
   --objective "obtain admin" \
   --session-id smoke_autopent

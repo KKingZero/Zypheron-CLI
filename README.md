@@ -12,7 +12,7 @@
   <p>Terminal-first recon, scanning, AI-assisted workflows, and operator tooling in one open source project.</p>
 
   <p>
-    <a href="CHANGELOG.md">Changelog</a> •
+    <a href="docs/CHANGELOG.md">Changelog</a> •
     <a href="#install">Install</a> •
     <a href="#quick-start">Quick Start</a> •
     <a href="#common-commands">Commands</a> •
@@ -157,7 +157,7 @@ zypheron workflow list
 zypheron autopent example.com
 
 # Tooling and environment
-zypheron tools status
+zypheron tools check
 zypheron tools install-all --critical-only --yes
 
 # Updates
@@ -196,7 +196,7 @@ If you prefer to manage them yourself:
 
 ```bash
 ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
-zypheron tools status
+zypheron tools check
 ```
 
 ## Requirements
@@ -215,7 +215,7 @@ Kali or a similarly equipped Linux environment is recommended for heavier offens
 |---|---|
 | [docs/INSTALL.md](docs/INSTALL.md) | Installation and environment setup |
 | [docs/SETUP_AND_USE.md](docs/SETUP_AND_USE.md) | Practical setup and usage |
-| [docs/GO_GUIDE.md](docs/GO_GUIDE.md) | Go CLI reference |
+| [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) | CLI command reference |
 | [docs/AI_GUIDE.md](docs/AI_GUIDE.md) | AI providers, keys, and model behavior |
 | [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md) | MCP and integration details |
 | [docs/TOOL_CHAINS.md](docs/TOOL_CHAINS.md) | Toolchain workflows |

@@ -603,9 +603,9 @@ zypheron config validate --verbose
 
 ## 📚 Additional Resources
 
-- [CLI_GUIDE.md](CLI_GUIDE.md) - Complete command reference
-- [SETUP.md](SETUP.md) - Installation guide
-- [DEV_STATUS.md](DEV_STATUS.md) - Feature status
+- [CLI_REFERENCE.md](CLI_REFERENCE.md) - Command reference
+- [INSTALL.md](INSTALL.md) - Installation guide
+- [SETUP_AND_USE.md](SETUP_AND_USE.md) - Setup and usage
 
 ---
 

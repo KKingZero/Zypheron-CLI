@@ -1,4 +1,7 @@
-# ✅ Zypheron CLI - Go Implementation Complete
+# ✅ Zypheron CLI - Go Implementation Complete (FREE VERSION)
+
+> **⚠️ FREE VERSION**: Automated exploit execution has been removed from this version.
+> This version focuses on vulnerability discovery, scanning, and analysis.
 
 ## 🎉 Summary
 
@@ -94,7 +97,7 @@ The Zypheron CLI has been **completely rewritten in Go** from the ground up. Thi
 
 - [x] **stubs.go** - All other commands
   - setup, recon, bruteforce
-  - exploit, fuzz, osint
+  - fuzz, osint (exploit removed in FREE)
   - threat, report, dashboard, kali
 
 ### ✅ Build System
