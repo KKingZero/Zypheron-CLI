@@ -7,14 +7,16 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/platform"
 )
 
 // ToolInfo contains information about a security tool
 type ToolInfo struct {
 	Name        string
-	Command     string   // command to check existence
-	InstallCmd  string   // apt/brew install command
-	ManualURL   string   // manual install URL
+	Command     string // command to check existence
+	InstallCmd  string // apt/brew install command
+	ManualURL   string // manual install URL
 	Description string
 	Required    bool     // true = critical, false = optional
 	Categories  []string // scan, web, exploit, recon
@@ -502,6 +504,22 @@ func getToolVersion(command string) string {
 
 // GetInstallCommand returns the appropriate install command for the OS
 func GetInstallCommand(tool ToolInfo) string {
+	switch strings.ToLower(tool.Name) {
+	case "sliver":
+		return "sudo bash install-c2.sh  # optional: uses curl -fsSL https://sliver.sh/install | bash"
+	case "empire":
+		return "sudo bash install-c2.sh  # optional: apt powershell-empire, then git fallback if approved"
+	case "havoc":
+		return fmt.Sprintf("# Havoc is manual-only. Install from: %s", tool.ManualURL)
+	}
+
+	env, err := platform.DetectEnvironment()
+	if err == nil && env.IsBlackArch {
+		if pkg := blackArchToolPackage(tool); pkg != "" {
+			return fmt.Sprintf("sudo pacman -S --needed %s", pkg)
+		}
+	}
+
 	switch runtime.GOOS {
 	case "linux":
 		// Check for package manager
@@ -537,9 +555,28 @@ func GetBulkInstallCommand(tools []ToolInfo) string {
 		return ""
 	}
 
+	env, err := platform.DetectEnvironment()
 	var names []string
 	for _, t := range tools {
-		names = append(names, t.InstallCmd)
+		if hasCategory(t, "c2") {
+			continue
+		}
+		if err == nil && env.IsBlackArch {
+			if pkg := blackArchToolPackage(t); pkg != "" {
+				names = append(names, pkg)
+				continue
+			}
+		}
+		if strings.TrimSpace(t.InstallCmd) != "" {
+			names = append(names, t.InstallCmd)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+
+	if err == nil && env.IsBlackArch {
+		return fmt.Sprintf("sudo pacman -S --needed %s", strings.Join(names, " "))
 	}
 
 	switch runtime.GOOS {
@@ -560,6 +597,51 @@ func GetBulkInstallCommand(tools []ToolInfo) string {
 	}
 
 	return ""
+}
+
+func hasCategory(tool ToolInfo, category string) bool {
+	for _, candidate := range tool.Categories {
+		if strings.EqualFold(candidate, category) {
+			return true
+		}
+	}
+	return false
+}
+
+func blackArchToolPackage(tool ToolInfo) string {
+	packages := map[string]string{
+		"nmap":         "nmap",
+		"nikto":        "nikto",
+		"nuclei":       "nuclei",
+		"httpx":        "httpx",
+		"katana":       "katana",
+		"gau":          "gau",
+		"waybackurls":  "waybackurls",
+		"assetfinder":  "assetfinder",
+		"gobuster":     "gobuster",
+		"ffuf":         "ffuf",
+		"feroxbuster":  "feroxbuster",
+		"dirsearch":    "dirsearch",
+		"wfuzz":        "wfuzz",
+		"kiterunner":   "kiterunner",
+		"sqlmap":       "sqlmap",
+		"hydra":        "hydra",
+		"masscan":      "masscan",
+		"amass":        "amass",
+		"subfinder":    "subfinder",
+		"whatweb":      "whatweb",
+		"wpscan":       "wpscan",
+		"metasploit":   "metasploit",
+		"msfconsole":   "metasploit",
+		"msf":          "metasploit",
+		"hashcat":      "hashcat",
+		"john":         "john",
+		"aircrack-ng":  "aircrack-ng",
+		"theharvester": "theharvester",
+		"dirb":         "dirb",
+		"bloodhound":   "bloodhound",
+	}
+	return packages[strings.ToLower(tool.Name)]
 }
 
 func isGoTool(name string) bool {

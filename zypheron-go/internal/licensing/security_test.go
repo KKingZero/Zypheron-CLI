@@ -3,7 +3,6 @@ package licensing
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -253,7 +252,7 @@ func TestRequireCloudAI_PaidTierAllowed(t *testing.T) {
 
 // ============ Dev Mode Bypass Security Tests ============
 
-// TestDevModeBypass_GateCheck tests that ZYPHERON_DEV bypasses gates
+// TestDevModeBypass_GateCheck verifies the build-tag-gated dev bypass behavior.
 func TestDevModeBypass_GateCheck(t *testing.T) {
 	instance = nil
 	once = sync.Once{}
@@ -263,23 +262,30 @@ func TestDevModeBypass_GateCheck(t *testing.T) {
 	m.license = &License{Tier: TierFree, Features: []Feature{}}
 	m.mu.Unlock()
 
-	// Without dev mode, should be blocked
-	err := NewGate(FeatureCloudAI).Check()
-	if err == nil {
-		t.Error("Gate should block without dev mode on free tier")
+	if isDevModeEnabled() {
+		err := NewGate(FeatureCloudAI).Check()
+		if err != nil {
+			t.Errorf("Gate should allow with devmode build tag, got: %v", err)
+		}
+		return
 	}
 
-	// With dev mode, should be allowed
-	os.Setenv("ZYPHERON_DEV", "1")
-	defer os.Unsetenv("ZYPHERON_DEV")
+	// Without a devmode build, should be blocked.
+	err := NewGate(FeatureCloudAI).Check()
+	if err == nil {
+		t.Error("Gate should block without devmode build tag on free tier")
+	}
+
+	// A production build must not enable feature bypass from environment alone.
+	t.Setenv("ZYPHERON_DEV", "1")
 
 	err = NewGate(FeatureCloudAI).Check()
-	if err != nil {
-		t.Errorf("Gate should allow with ZYPHERON_DEV=1, got: %v", err)
+	if err == nil {
+		t.Error("Gate should block when only ZYPHERON_DEV=1 is set in a production build")
 	}
 }
 
-// TestDevModeBypass_TokenDeduction tests that ZYPHERON_DEV bypasses token deduction
+// TestDevModeBypass_TokenDeduction verifies the build-tag-gated token bypass behavior.
 func TestDevModeBypass_TokenDeduction(t *testing.T) {
 	instance = nil
 	once = sync.Once{}
@@ -292,18 +298,27 @@ func TestDevModeBypass_TokenDeduction(t *testing.T) {
 	}
 	m.mu.Unlock()
 
-	os.Setenv("ZYPHERON_DEV", "1")
-	defer os.Unsetenv("ZYPHERON_DEV")
+	if isDevModeEnabled() {
+		err := m.DeductTokens(1000, TokenUsage{Action: "test"})
+		if err != nil {
+			t.Errorf("DeductTokens should be bypassed with devmode build tag, got: %v", err)
+		}
 
-	// Should succeed even with 0 tokens in dev mode
-	err := m.DeductTokens(1000, TokenUsage{Action: "test"})
-	if err != nil {
-		t.Errorf("DeductTokens should be bypassed in dev mode, got: %v", err)
+		if m.License().TokensRemaining != 0 {
+			t.Error("Tokens should not change in dev mode")
+		}
+		return
 	}
 
-	// Tokens should remain unchanged
+	// A production build must not enable token bypass from environment alone.
+	t.Setenv("ZYPHERON_DEV", "1")
+	err := m.DeductTokens(1000, TokenUsage{Action: "test"})
+	if err == nil {
+		t.Error("DeductTokens should fail when only ZYPHERON_DEV=1 is set in a production build")
+	}
+
 	if m.License().TokensRemaining != 0 {
-		t.Error("Tokens should not change in dev mode")
+		t.Error("Tokens should not change after failed deduction")
 	}
 }
 

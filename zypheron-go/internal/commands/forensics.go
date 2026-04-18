@@ -22,14 +22,14 @@ import (
 // ForensicsCmd returns the forensics command
 func ForensicsCmd() *cobra.Command {
 	var (
-		target     string
-		tool       string
-		chain      string
-		stream     bool
-		timeout    int
-		output     string
-		assumeYes  bool
-		noInput    bool
+		target    string
+		tool      string
+		chain     string
+		stream    bool
+		timeout   int
+		output    string
+		assumeYes bool
+		noInput   bool
 	)
 
 	cmd := &cobra.Command{
@@ -78,17 +78,8 @@ func ForensicsCmd() *cobra.Command {
 			fmt.Printf("%s\n", ui.Primary.Sprint("║  ZYPHERON DIGITAL FORENSICS            ║"))
 			fmt.Printf("%s\n\n", ui.Primary.Sprint("╚═══════════════════════════════════════╝"))
 
-			// Detect Kali environment
-			fmt.Println(ui.InfoMsg("Detecting Kali environment..."))
-			env, err := kali.DetectEnvironment()
-			if err != nil {
+			if _, err := printSecurityEnvironment(); err != nil {
 				return err
-			}
-
-			if env.IsKali {
-				fmt.Println(ui.SuccessMsg(fmt.Sprintf("Running on Kali Linux %s", env.Version)))
-			} else {
-				fmt.Println(ui.WarningMsg("Not running on Kali Linux - some tools may not be available"))
 			}
 
 			// Detect tools
@@ -298,4 +289,3 @@ func buildForensicsArgs(tool, target string) []string {
 
 	return args
 }
-

@@ -52,8 +52,8 @@
       "invocations": [
         {
           "commandLine": "zypheron scan example.com --ports 1-1000",
-          "startTimeUtc": "2026-02-14T05:12:53Z",
-          "endTimeUtc": "2026-02-14T05:13:23Z",
+          "startTimeUtc": "2026-04-18T16:11:15Z",
+          "endTimeUtc": "2026-04-18T16:11:45Z",
           "executionSuccessful": true,
           "properties": {
             "ports": "1-1000",

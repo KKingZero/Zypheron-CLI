@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--resume", help="Resume session by ID")
     parser.add_argument("--list", action="store_true", help="List saved sessions")
     parser.add_argument("--autonomous", action="store_true", help="Full autonomous mode - AI decides all")
+    parser.add_argument("--demo", action="store_true", help="Use built-in demo findings instead of a real discovery provider")
     args = parser.parse_args()
 
     if args.list:
@@ -45,11 +46,12 @@ def main():
             session_id=args.session_id,
             save=args.save,
             autonomous=args.autonomous,
+            demo=args.demo,
         )
     )
 
 
-async def run_autopent(target, objective, session_id, save, autonomous=False):
+async def run_autopent(target, objective, session_id, save, autonomous=False, demo=False):
     orchestrator = None
     try:
         orchestrator = AutonomousOrchestrator(
@@ -57,6 +59,7 @@ async def run_autopent(target, objective, session_id, save, autonomous=False):
             initial_target=target,
             session_id=session_id,
             autonomous_mode=autonomous,
+            demo_mode=demo,
         )
 
         if autonomous:

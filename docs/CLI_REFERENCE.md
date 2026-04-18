@@ -116,6 +116,36 @@ zypheron tools install <tool> [-y]             # Install tool
 zypheron tools install-all [--critical-only]   # Install all tools
 ```
 
+Optional C2 frameworks are not installed by the main installer. To opt in:
+
+```bash
+sudo bash install-c2.sh
+```
+
+### Exploitation and C2
+
+```bash
+zypheron exploit [target] [flags]
+zypheron exploit --c2 sliver --listener mtls
+zypheron exploit --c2 empire
+zypheron exploit --c2 empire --listener http
+```
+
+**Exploit flags:**
+- `--auto` -- automated exploitation mode
+- `--manual` -- manual exploitation mode
+- `--safe-mode` -- verification-focused mode
+- `--c2 <framework>` -- sliver, empire, havoc, metasploit
+- `--listener <type>` -- listener type such as mtls, https, or http
+
+Empire uses its REST API instead of CLI arguments. Configure it with:
+
+```bash
+export EMPIRE_HOST=https://127.0.0.1:1337
+export EMPIRE_USER=<username>
+export EMPIRE_PASS=<password>
+```
+
 ### Configuration
 
 ```bash

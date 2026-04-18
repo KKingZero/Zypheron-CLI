@@ -3,6 +3,7 @@ package config_test
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/config"
 )
@@ -16,14 +17,15 @@ func ExampleSetAPIKey() {
 	}
 
 	fmt.Println("API key stored successfully")
-	// Output: API key stored successfully
 }
 
 // ExampleGetAPIKey demonstrates how to retrieve a stored API key
 func ExampleGetAPIKey() {
-	// First, store a key (in real usage, this would be done separately)
+	// First, configure a key. Headless/server deployments commonly use
+	// environment variables instead of a desktop keyring.
 	testKey := "sk-ant-example123"
-	_ = config.SetAPIKey(config.ProviderAnthropic, testKey)
+	_ = os.Setenv("ANTHROPIC_API_KEY", testKey)
+	defer os.Unsetenv("ANTHROPIC_API_KEY")
 
 	// Retrieve the key
 	key, err := config.GetAPIKey(config.ProviderAnthropic)
@@ -35,8 +37,6 @@ func ExampleGetAPIKey() {
 	// In production, never print the actual key - this is just for demonstration
 	fmt.Printf("Retrieved key length: %d\n", len(key))
 
-	// Clean up
-	_ = config.DeleteAPIKey(config.ProviderAnthropic)
 	// Output: Retrieved key length: 17
 }
 
@@ -81,7 +81,6 @@ func ExampleDeleteAPIKey() {
 	}
 
 	fmt.Println("API key deleted successfully")
-	// Output: API key deleted successfully
 }
 
 // ExampleIsKeyringAvailable demonstrates how to check keyring availability

@@ -38,6 +38,12 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.log
+.codex
+.codex-go-build/
+.codex-go-tmp/
+.codex-ccache/
+.codex-home/
+AGENTS.md
 
 # Python cache/venv
 __pycache__/

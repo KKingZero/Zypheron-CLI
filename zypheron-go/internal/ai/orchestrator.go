@@ -22,10 +22,10 @@ type ToolResult struct {
 
 // OrchestrationResult represents the aggregated results from multiple tools
 type OrchestrationResult struct {
-	Target      string
-	Tools       []string
-	Results     []ToolResult
-	TotalTime   time.Duration
+	Target       string
+	Tools        []string
+	Results      []ToolResult
+	TotalTime    time.Duration
 	SuccessCount int
 	FailureCount int
 }
@@ -44,6 +44,8 @@ func NewOrchestrator() *Orchestrator {
 
 // ExecuteTools executes multiple tools based on intent
 func (o *Orchestrator) ExecuteTools(ctx context.Context, intent *Intent, progressCallback func(string)) (*OrchestrationResult, error) {
+	return nil, fmt.Errorf("legacy Go tool orchestration is disabled; route tool execution through the Python query engine policy layer")
+
 	if len(intent.Tools) == 0 {
 		return nil, fmt.Errorf("no tools specified in intent")
 	}
@@ -53,8 +55,8 @@ func (o *Orchestrator) ExecuteTools(ctx context.Context, intent *Intent, progres
 	}
 
 	orchestrationResult := &OrchestrationResult{
-		Target: intent.Target,
-		Tools:  intent.Tools,
+		Target:  intent.Target,
+		Tools:   intent.Tools,
 		Results: []ToolResult{},
 	}
 
@@ -170,17 +172,17 @@ func buildCommand(tool, target string) *exec.Cmd {
 // getToolDisplayName returns a user-friendly name for the tool
 func getToolDisplayName(tool string) string {
 	displayNames := map[string]string{
-		"scan":            "security scan",
-		"osint":           "OSINT",
-		"recon":           "reconnaissance",
-		"forensics":       "forensics analysis",
-		"api-pentest":     "API testing",
-		"reverse-eng":     "reverse engineering",
-		"fuzz":           "fuzzing",
-		"secrets":         "secret scanning",
-		"deps":            "dependency analysis",
+		"scan":               "security scan",
+		"osint":              "OSINT",
+		"recon":              "reconnaissance",
+		"forensics":          "forensics analysis",
+		"api-pentest":        "API testing",
+		"reverse-eng":        "reverse engineering",
+		"fuzz":               "fuzzing",
+		"secrets":            "secret scanning",
+		"deps":               "dependency analysis",
 		"authenticated-scan": "authenticated scanning",
-		"pwn":             "exploitation",
+		"pwn":                "exploitation",
 	}
 
 	if name, ok := displayNames[tool]; ok {
@@ -189,4 +191,3 @@ func getToolDisplayName(tool string) string {
 
 	return strings.ToUpper(tool)
 }
-

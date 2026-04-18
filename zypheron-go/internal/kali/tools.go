@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/platform"
 )
 
 // Tool represents a Kali security tool
@@ -135,13 +137,72 @@ func (tm *ToolManager) IsInstalled(name string) bool {
 func (tm *ToolManager) GetInstallCommand(name string) string {
 	tool := tm.GetTool(name)
 	if tool != nil {
-		return tool.InstallCmd
+		return getInstallCommandString(*tool)
 	}
 	return fmt.Sprintf("sudo apt-get install -y %s", name)
 }
 
+func getInstallCommandString(tool Tool) string {
+	env, err := platform.DetectEnvironment()
+	if err == nil && env.IsBlackArch {
+		if pkg := blackArchPackage(tool.Name); pkg != "" {
+			return fmt.Sprintf("sudo pacman -S --needed --noconfirm %s", pkg)
+		}
+	}
+	return tool.InstallCmd
+}
+
+func blackArchPackage(toolName string) string {
+	packages := map[string]string{
+		"nmap":         "nmap",
+		"nikto":        "nikto",
+		"nuclei":       "nuclei",
+		"httpx":        "httpx",
+		"katana":       "katana",
+		"gau":          "gau",
+		"waybackurls":  "waybackurls",
+		"assetfinder":  "assetfinder",
+		"masscan":      "masscan",
+		"sqlmap":       "sqlmap",
+		"hydra":        "hydra",
+		"metasploit":   "metasploit",
+		"msfconsole":   "metasploit",
+		"gobuster":     "gobuster",
+		"ffuf":         "ffuf",
+		"feroxbuster":  "feroxbuster",
+		"dirsearch":    "dirsearch",
+		"wfuzz":        "wfuzz",
+		"kiterunner":   "kiterunner",
+		"kr":           "kiterunner",
+		"aircrack-ng":  "aircrack-ng",
+		"john":         "john",
+		"hashcat":      "hashcat",
+		"theharvester": "theharvester",
+		"ghidra":       "ghidra",
+		"radare2":      "radare2",
+		"gdb":          "gdb",
+		"strings":      "binutils",
+		"objdump":      "binutils",
+		"readelf":      "binutils",
+		"file":         "file",
+		"checksec":     "checksec",
+		"autopsy":      "autopsy",
+		"sleuthkit":    "sleuthkit",
+		"binwalk":      "binwalk",
+		"foremost":     "foremost",
+	}
+	return packages[strings.ToLower(toolName)]
+}
+
 // getInstallCommand returns safe install command for a tool
 func getInstallCommand(toolName string) (string, []string, error) {
+	env, err := platform.DetectEnvironment()
+	if err == nil && env.IsBlackArch {
+		if pkg := blackArchPackage(toolName); pkg != "" {
+			return "sudo", []string{"pacman", "-S", "--needed", "--noconfirm", pkg}, nil
+		}
+	}
+
 	// Hardcoded install commands - never use user input
 	installCommands := map[string]struct {
 		cmd  string

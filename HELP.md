@@ -86,6 +86,37 @@ cd zypheron-ai && source venv/bin/activate
 ./install-heavy.sh
 ```
 
+### Optional C2 frameworks
+The main installers never auto-install C2 frameworks. To opt in interactively:
+```bash
+sudo bash install-c2.sh
+```
+Per-framework behavior:
+- **Sliver**: Kali/Parrot `sliver` apt pkg → pinned GitHub release tarball (SHA256-verified) → upstream `curl | bash` only when `ZYPHERON_ALLOW_UNVERIFIED_SLIVER=1` is set.
+- **Empire**: `powershell-empire` apt pkg (Kali/Parrot) → optional `git clone` of `BC-SECURITY/Empire` + `./setup/install.sh`.
+- **Havoc**: not installed — install manually from https://github.com/HavocFramework/Havoc.
+
+Empire RPC usage expects environment variables:
+```bash
+export EMPIRE_HOST=https://127.0.0.1:1337
+export EMPIRE_USER=<username>
+export EMPIRE_PASS=<password>
+# Optional, loopback/RFC1918 only:
+export EMPIRE_INSECURE_TLS=1
+```
+
+### Pentest tool installers (per-distro)
+If the main `setup-hybrid.sh` skipped external tools (`ZYPHERON_INSTALL_TOOLS=none`), run the distro-specific installer:
+```bash
+sudo bash install-tools.sh          # Debian / Ubuntu / Kali / Parrot / Mint
+sudo bash install-tools-arch.sh     # Arch / Manjaro / BlackArch
+sudo bash install-tools-rpm.sh      # Fedora / RHEL / Rocky / Alma
+```
+Opt-in env flags:
+- `ZYPHERON_ALLOW_REMOTE_INSTALLERS=1` — enable Rapid7 Metasploit omnibus fallback (pinned commit + SHA256)
+- `ZYPHERON_BUILD_GO=1` — also build the `zypheron-go` Go CLI from source
+- `ZYPHERON_ENABLE_BLACKARCH=1` (arch only) — enable BlackArch pacman repo with pinned `strap.sh` SHA256
+
 ## AI Engine / API
 
 ### AI engine won't start (connection refused on :8765)

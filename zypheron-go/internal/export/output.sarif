@@ -66,8 +66,8 @@
       ],
       "invocations": [
         {
-          "startTimeUtc": "2026-02-14T05:12:53Z",
-          "endTimeUtc": "2026-02-14T05:13:39Z",
+          "startTimeUtc": "2026-04-18T16:11:15Z",
+          "endTimeUtc": "2026-04-18T16:12:00Z",
           "executionSuccessful": true,
           "properties": {
             "ports": "1-1000",
@@ -81,7 +81,7 @@
       "properties": {
         "scan_id": "scan-001",
         "scan_target": "example.com",
-        "scan_timestamp": "2026-02-13T23:12:53-06:00",
+        "scan_timestamp": "2026-04-18T11:11:15-05:00",
         "scan_tool": "nmap"
       }
     }

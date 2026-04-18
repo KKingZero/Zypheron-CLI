@@ -40,11 +40,11 @@ Zypheron is free and open source. This repository should be treated as a local-f
 
 ## Install
 
-There are two primary install paths.
+Three install paths — pick one.
 
-### Option 1: Bootstrap from source
+### 1. Bootstrap from source (recommended)
 
-Use this if you want the full repo, local development workflow, and automated dependency setup.
+Full repo, local development workflow, automated dependency setup.
 
 ```bash
 git clone https://github.com/KKingZero/Zypheron-CLI.git
@@ -52,64 +52,127 @@ cd Zypheron-CLI
 bash ./setup-hybrid.sh
 ```
 
-What `setup-hybrid.sh` does:
+`setup-hybrid.sh` builds the Go CLI into `~/.local/bin/zypheron`, runs `zypheron install-deps` for Python dependencies, and installs bash/zsh completion.
 
-- Builds the Go CLI into `~/.local/bin/zypheron` by default
-- Runs `zypheron install-deps` for Python-side dependencies
-- Installs shell completion for `bash` or `zsh` when possible
-- Optionally installs missing external tools
-
-Useful bootstrap options:
+Common overrides:
 
 ```bash
+# Custom install dir
 ZYPHERON_INSTALL_DIR="$HOME/.local/bin" bash ./setup-hybrid.sh
+
+# Skip external tool install (manage them yourself)
 ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
+
+# Install every supported external tool
 ZYPHERON_INSTALL_TOOLS=all bash ./setup-hybrid.sh
-ZYPHERON_DEP_PACKS=core bash ./setup-hybrid.sh
 ```
 
-### Option 2: Install a release binary
+### 2. Release binary
 
-Use this if you want the packaged CLI without cloning the repo.
+Packaged CLI without cloning the repo.
 
 ```bash
 curl -sSfL https://download.zypheron.net/install.sh | bash
 ```
 
-Useful installer options:
+Overrides:
 
 ```bash
 ZYPHERON_VERSION=v2.0.0 curl -sSfL https://download.zypheron.net/install.sh | bash
 ZYPHERON_INSTALL_DIR="$HOME/.local/bin" curl -sSfL https://download.zypheron.net/install.sh | bash
 ```
 
-The release installer:
+The release installer detects OS/arch, downloads the matching archive + `SHA256SUMS`, verifies the checksum, and installs the `zypheron` binary.
 
-- Detects OS and architecture
-- Downloads the matching archive and `SHA256SUMS`
-- Verifies the checksum when checksum tools are available
-- Installs the `zypheron` binary into the target directory
+### 3. Pentest tools only (per-distro installers)
+
+Standalone installers for external tools (hydra, nuclei, amass, metasploit, ropper, volatility3, one_gadget, ghidra, SecLists, rockyou). Use these when you already have the Zypheron CLI installed and just need the tool ecosystem.
+
+```bash
+# Debian / Ubuntu / Kali / Parrot / Mint / Pop!_OS / elementary
+sudo bash install-tools.sh
+
+# Arch / Manjaro / EndeavourOS / Garuda / BlackArch
+sudo bash install-tools-arch.sh
+
+# Fedora / RHEL 8+ / CentOS Stream / Rocky / Alma / Oracle Linux / Amazon Linux 2023
+sudo bash install-tools-rpm.sh
+```
+
+All three installers share the same env-flag surface:
+
+| Flag | Effect |
+|---|---|
+| `ZYPHERON_MIN_FREE_MB=<mb>` | Override disk preflight (default `3072` = 3 GB) |
+| `ZYPHERON_ALLOW_REMOTE_INSTALLERS=1` | Enable Metasploit omnibus fallback (pinned commit + SHA256) |
+| `ZYPHERON_BUILD_GO=1` | Also build `zypheron-go` from source when present |
+| `ZYPHERON_GO_DL_VERSION=1.24.2` | Go tarball version to pull from go.dev when apt/pacman/dnf is too old |
+| `ZYPHERON_INSTALL_LOG=<path>` | Log destination (default `/var/log/zypheron-install.log`) |
+
+Arch-only flags:
+
+| Flag | Effect |
+|---|---|
+| `ZYPHERON_ENABLE_BLACKARCH=1` | Enable BlackArch pacman repo (SHA256-pinned `strap.sh`) |
+| `ZYPHERON_AUR_HELPER=paru\|yay` | Preferred AUR helper (default: paru, falls back to yay, bootstraps paru-bin if neither present) |
+| `ZYPHERON_ALLOW_AUR_SKIPREVIEW=1` | Skip interactive PKGBUILD review (off by default, not recommended) |
+
+### 4. Optional: C2 frameworks (Sliver, Empire)
+
+Interactive installer, never auto-runs from the main installers.
+
+```bash
+sudo bash install-c2.sh
+```
+
+- **Sliver** installs from Kali/Parrot apt when available, otherwise from a pinned GitHub release tarball verified against an embedded SHA256. Set `ZYPHERON_ALLOW_UNVERIFIED_SLIVER=1` to fall through to the upstream `curl | bash` installer (not recommended).
+- **Empire** installs from `powershell-empire` apt pkg on Kali/Parrot; otherwise clones `BC-SECURITY/Empire` into `/opt/Empire` (override with `ZYPHERON_EMPIRE_DIR`) and runs `./setup/install.sh` after consent.
+- **Havoc** is intentionally excluded — install manually from the upstream project.
+
+After install, Empire usage via `zypheron exploit --c2 empire` expects:
+
+```bash
+export EMPIRE_HOST=https://127.0.0.1:1337
+export EMPIRE_USER=<username>
+export EMPIRE_PASS=<password>
+# Optional, loopback/RFC1918 only:
+export EMPIRE_INSECURE_TLS=1
+```
 
 ## Quick Start
 
+Shortest end-to-end path for a new box:
+
 ```bash
-# Launch the terminal UI
-zypheron
+# 1. Clone + bootstrap
+git clone https://github.com/KKingZero/Zypheron-CLI.git
+cd Zypheron-CLI
+bash ./setup-hybrid.sh
 
-# Verify local setup
+# 2. Install the external pentest tool ecosystem (pick one)
+sudo bash install-tools.sh          # Debian / Ubuntu / Kali / Parrot / Mint
+sudo bash install-tools-arch.sh     # Arch / Manjaro / BlackArch
+sudo bash install-tools-rpm.sh      # Fedora / RHEL / Rocky / Alma
+
+# 3. Verify
 zypheron doctor
+zypheron tools check
 
-# Install Python-side dependencies if needed
+# 4. Launch
+zypheron
+```
+
+Optional follow-ups:
+
+```bash
+# C2 frameworks (Sliver, Empire) — interactive, opt-in per framework
+sudo bash install-c2.sh
+
+# Install Python-side AI/ML dependencies
 zypheron install-deps --all
 
 # Check CLI version
 zypheron --version
-```
-
-For a fresh source install, the shortest path is:
-
-```bash
-git clone https://github.com/KKingZero/Zypheron-CLI.git && cd Zypheron-CLI && bash ./setup-hybrid.sh
 ```
 
 ## What It Does
@@ -186,18 +249,34 @@ zypheron
 
 ### External tools
 
-Many workflows call external tools. `setup-hybrid.sh` can install critical tools automatically:
+Many workflows call external tools. Either let `setup-hybrid.sh` install the critical set:
 
 ```bash
 ZYPHERON_INSTALL_TOOLS=critical bash ./setup-hybrid.sh
 ```
 
-If you prefer to manage them yourself:
+Or skip that step and run the dedicated per-distro installer afterwards (bigger tool set, hardened with pinned versions + SHA256-verified remote installers):
 
 ```bash
 ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
+
+# Then one of:
+sudo bash install-tools.sh          # Debian / Ubuntu / Kali / Parrot
+sudo bash install-tools-arch.sh     # Arch family
+sudo bash install-tools-rpm.sh      # RedHat / Fedora family
+
 zypheron tools check
 ```
+
+### C2 frameworks
+
+Sliver and Empire are not installed by the main installer. Opt in with:
+
+```bash
+sudo bash install-c2.sh
+```
+
+See the [Install](#install) section for details on verification and env flags.
 
 ## Requirements
 

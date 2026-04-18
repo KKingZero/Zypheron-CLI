@@ -1100,36 +1100,10 @@ func (b *AIBridge) GetConfiguredProviders() (map[string]interface{}, error) {
 
 // ParseIntent parses natural language query to extract intent
 func (b *AIBridge) ParseIntent(query string) (map[string]interface{}, error) {
-	params := map[string]interface{}{
-		"query": query,
-	}
-
-	resp, err := b.SendRequest("parse_intent", params)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp.Result, nil
+	return nil, fmt.Errorf("parse_intent is not implemented by the Python AI engine; use chat/query-engine tool planning instead")
 }
 
 // AnalyzeMultiToolResults analyzes aggregated results from multiple tools
 func (b *AIBridge) AnalyzeMultiToolResults(aggregatedData map[string]interface{}, analysisType, userQuery string, provider string) (string, error) {
-	params := map[string]interface{}{
-		"aggregated_data": aggregatedData,
-		"analysis_type":   analysisType,
-		"user_query":      userQuery,
-		"provider":        provider,
-	}
-
-	resp, err := b.SendRequest("analyze_multi_tool_results", params)
-	if err != nil {
-		return "", err
-	}
-
-	summary, ok := resp.Result["summary"].(string)
-	if !ok {
-		return "", fmt.Errorf("invalid response format: missing summary")
-	}
-
-	return summary, nil
+	return "", fmt.Errorf("analyze_multi_tool_results is not implemented by the Python AI engine; send aggregated context through ChatDetailed instead")
 }

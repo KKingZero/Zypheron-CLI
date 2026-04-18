@@ -84,13 +84,15 @@ class AutonomousOrchestrator:
         credential_vault: Optional[CredentialVault] = None,
         approval_manager: Optional[ApprovalManager] = None,
         resume_mode: bool = False,
-        autonomous_mode: bool = False
+        autonomous_mode: bool = False,
+        demo_mode: bool = False,
     ):
         self.objective = objective
         self.initial_target = initial_target
         self.session_id = session_id or f"session_{uuid.uuid4().hex[:8]}"
         self.resume_mode = resume_mode
         self.autonomous_mode = autonomous_mode
+        self.demo_mode = demo_mode
 
         # Core components - use provided or create new
         self.attack_graph = attack_graph or AttackPathGraph(objective, initial_target)
@@ -160,7 +162,17 @@ class AutonomousOrchestrator:
 
             # Phase 1: Discovery & Planning (skip if resuming)
             if not self.resume_mode:
-                await self._phase_discovery()
+                discovery_ready = await self._phase_discovery()
+                if not discovery_ready:
+                    self.status = OrchestratorStatus.FAILED
+                    self._sync_task(TaskStatus.FAILED, {
+                        "error": "no discovery provider configured",
+                    })
+                    self._emit_event("autopent_failed", {
+                        "reason": "no discovery provider configured",
+                        "hint": "enable demo mode only for sample fixtures, or configure a real discovery provider",
+                    })
+                    return await self._phase_reporting()
             else:
                 # Show current attack graph state
                 print("\n📊 Restored Attack Graph:")
@@ -225,14 +237,15 @@ class AutonomousOrchestrator:
 
         return valid_count
 
-    async def _phase_discovery(self):
+    async def _phase_discovery(self) -> bool:
         """Phase 1: Discover attack paths and build graph"""
         logger.info("🔍 Phase 1: Discovery & Planning")
         self._emit_event("phase_started", {"phase": "discovery"})
 
         # TODO: Integrate with actual reconnaissance tools
-        # For now, we'll simulate discovery
-        await self._simulate_discovery()
+        if not await self._simulate_discovery():
+            logger.warning("Discovery stopped: no real recon provider configured")
+            return False
 
         # Show discovered attack graph
         print(self.attack_graph.visualize_graph())
@@ -245,6 +258,7 @@ class AutonomousOrchestrator:
 
         logger.info(f"🤖 AI Recommendation: {decision.recommendation}")
         logger.info(f"   Reasoning: {decision.reasoning}")
+        return True
 
     async def _phase_execution(self) -> OrchestratorStatus:
         """Phase 2: Execute attack path"""
@@ -289,8 +303,16 @@ class AutonomousOrchestrator:
                 self._sync_task(TaskStatus.RUNNING)
 
                 # Handle failure
-                recovered = await self._handle_step_failure(edge)
-                if not recovered:
+                recovery_outcome = await self._handle_step_failure(edge)
+                if recovery_outcome == StepOutcome.SUCCEEDED:
+                    self.actions_successful += 1
+                    self._sync_task(TaskStatus.RUNNING)
+                elif recovery_outcome == StepOutcome.SKIPPED:
+                    self._sync_task(TaskStatus.RUNNING)
+                elif recovery_outcome == StepOutcome.ABORTED:
+                    aborted = True
+                    break
+                else:
                     logger.warning(f"Unable to recover from failure, stopping execution")
                     had_unrecovered_failure = True
                     break
@@ -637,7 +659,7 @@ class AutonomousOrchestrator:
 
         return approved
 
-    async def _handle_step_failure(self, failed_edge: GraphEdge) -> bool:
+    async def _handle_step_failure(self, failed_edge: GraphEdge) -> StepOutcome:
         """
         Handle a failed attack step
 
@@ -647,7 +669,7 @@ class AutonomousOrchestrator:
             failed_edge: The edge that failed
 
         Returns:
-            True if recovered, False otherwise
+            Step outcome for the selected recovery action.
         """
         self.user_interventions += 1
 
@@ -693,7 +715,7 @@ class AutonomousOrchestrator:
             })
             if external is None:
                 logger.warning("No external recovery decision received; aborting execution")
-                return False
+                return StepOutcome.FAILED
             decision_map = {
                 ApprovalDecision.APPROVE_ONCE: "retry",
                 ApprovalDecision.APPROVE_SESSION: "alternative",
@@ -704,7 +726,7 @@ class AutonomousOrchestrator:
 
         if user_choice == "abort":
             self.approval_manager.abort_requested = True
-            return False
+            return StepOutcome.ABORTED
 
         # Handle user's choice
         if "retry" in user_choice.lower():
@@ -718,7 +740,7 @@ class AutonomousOrchestrator:
             if alternatives:
                 return await self._execute_step(alternatives[0], self.current_step, self.total_steps)
 
-        return False
+        return StepOutcome.FAILED
 
     async def _process_discovered_credentials(self, credentials: List[Dict[str, Any]]):
         """Process credentials discovered during attack"""
@@ -796,8 +818,13 @@ class AutonomousOrchestrator:
         """Generate partial results when execution is interrupted"""
         return await self._phase_reporting()
 
-    async def _simulate_discovery(self):
-        """Simulate discovery phase (TODO: Replace with real recon)"""
+    async def _simulate_discovery(self) -> bool:
+        """Seed demo discovery state only when demo mode is explicitly enabled."""
+        if not self.demo_mode:
+            logger.info("Discovery has no real recon provider configured; no demo findings were seeded")
+            self._emit_event("discovery_skipped", {"reason": "demo mode disabled"})
+            return False
+
         # Add some example vulnerabilities
         self.attack_graph.add_vulnerability(
             vuln_id="vuln_sql_injection",
@@ -868,6 +895,8 @@ class AutonomousOrchestrator:
                     success_probability=0.6,
                 )
             )
+
+        return True
 
     async def _simulate_step_execution(self, edge: GraphEdge, shared_approval_granted: bool = False) -> Dict[str, Any]:
         """Execute step using real tools or simulation"""

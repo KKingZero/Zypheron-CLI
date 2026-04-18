@@ -75,9 +75,9 @@ Examples:
 			ui.PrintInfo("Step 3/4: Checking API keys...")
 			providers := map[string]string{
 				"ANTHROPIC_API_KEY": "Claude",
-				"OPENAI_API_KEY":   "OpenAI",
-				"GEMINI_API_KEY":   "Gemini",
-				"GOOGLE_API_KEY":   "Google",
+				"OPENAI_API_KEY":    "OpenAI",
+				"GEMINI_API_KEY":    "Gemini",
+				"GOOGLE_API_KEY":    "Google",
 			}
 			keyCount := 0
 			for env, name := range providers {
@@ -533,17 +533,17 @@ This is an alias for 'zypheron tui'.`,
 	}
 }
 
-// KaliCmd returns the Kali Linux operations command
+// KaliCmd returns security Linux environment operations.
 func KaliCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "kali",
-		Short: "Kali Linux specific operations",
-		Long: `Kali Linux detection and tool management.
+		Short: "Security Linux environment operations",
+		Long: `Detect supported security Linux environments and show distro-specific guidance.
 
 Subcommands:
-  detect    Check if running on Kali Linux
-  install   Install Kali metapackages
-  update    Update Kali tools`,
+  detect    Check for Kali, Parrot OS, BlackArch, and WSL
+  install   Show Kali metapackage installation guidance
+  update    Update security tools`,
 	}
 
 	cmd.AddCommand(kaliDetectCmd())
@@ -555,9 +555,9 @@ Subcommands:
 func kaliDetectCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "detect",
-		Short: "Detect Kali Linux environment",
+		Short: "Detect security Linux environment",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ui.PrintHeader("Kali Linux Detection")
+			ui.PrintHeader("Security Linux Detection")
 			fmt.Println()
 
 			if runtime.GOOS != "linux" {
@@ -565,32 +565,12 @@ func kaliDetectCmd() *cobra.Command {
 				return nil
 			}
 
-			// Check /etc/os-release for Kali
-			data, err := os.ReadFile("/etc/os-release")
+			env, err := printSecurityEnvironment()
 			if err != nil {
-				ui.PrintWarning("Could not read /etc/os-release")
-				return nil
+				return err
 			}
-
-			content := string(data)
-			if strings.Contains(content, "Kali") {
-				ui.PrintSuccess("Running on Kali Linux")
-				// Extract version
-				for _, line := range strings.Split(content, "\n") {
-					if strings.HasPrefix(line, "VERSION=") || strings.HasPrefix(line, "PRETTY_NAME=") {
-						fmt.Printf("  %s\n", line)
-					}
-				}
-			} else {
-				ui.PrintInfo("Not running Kali Linux (tools still work on any Linux)")
-			}
-
-			fmt.Println()
-
-			// Check WSL
-			if _, err := os.Stat("/proc/sys/fs/binfmt_misc/WSLInterop"); err == nil {
-				ui.PrintInfo("WSL detected — some tools may need additional configuration")
-			}
+			fmt.Printf("  Distro ID: %s\n", env.ID)
+			fmt.Printf("  Package manager: %s\n", env.PackageManager())
 
 			return nil
 		},

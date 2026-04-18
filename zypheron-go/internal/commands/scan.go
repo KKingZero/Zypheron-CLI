@@ -46,8 +46,8 @@ func ScanCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "scan [target]",
 		Aliases: []string{"s"},
-		Short:   "Security scanning with Kali tools (nmap, nikto, nuclei)",
-		Long: `Perform security scans using integrated Kali Linux tools with real-time output streaming.
+		Short:   "Security scanning with security tools (nmap, nikto, nuclei)",
+		Long: `Perform security scans using integrated security tools with real-time output streaming.
 
 Supports multiple scan types:
   • Port scanning (nmap, masscan)
@@ -145,21 +145,8 @@ Examples:
 			fmt.Printf("%s\n", ui.Primary.Sprint("║  ZYPHERON SECURITY SCANNER           ║"))
 			fmt.Printf("%s\n\n", ui.Primary.Sprint("╚═══════════════════════════════════════╝"))
 
-			// Detect Kali environment
-			fmt.Println(ui.InfoMsg("Detecting Kali environment..."))
-			env, err := kali.DetectEnvironment()
-			if err != nil {
+			if _, err := printSecurityEnvironment(); err != nil {
 				return err
-			}
-
-			if env.IsKali {
-				fmt.Println(ui.SuccessMsg(fmt.Sprintf("Running on Kali Linux %s", env.Version)))
-			} else {
-				fmt.Println(ui.WarningMsg("Not running on Kali Linux - some tools may not be available"))
-			}
-
-			if env.IsWSL {
-				fmt.Println(ui.InfoMsg(fmt.Sprintf("WSL Environment: %s", env.Distribution)))
 			}
 
 			// Detect tools

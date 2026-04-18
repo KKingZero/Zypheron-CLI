@@ -313,7 +313,7 @@ func toolsInfoCmd() *cobra.Command {
 
 			if !tool.Installed {
 				fmt.Printf("%s\n", ui.Accent.Sprint("Installation:"))
-				fmt.Printf("  %s\n\n", tool.InstallCmd)
+				fmt.Printf("  %s\n\n", toolManager.GetInstallCommand(tool.Name))
 			}
 
 			if len(tool.Aliases) > 0 {
@@ -357,7 +357,7 @@ func toolsSuggestCmd() *cobra.Command {
 			} else {
 				fmt.Println(ui.WarningMsg(fmt.Sprintf("%s is not installed", tool.Name)))
 				fmt.Printf("\n%s\n", ui.InfoMsg("Install with:"))
-				fmt.Printf("  %s\n\n", ui.Accent.Sprint(tool.InstallCmd))
+				fmt.Printf("  %s\n\n", ui.Accent.Sprint(toolManager.GetInstallCommand(tool.Name)))
 			}
 
 			return nil

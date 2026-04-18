@@ -7,7 +7,7 @@ import pytest
 
 from autopent.approval_manager import ApprovalDecision
 from autopent.attack_path_graph import GraphEdge
-from autopent.autonomous_orchestrator import AutonomousOrchestrator, OrchestratorStatus
+from autopent.autonomous_orchestrator import AutonomousOrchestrator, OrchestratorStatus, StepOutcome
 from contracts.runtime import RiskCategory
 from tasks.store import TaskStore
 
@@ -24,6 +24,33 @@ class TestAutopentRuntime:
         )
         orchestrator.task_store = TaskStore(str(tmp_path / "runtime.db"))
         orchestrator.attack_graph.get_optimal_path_to_objective = MagicMock(return_value=[])
+
+        status = await orchestrator._phase_execution()
+
+        assert status == OrchestratorStatus.FAILED
+
+    @pytest.mark.asyncio
+    async def test_failed_recovery_step_does_not_count_as_recovered(self, tmp_path):
+        orchestrator = AutonomousOrchestrator(
+            objective="obtain admin",
+            initial_target="127.0.0.1",
+            session_id="test-failed-recovery",
+        )
+        orchestrator.task_store = TaskStore(str(tmp_path / "runtime.db"))
+        edge = GraphEdge(
+            edge_id="edge-1",
+            source_id="src",
+            target_id="127.0.0.1",
+            technique="T1046",
+            tool="nmap",
+            description="Scan target",
+            complexity="low",
+            detection_likelihood="low",
+            success_probability=0.5,
+        )
+        orchestrator.attack_graph.get_optimal_path_to_objective = MagicMock(return_value=[edge])
+        orchestrator._execute_step = AsyncMock(return_value=StepOutcome.FAILED)
+        orchestrator._handle_step_failure = AsyncMock(return_value=StepOutcome.FAILED)
 
         status = await orchestrator._phase_execution()
 
@@ -82,3 +109,35 @@ class TestAutopentRuntime:
         assert allowed is True
         assert granted is True
         assert orchestrator.task_store.has_session_approval(orchestrator.session_id, "sqlmap_scan")
+
+    @pytest.mark.asyncio
+    async def test_discovery_does_not_seed_demo_credentials_by_default(self, tmp_path):
+        orchestrator = AutonomousOrchestrator(
+            objective="reach database",
+            initial_target="127.0.0.1",
+            session_id="test-no-demo-seed",
+        )
+        orchestrator.task_store = TaskStore(str(tmp_path / "runtime.db"))
+
+        discovered = await orchestrator._simulate_discovery()
+
+        assert discovered is False
+        assert orchestrator.credential_vault.credentials == {}
+        assert "vuln_sql_injection" not in orchestrator.attack_graph.nodes
+
+    @pytest.mark.asyncio
+    async def test_execute_fails_early_without_discovery_provider(self, tmp_path):
+        orchestrator = AutonomousOrchestrator(
+            objective="reach database",
+            initial_target="127.0.0.1",
+            session_id="test-no-discovery-provider",
+        )
+        orchestrator.task_store = TaskStore(str(tmp_path / "runtime.db"))
+        orchestrator._phase_reporting = AsyncMock(return_value={"status": "failed"})
+        orchestrator._phase_execution = AsyncMock()
+
+        result = await orchestrator.execute()
+
+        assert result == {"status": "failed"}
+        assert orchestrator.status == OrchestratorStatus.FAILED
+        orchestrator._phase_execution.assert_not_called()

@@ -22,13 +22,13 @@ import (
 // ReverseEngCmd returns the reverse engineering command
 func ReverseEngCmd() *cobra.Command {
 	var (
-		tool       string
-		chain      string
-		stream     bool
-		timeout    int
-		output     string
-		assumeYes  bool
-		noInput    bool
+		tool      string
+		chain     string
+		stream    bool
+		timeout   int
+		output    string
+		assumeYes bool
+		noInput   bool
 	)
 
 	cmd := &cobra.Command{
@@ -75,17 +75,8 @@ func ReverseEngCmd() *cobra.Command {
 			fmt.Printf("%s\n", ui.Primary.Sprint("║  ZYPHERON REVERSE ENGINEERING        ║"))
 			fmt.Printf("%s\n\n", ui.Primary.Sprint("╚═══════════════════════════════════════╝"))
 
-			// Detect Kali environment
-			fmt.Println(ui.InfoMsg("Detecting Kali environment..."))
-			env, err := kali.DetectEnvironment()
-			if err != nil {
+			if _, err := printSecurityEnvironment(); err != nil {
 				return err
-			}
-
-			if env.IsKali {
-				fmt.Println(ui.SuccessMsg(fmt.Sprintf("Running on Kali Linux %s", env.Version)))
-			} else {
-				fmt.Println(ui.WarningMsg("Not running on Kali Linux - some tools may not be available"))
 			}
 
 			// Detect tools
@@ -226,16 +217,16 @@ func ReverseEngCmd() *cobra.Command {
 			} else {
 				scanID := storage.GenerateScanID(targetBinary, selectedTool)
 				scanResult := &types.ScanResult{
-					ID:         scanID,
-					Timestamp:  analysisStartTime,
-					Target:     targetBinary,
-					Tool:       selectedTool,
-					Output:     result.Output,
-					Duration:   result.Duration.Seconds(),
-					Success:    result.Success,
+					ID:           scanID,
+					Timestamp:    analysisStartTime,
+					Target:       targetBinary,
+					Tool:         selectedTool,
+					Output:       result.Output,
+					Duration:     result.Duration.Seconds(),
+					Success:      result.Success,
 					ErrorMessage: result.Error,
 					Metadata: map[string]string{
-						"type": "reverse-engineering",
+						"type":  "reverse-engineering",
 						"chain": chain,
 					},
 				}
@@ -306,4 +297,3 @@ func buildReverseEngArgs(tool, binary string) []string {
 
 	return args
 }
-

@@ -392,14 +392,20 @@ exploitation:
     priority: 2
     params:
       operator: true
+
+  - tool: empire
+    priority: 3
+    params:
+      rest_api: true
+      env_auth: true
       
   - tool: havoc
-    priority: 3
+    priority: 4
     params:
       teamserver: "${HAVOC_SERVER}"
       
   - tool: searchsploit
-    priority: 4
+    priority: 5
     params:
       json: true
       
@@ -779,23 +785,29 @@ red_team_operations:
     priority: 1
     params:
       operator: true
+
+  - tool: empire
+    priority: 2
+    params:
+      rest_api: true
+      env_auth: true
       
   - tool: bloodhound
-    priority: 2
+    priority: 3
     params:
       analysis: true
       
   - tool: crackmapexec
-    priority: 3
+    priority: 4
     params:
       lateral_movement: true
       
   - tool: responder
-    priority: 4
+    priority: 5
     params:
       hash_capture: true
       
   - tool: metasploit
-    priority: 5
+    priority: 6
     params:
       advanced: true

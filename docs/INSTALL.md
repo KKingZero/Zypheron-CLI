@@ -4,10 +4,12 @@ This guide covers the current supported install paths for Zypheron CLI.
 
 ## Install Paths
 
-There are two primary ways to install Zypheron:
+There are four supported install paths:
 
-1. Source bootstrap with [setup-hybrid.sh](../setup-hybrid.sh)
-2. Release binary install with [scripts/install.sh](../scripts/install.sh)
+1. Source bootstrap — [setup-hybrid.sh](../setup-hybrid.sh) (Zypheron CLI itself)
+2. Release binary — [scripts/install.sh](../scripts/install.sh) (packaged CLI download)
+3. Pentest tool ecosystem — per-distro installers (`install-tools.sh`, `install-tools-arch.sh`, `install-tools-rpm.sh`)
+4. C2 frameworks — optional interactive [install-c2.sh](../install-c2.sh) (Sliver, Empire)
 
 ## Option 1: Bootstrap From Source
 
@@ -57,6 +59,79 @@ The release installer:
 - downloads the matching archive and `SHA256SUMS`
 - verifies checksums when local checksum tools are available
 - installs the `zypheron` binary into the target directory
+
+## Option 3: Pentest Tool Ecosystem
+
+Standalone installers that provision the external tools Zypheron workflows call (hydra, john, nuclei, amass, metasploit, ropper, volatility3, one_gadget, ghidra, SecLists, rockyou).
+
+These are independent of the CLI install — run them on any supported distro after `setup-hybrid.sh` (or skip them entirely and install tools manually).
+
+```bash
+# Debian / Ubuntu / Kali / Parrot / Mint / Pop!_OS / elementary
+sudo bash install-tools.sh
+
+# Arch / Manjaro / EndeavourOS / Garuda / BlackArch
+sudo bash install-tools-arch.sh
+
+# Fedora / RHEL 8+ / CentOS Stream / Rocky / Alma / Oracle Linux / Amazon Linux 2023
+sudo bash install-tools-rpm.sh
+```
+
+All three share the same env-flag surface:
+
+| Flag | Default | Effect |
+|---|---|---|
+| `ZYPHERON_MIN_FREE_MB` | `3072` | Disk preflight threshold (MB, on `/usr /var /tmp`) |
+| `ZYPHERON_INSTALL_LOG` | `/var/log/zypheron-install.log` | Log destination |
+| `ZYPHERON_ALLOW_REMOTE_INSTALLERS` | `0` | Enable Rapid7 Metasploit omnibus fallback (commit-pinned + SHA256-verified) |
+| `ZYPHERON_MSF_COMMIT` | embedded | Rapid7 metasploit-omnibus commit SHA used by the omnibus fallback |
+| `ZYPHERON_MSF_SHA256` | embedded | Expected SHA256 of `msfupdate.erb` at that commit |
+| `ZYPHERON_BUILD_GO` | `0` | Also build the `zypheron-go` Go CLI if sources are present |
+| `ZYPHERON_GO_DL_VERSION` | `1.24.2` | Go tarball version fetched from go.dev when the distro package is too old |
+
+Arch-only flags:
+
+| Flag | Default | Effect |
+|---|---|---|
+| `ZYPHERON_ENABLE_BLACKARCH` | `0` | Enable BlackArch pacman repo (installs SHA256-verified `strap.sh`) |
+| `ZYPHERON_BLACKARCH_STRAP_SHA256` | embedded | Expected SHA256 of `blackarch.org/strap.sh` |
+| `ZYPHERON_AUR_HELPER` | `paru` | Preferred AUR helper (`paru` or `yay`); bootstraps `paru-bin` if neither present |
+| `ZYPHERON_ALLOW_AUR_SKIPREVIEW` | `0` | Skip interactive PKGBUILD review before AUR installs (not recommended) |
+
+Each installer writes a structured log to `$ZYPHERON_INSTALL_LOG`, tracks per-step status (ok / warn / fail / skip), and runs a verification pass confirming installed binaries resolve on `PATH`. Exit codes: `0` success, `1` any failed step, `2` fewer than three core tools verified.
+
+## Option 4: C2 Frameworks (Sliver, Empire)
+
+Never auto-installed. Run the interactive installer when you want them:
+
+```bash
+sudo bash install-c2.sh
+```
+
+Per-framework behavior:
+
+- **Sliver** — Kali/Parrot apt `sliver` pkg → pinned GitHub release tarball (SHA256-verified) → upstream `curl | bash` with `ZYPHERON_ALLOW_UNVERIFIED_SLIVER=1`.
+- **Empire** — `powershell-empire` apt pkg (Kali/Parrot) → git clone of `BC-SECURITY/Empire` into `/opt/Empire` (override with `ZYPHERON_EMPIRE_DIR`) and `./setup/install.sh` after consent.
+- **Havoc** — intentionally excluded.
+
+Override Sliver pin when bumping versions:
+
+```bash
+ZYPHERON_SLIVER_VERSION=v1.7.3 \
+ZYPHERON_SLIVER_SHA256_AMD64=<sha256> \
+ZYPHERON_SLIVER_SHA256_ARM64=<sha256> \
+sudo -E bash install-c2.sh
+```
+
+Empire usage after install (via `zypheron exploit --c2 empire`):
+
+```bash
+export EMPIRE_HOST=https://127.0.0.1:1337
+export EMPIRE_USER=<username>
+export EMPIRE_PASS=<password>
+# Optional (loopback / RFC1918 only — prints a warning on public IPs):
+export EMPIRE_INSECURE_TLS=1
+```
 
 ## Cross-Platform Builds
 

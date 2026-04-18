@@ -81,17 +81,8 @@ func PwnCmd() *cobra.Command {
 			fmt.Printf("%s\n", ui.Primary.Sprint("║  ZYPHERON BINARY EXPLOITATION (PWN)   ║"))
 			fmt.Printf("%s\n\n", ui.Primary.Sprint("╚═══════════════════════════════════════╝"))
 
-			// Detect Kali environment
-			fmt.Println(ui.InfoMsg("Detecting Kali environment..."))
-			env, err := kali.DetectEnvironment()
-			if err != nil {
+			if _, err := printSecurityEnvironment(); err != nil {
 				return err
-			}
-
-			if env.IsKali {
-				fmt.Println(ui.SuccessMsg(fmt.Sprintf("Running on Kali Linux %s", env.Version)))
-			} else {
-				fmt.Println(ui.WarningMsg("Not running on Kali Linux - some tools may not be available"))
 			}
 
 			// Detect tools
