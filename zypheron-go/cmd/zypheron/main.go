@@ -57,6 +57,7 @@ func shouldAutoStartAI(cmd *cobra.Command) bool {
 		"tools": true, "config": true, "setup": true,
 		"completion": true, "version": true, "help": true,
 		"history": true, "session": true,
+		"install-deps": true,
 	}
 	if noAICommands[cmd.Name()] {
 		return false
@@ -131,6 +132,7 @@ func main() {
 	rootCmd.AddCommand(commands.BountyCmd())
 	rootCmd.AddCommand(commands.CloudCmd())
 	rootCmd.AddCommand(commands.ADCmd())
+	rootCmd.AddCommand(commands.InstallDepsCmd())
 
 	// Version
 	rootCmd.Version = version

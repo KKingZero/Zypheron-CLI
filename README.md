@@ -67,6 +67,46 @@ ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
 ZYPHERON_INSTALL_TOOLS=all bash ./setup-hybrid.sh
 ```
 
+### Manual setup / repair commands
+
+Use these if the bootstrap fails with missing Go checksums, a missing `zypheron`
+command, or Python dependency errors.
+
+```bash
+# From the repo root
+cd Zypheron-CLI
+
+# Generate missing Go checksums
+cd zypheron-go
+go mod tidy
+
+# Build and install the CLI locally
+mkdir -p "$HOME/.local/bin"
+go build -o "$HOME/.local/bin/zypheron" ./cmd/zypheron
+export PATH="$HOME/.local/bin:$PATH"
+
+# Confirm the CLI is installed
+zypheron --version
+zypheron --help
+
+# Install Python AI engine dependencies
+cd ..
+zypheron install-deps
+
+# Optional large dependency packs
+zypheron install-deps --security --web --mcp
+zypheron install-deps --all
+
+# Check the full install
+zypheron doctor
+```
+
+If `zypheron` is still not found, add this to your shell profile:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 ### 2. Release binary
 
 Packaged CLI without cloning the repo.
