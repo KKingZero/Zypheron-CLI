@@ -93,6 +93,31 @@ lint:
 	@echo "Running linter..."
 	golangci-lint run ./...
 
+.PHONY: generate-bridge
+generate-bridge:
+	@echo "Regenerating Go bridge types + client from schema/control-api.yaml..."
+	$(GO) generate ./internal/desktopbridge/gen/...
+	@echo "✓ Regenerated: internal/desktopbridge/gen/control_api.gen.go"
+
+.PHONY: check-bridge-drift
+check-bridge-drift: generate-bridge
+	@echo "Checking for stale generated bridge code..."
+	@git diff --exit-code internal/desktopbridge/gen/ || { echo "ERROR: schema/control-api.yaml changed but generated code is stale. Run 'make generate-bridge' and commit."; exit 1; }
+	@echo "✓ Generated bridge code is in sync with schema."
+
+.PHONY: generate-cli
+generate-cli: generate-bridge
+	@echo "Regenerating bridge Cobra commands from schema/control-api.yaml..."
+	$(GO) run ./tools/cobragen --schema ../schema/control-api.yaml --out internal/commands/bridge/generated
+	$(GO) fmt ./internal/commands/bridge/generated/...
+	@echo "✓ Regenerated: internal/commands/bridge/generated/"
+
+.PHONY: check-cli-drift
+check-cli-drift: generate-cli
+	@echo "Checking for stale generated CLI commands..."
+	@git diff --exit-code internal/commands/bridge/generated/ || { echo "ERROR: schema/control-api.yaml or cobragen changed but generated commands are stale. Run 'make generate-cli' and commit."; exit 1; }
+	@echo "✓ Generated CLI commands are in sync with schema."
+
 .PHONY: compress
 compress: build
 	@echo "Compressing binary with UPX..."

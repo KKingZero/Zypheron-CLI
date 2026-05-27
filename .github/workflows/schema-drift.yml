@@ -1,0 +1,66 @@
+name: Schema Drift Check
+
+on:
+  push:
+    branches: [ main, develop, Zypheron-CLI ]
+  pull_request:
+    branches: [ main, develop, Zypheron-CLI ]
+    paths:
+      - 'schema/**'
+      - 'zypheron-go/internal/desktopbridge/gen/**'
+      - 'zypheron-go/go.mod'
+      - 'zypheron-go/go.sum'
+      - '.github/workflows/schema-drift.yml'
+
+jobs:
+  go-bridge-drift:
+    name: Go bridge regen produces zero diff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Regenerate bridge client
+        working-directory: zypheron-go
+        run: make generate-bridge
+
+      - name: Fail if generated client is stale
+        working-directory: zypheron-go
+        run: |
+          if ! git diff --exit-code internal/desktopbridge/gen/; then
+            echo ""
+            echo "ERROR: schema/control-api.yaml changed but internal/desktopbridge/gen/ was not regenerated."
+            echo "Fix locally with: make -C zypheron-go generate-bridge && git add zypheron-go/internal/desktopbridge/gen/"
+            exit 1
+          fi
+
+      - name: Regenerate Cobra bridge commands
+        working-directory: zypheron-go
+        run: make generate-cli
+
+      - name: Fail if generated commands are stale
+        working-directory: zypheron-go
+        run: |
+          if ! git diff --exit-code internal/commands/bridge/generated/; then
+            echo ""
+            echo "ERROR: schema/control-api.yaml or cobragen changed but internal/commands/bridge/generated/ was not regenerated."
+            echo "Fix locally with: make -C zypheron-go generate-cli && git add zypheron-go/internal/commands/bridge/generated/"
+            exit 1
+          fi
+
+      - name: Build with generated code
+        working-directory: zypheron-go
+        run: go build ./...

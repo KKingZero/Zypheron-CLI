@@ -1,0 +1,799 @@
+openapi: 3.1.0
+info:
+  title: Zypheron Desktop Control API
+  version: 1.0.0
+  description: |
+    Loopback HTTP API exposed by the Zypheron Desktop app on
+    `127.0.0.1:<random>`. Discovered via `~/.zypheron/desktop.json`.
+    Authoritative source of the CLI ↔ Desktop contract; both ends codegen
+    from this file.
+
+servers:
+  - url: http://127.0.0.1:{port}
+    variables:
+      port:
+        default: "0"
+        description: |
+          Actual port is discovered at runtime via the endpoint file
+          `~/.zypheron/desktop.json` (`port` field).
+
+tags:
+  - name: handshake
+    description: Capability negotiation; unauthenticated.
+  - name: auth
+    description: Pair / refresh / revoke for the two-token CLI auth model.
+  - name: health
+    description: Liveness + diagnostic surface.
+  - name: events
+    description: SSE event stream for live state changes.
+  - name: actions
+    description: Imperative operations on the desktop session.
+  - name: scope
+    description: Engagement scope rules.
+  - name: scans
+    description: Scan lifecycle.
+  - name: findings
+    description: Findings produced by scans.
+  - name: approvals
+    description: Approval-gate decisions for destructive AI ops.
+  - name: sessions
+    description: CLI session inventory.
+
+security:
+  - bearer: []
+
+paths:
+  /v1/handshake:
+    get:
+      tags: [handshake]
+      operationId: getHandshake
+      summary: Negotiate protocol + capability with the desktop.
+      security: []
+      responses:
+        '200':
+          description: Server identity and capability list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandshakeResult'
+        '426':
+          description: CLI client too old for this desktop.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/auth/pair:
+    post:
+      tags: [auth]
+      operationId: pair
+      summary: Exchange a deep-link nonce for a fresh token pair.
+      description: |
+        Long-poll. Blocks until the user approves or denies the PairCliModal,
+        or the nonce TTL (5 min) elapses. CLI mints the nonce locally and
+        passes it both via the `zypheron://pair?nonce=...` deep link AND in
+        this request body.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PairRequest'
+      responses:
+        '200':
+          description: Pair approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          description: Missing required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: User denied or modal timed out.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Nonce unknown, expired, or already consumed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      summary: Rotate the refresh token, returning a fresh access+refresh pair.
+      description: |
+        Refresh tokens are **one-time use**. Replaying a consumed refresh
+        token revokes the entire client (defense in depth). CLI must
+        serialize refreshes across processes — see flock guard in client.go.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Rotated pair.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          description: Missing `refresh_token`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Token expired, revoked, or replayed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/auth/revoke:
+    post:
+      tags: [auth]
+      operationId: revoke
+      summary: Revoke all credentials for the calling CLI client.
+      responses:
+        '204':
+          description: Revoked.
+
+  /v1/health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Liveness + sidecar status.
+      responses:
+        '200':
+          description: Health snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResult'
+
+  /v1/events:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: Server-Sent Events stream of live desktop state.
+      description: |
+        Long-lived `text/event-stream`. Frames carry `event:` + `id:` +
+        `data:` triples. Server emits a `:keepalive` comment every 15s.
+        On reconnect, pass `Last-Event-ID` to resume; if older than the
+        replay buffer, server emits a single `snapshot.invalidated` event
+        and the client must refetch state.
+
+        Event types include: `scan.started`, `scan.progress`, `scan.completed`,
+        `finding.created`, `approval.requested`, `approval.resolved`,
+        `engine.log`, `task.state_changed`, `snapshot.invalidated`.
+      parameters:
+        - in: header
+          name: Last-Event-ID
+          required: false
+          schema:
+            type: string
+          description: ID of the last event the client observed (for resume).
+      responses:
+        '200':
+          description: SSE stream opened.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  SSE-framed events. See description for event types and shapes.
+
+  /v1/actions/predict_vulnerabilities:
+    post:
+      tags: [actions]
+      operationId: predictVulnerabilities
+      summary: Run the ML vulnerability predictor against a target set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictVulnerabilitiesRequest'
+      responses:
+        '200':
+          description: Predictions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictVulnerabilitiesResult'
+        '400':
+          description: Malformed body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Sidecar unavailable or errored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/scope:
+    get:
+      tags: [scope]
+      operationId: listScope
+      summary: List engagement scope rules.
+      x-cli:
+        command: ["scope", "list"]
+        output: table_or_json
+      responses:
+        '200':
+          description: All scope rules.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScopeRule'
+    post:
+      tags: [scope]
+      operationId: addScope
+      summary: Add a scope rule.
+      x-cli:
+        command: ["scope", "add"]
+        output: table_or_json
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScopeRuleInput'
+      responses:
+        '201':
+          description: Rule created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScopeRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    delete:
+      tags: [scope]
+      operationId: clearScope
+      summary: Drop all scope rules.
+      x-cli:
+        command: ["scope", "clear"]
+        output: table_or_json
+      responses:
+        '204':
+          description: Cleared.
+
+  /v1/scope/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+    delete:
+      tags: [scope]
+      operationId: deleteScope
+      summary: Drop one scope rule by id.
+      x-cli:
+        command: ["scope", "delete"]
+        output: table_or_json
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/scans:
+    get:
+      tags: [scans]
+      operationId: listScans
+      summary: List recent scans for the current project.
+      x-cli:
+        command: ["scans", "list"]
+        output: table_or_json
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [queued, running, completed, failed, cancelled]
+      responses:
+        '200':
+          description: Scans.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Scan'
+
+  /v1/scans/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [scans]
+      operationId: getScan
+      summary: Fetch a scan by id.
+      x-cli:
+        command: ["scans", "get"]
+        output: table_or_json
+      responses:
+        '200':
+          description: Scan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scan'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/findings:
+    get:
+      tags: [findings]
+      operationId: listFindings
+      summary: List findings filtered by severity / scan / status.
+      x-cli:
+        command: ["findings", "list"]
+        output: table_or_json
+      parameters:
+        - in: query
+          name: scan_id
+          schema:
+            type: string
+        - in: query
+          name: severity
+          schema:
+            type: string
+            enum: [critical, high, medium, low, info]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Findings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Finding'
+
+  /v1/findings/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [findings]
+      operationId: getFinding
+      summary: Full detail for one finding.
+      x-cli:
+        command: ["findings", "get"]
+        output: table_or_json
+      responses:
+        '200':
+          description: Finding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/approvals:
+    get:
+      tags: [approvals]
+      operationId: listApprovals
+      summary: Pending and recent approval requests.
+      x-cli:
+        command: ["approvals", "list"]
+        output: table_or_json
+      parameters:
+        - in: query
+          name: state
+          schema:
+            type: string
+            enum: [pending, approved, denied, expired]
+      responses:
+        '200':
+          description: Approvals.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Approval'
+
+  /v1/approvals/{id}/approve:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [approvals]
+      operationId: approveApproval
+      summary: Approve a pending approval request.
+      x-cli:
+        command: ["approvals", "approve"]
+        output: table_or_json
+      responses:
+        '200':
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Approval already resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/approvals/{id}/deny:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [approvals]
+      operationId: denyApproval
+      summary: Deny a pending approval request.
+      x-cli:
+        command: ["approvals", "deny"]
+        output: table_or_json
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DenyRequest'
+      responses:
+        '200':
+          description: Denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Approval already resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/sessions:
+    get:
+      tags: [sessions]
+      operationId: listSessions
+      summary: Inventory of paired CLI clients on this desktop.
+      x-cli:
+        command: ["sessions", "list"]
+        output: table_or_json
+      responses:
+        '200':
+          description: Sessions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: |
+        64-char lowercase hex access token. Format enforced server-side as
+        `^Bearer\s+([a-f0-9]{64})$`.
+
+  responses:
+    BadRequest:
+      description: Bad request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable code (e.g. `invalid_nonce`).
+        message:
+          type: string
+          description: Human-readable error description.
+        details:
+          type: object
+          additionalProperties: true
+
+    HandshakeResult:
+      type: object
+      required: [product_version, protocol_version, min_client_version, features]
+      properties:
+        product_version:
+          type: string
+          example: "1.1.0"
+        protocol_version:
+          type: string
+          example: "v1"
+        min_client_version:
+          type: string
+          example: "0.1.0"
+        features:
+          type: array
+          items:
+            type: string
+          example: ["sse", "mcp", "ml"]
+
+    PairRequest:
+      type: object
+      required: [nonce, agent_name]
+      properties:
+        nonce:
+          type: string
+          description: 48-char lowercase hex, minted by the CLI before opening the deep link.
+          pattern: "^[a-f0-9]{48}$"
+        agent_name:
+          type: string
+          description: Friendly identifier the desktop modal shows to the user.
+        cli_version:
+          type: string
+        cli_platform:
+          type: string
+
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, access_expires_in, refresh_expires_in]
+      properties:
+        access_token:
+          type: string
+          description: Short-lived bearer token (15 min). 64-char hex.
+        refresh_token:
+          type: string
+          description: One-time-use rotating refresh token (90 d). 64-char hex.
+        access_expires_in:
+          type: integer
+          description: Seconds until access token expiry.
+        refresh_expires_in:
+          type: integer
+          description: Seconds until refresh token expiry.
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    HealthResult:
+      type: object
+      required: [status, uptime_seconds, sidecar]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        uptime_seconds:
+          type: integer
+        sidecar:
+          type: object
+          required: [hot_modules, cold_modules]
+          properties:
+            hot_modules:
+              type: array
+              items:
+                type: string
+            cold_modules:
+              type: array
+              items:
+                type: string
+
+    PredictVulnerabilitiesRequest:
+      type: object
+      properties:
+        target_data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        use_ai:
+          type: boolean
+          default: false
+
+    PredictVulnerabilitiesResult:
+      type: object
+      required: [predictions, model_version, latency_ms]
+      properties:
+        predictions:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        model_version:
+          type: string
+        latency_ms:
+          type: integer
+
+    ScopeRule:
+      type: object
+      required: [id, kind, value]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [domain, ip_cidr, url_prefix, host]
+        value:
+          type: string
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ScopeRuleInput:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:
+          type: string
+          enum: [domain, ip_cidr, url_prefix, host]
+        value:
+          type: string
+        notes:
+          type: string
+
+    Scan:
+      type: object
+      required: [id, status, target, started_at]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed, cancelled]
+        target:
+          type: string
+        tool:
+          type: string
+        project_id:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        finding_count:
+          type: integer
+
+    Finding:
+      type: object
+      required: [id, scan_id, severity, title]
+      properties:
+        id:
+          type: string
+        scan_id:
+          type: string
+        severity:
+          type: string
+          enum: [critical, high, medium, low, info]
+        title:
+          type: string
+        description:
+          type: string
+        cve:
+          type: string
+        cvss:
+          type: number
+        target:
+          type: string
+        port:
+          type: integer
+        evidence:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    Approval:
+      type: object
+      required: [id, action, state, requested_at]
+      properties:
+        id:
+          type: string
+        action:
+          type: string
+          description: Human-readable description of what's awaiting approval.
+        agent_identity:
+          type: string
+          description: Which AI agent / CLI session requested this.
+        state:
+          type: string
+          enum: [pending, approved, denied, expired]
+        requested_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+
+    DenyRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+
+    Session:
+      type: object
+      required: [client_id, agent_name, paired_at]
+      properties:
+        client_id:
+          type: string
+        agent_name:
+          type: string
+        cli_version:
+          type: string
+        cli_platform:
+          type: string
+        paired_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        scope:
+          type: string
