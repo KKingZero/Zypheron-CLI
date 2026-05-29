@@ -364,6 +364,9 @@ class IPCServer:
             'task_get': self.handle_task_get,
             'task_events': self.handle_task_events,
             'task_approve': self.handle_task_approve,
+            'scope_set': self.handle_scope_set,
+            'scope_get': self.handle_scope_get,
+            'scope_clear': self.handle_scope_clear,
         }
         
         handler = handlers.get(method)
@@ -623,7 +626,33 @@ class IPCServer:
             decision=decision,
         )
         return response.to_result()
-    
+
+    async def handle_scope_set(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Replace the session scope with a list of host suffixes."""
+        session_id = params.get('session_id')
+        if not session_id:
+            raise ValueError("session_id is required")
+        hosts = params.get('hosts') or []
+        if not isinstance(hosts, list):
+            raise ValueError("hosts must be a list of strings")
+        self.query_engine.task_store.set_session_scope(session_id, [str(h) for h in hosts])
+        return {"scope": self.query_engine.task_store.get_session_scope(session_id)}
+
+    async def handle_scope_get(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the current session scope entries."""
+        session_id = params.get('session_id')
+        if not session_id:
+            raise ValueError("session_id is required")
+        return {"scope": self.query_engine.task_store.get_session_scope(session_id)}
+
+    async def handle_scope_clear(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Drop every scope entry for the session."""
+        session_id = params.get('session_id')
+        if not session_id:
+            raise ValueError("session_id is required")
+        self.query_engine.task_store.clear_session_scope(session_id)
+        return {"scope": []}
+
     async def handle_store_api_key(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle API key storage request"""
         from core.secure_config import store_api_key

@@ -17,6 +17,8 @@ from urllib.parse import urlparse
 
 import requests
 
+from core.scope import scope_match
+
 logger = logging.getLogger(__name__)
 
 # Edition detection
@@ -85,19 +87,12 @@ class PentestConfig:
     ai_provider: Optional[str] = "claude"
     
     def is_in_scope(self, target: str) -> bool:
-        """Check if target is in scope"""
-        # Simple contains check - implement proper matching
-        for scope_item in self.scope:
-            if scope_item in target:
-                return True
-        return False
-    
+        """Check if target is in scope using suffix/host matching."""
+        return scope_match(target, self.scope)
+
     def is_excluded(self, target: str) -> bool:
-        """Check if target is excluded"""
-        for exclusion in self.exclusions:
-            if exclusion in target:
-                return True
-        return False
+        """Check if target is excluded using suffix/host matching."""
+        return scope_match(target, self.exclusions)
 
 
 @dataclass

@@ -20,18 +20,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24.10'
       
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.12'
       
       - name: Run Go tests
         run: |
           cd zypheron-go
-          make deps
-          make test
+          go mod download
+          go test -v -cover -coverprofile=coverage.out ./...
       
       - name: Run Python tests
         run: |
@@ -63,7 +63,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24.10'
 
       - name: Run Goreleaser
         uses: goreleaser/goreleaser-action@v6

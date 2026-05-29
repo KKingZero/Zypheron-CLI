@@ -262,14 +262,14 @@ func TestBanner(t *testing.T) {
 		}
 	})
 
-	t.Run("contains snake ascii art", func(t *testing.T) {
+	t.Run("contains updated byline", func(t *testing.T) {
 		color.NoColor = true
 		defer func() { color.NoColor = false }()
 
 		banner := Banner()
 
-		if !strings.Contains(banner, "(snake)") {
-			t.Error("Banner() does not contain snake reference")
+		if !strings.Contains(banner, StartupBannerByline) {
+			t.Errorf("Banner() does not contain byline %q", StartupBannerByline)
 		}
 	})
 
@@ -281,6 +281,17 @@ func TestBanner(t *testing.T) {
 
 		if !strings.Contains(banner, "AI-Powered Penetration Testing Platform") {
 			t.Error("Banner() does not contain expected tagline")
+		}
+	})
+
+	t.Run("does not contain snake art", func(t *testing.T) {
+		color.NoColor = true
+		defer func() { color.NoColor = false }()
+
+		banner := Banner()
+
+		if strings.Contains(banner, "(snake)") {
+			t.Error("Banner() should not contain snake reference")
 		}
 	})
 }

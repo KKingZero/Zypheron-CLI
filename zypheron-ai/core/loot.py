@@ -62,7 +62,8 @@ class TimelineEntry:
 
 
 def base_loot_dir() -> Path:
-    return Path.home() / ".zypheron" / "loot"
+    state_dir = Path(os.environ.get("ZYPHERON_STATE_DIR", Path.home() / ".zypheron"))
+    return state_dir / "loot"
 
 
 class LootManager:
@@ -115,6 +116,7 @@ class LootManager:
             status=status,
         )
         timeline_path = self.session_dir / "timeline.log"
+        timeline_path.parent.mkdir(parents=True, exist_ok=True)
         with open(timeline_path, "a") as f:
             f.write(json.dumps(asdict(entry)) + "\n")
 

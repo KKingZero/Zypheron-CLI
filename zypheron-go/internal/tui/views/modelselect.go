@@ -1,12 +1,24 @@
 package views
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tui/styles"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+)
+
+const (
+	ClaudeModelLabel  = "Claude"
+	GeminiModelLabel  = "Gemini"
+	ChatGPTModelLabel = "ChatGPT"
+	KimiModelLabel    = "Kimi"
+	LocalAIModelLabel = "local ai"
 )
 
 type ModelSelector struct {
@@ -19,17 +31,13 @@ type ModelSelector struct {
 func NewModelSelector(width int) ModelSelector {
 	return ModelSelector{
 		availableModels: []string{
-			"claude-opus-4-6",
-			"claude-sonnet-4-6",
-			"gpt-5.4",
-			"gemini-3.1-pro-preview",
-			"gemini-3-flash-preview",
-			"deepseek-r1",
-			"kimi-k2",
-			"ollama-qwen3-coder",
-			"ollama-llama3.2:3b",
+			ClaudeModelLabel,
+			GeminiModelLabel,
+			ChatGPTModelLabel,
+			KimiModelLabel,
+			LocalAIModelLabel,
 		},
-		selectedIdx: 0, // Default to Claude Opus
+		selectedIdx: 0,
 		isOpen:      false,
 		width:       width,
 	}
@@ -144,7 +152,22 @@ func ModelToProvider(model string) string {
 		return ""
 	}
 
+	if strings.EqualFold(model, ClaudeModelLabel) {
+		return "claude"
+	}
+	if strings.EqualFold(model, GeminiModelLabel) {
+		return "gemini"
+	}
+	if strings.EqualFold(model, ChatGPTModelLabel) {
+		return "openai"
+	}
+	if strings.EqualFold(model, KimiModelLabel) {
+		return "kimi"
+	}
 	if strings.HasPrefix(model, "ollama-") {
+		return "ollama"
+	}
+	if strings.EqualFold(model, LocalAIModelLabel) {
 		return "ollama"
 	}
 	if strings.HasPrefix(model, "claude-") {
@@ -178,18 +201,18 @@ func ModelToCredentialProvider(model string) string {
 	}
 
 	switch {
+	case strings.EqualFold(model, LocalAIModelLabel):
+		return ""
 	case strings.HasPrefix(model, "ollama-"):
 		return ""
-	case strings.HasPrefix(model, "claude-"):
+	case strings.EqualFold(model, ClaudeModelLabel), strings.HasPrefix(model, "claude-"):
 		return "anthropic"
-	case strings.HasPrefix(model, "gpt-"):
+	case strings.EqualFold(model, ChatGPTModelLabel), strings.HasPrefix(model, "gpt-"):
 		return "openai"
-	case strings.HasPrefix(model, "gemini-"):
+	case strings.EqualFold(model, GeminiModelLabel), strings.HasPrefix(model, "gemini-"):
 		return "google"
-	case strings.HasPrefix(model, "kimi-"):
+	case strings.EqualFold(model, KimiModelLabel), strings.HasPrefix(model, "kimi-"):
 		return "kimi"
-	case strings.HasPrefix(model, "deepseek-"):
-		return "deepseek"
 	case strings.HasPrefix(model, "grok-"):
 		return "grok"
 	default:
@@ -221,7 +244,7 @@ func CredentialProviderLabel(provider string) string {
 	case "anthropic":
 		return "Claude"
 	case "openai":
-		return "OpenAI"
+		return "ChatGPT"
 	case "google":
 		return "Gemini"
 	case "kimi":
@@ -255,5 +278,61 @@ func ModelToEngineModel(model string) string {
 	if strings.HasPrefix(model, "ollama-") {
 		return strings.TrimPrefix(model, "ollama-")
 	}
+	if strings.EqualFold(model, LocalAIModelLabel) {
+		return ResolveLargestOllamaModel()
+	}
 	return ""
+}
+
+func ResolveLargestOllamaModel() string {
+	baseURL := strings.TrimSpace(os.Getenv("OLLAMA_URL"))
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+
+	client := http.Client{Timeout: 1500 * time.Millisecond}
+	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/api/tags")
+	if err != nil {
+		return fallbackOllamaModel()
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fallbackOllamaModel()
+	}
+
+	var payload struct {
+		Models []struct {
+			Name string `json:"name"`
+			Size int64  `json:"size"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return fallbackOllamaModel()
+	}
+
+	var selectedName string
+	var selectedSize int64
+	for _, model := range payload.Models {
+		name := strings.TrimSpace(model.Name)
+		if name == "" {
+			continue
+		}
+		if model.Size > selectedSize || selectedName == "" {
+			selectedName = name
+			selectedSize = model.Size
+		}
+	}
+	if selectedName == "" {
+		return fallbackOllamaModel()
+	}
+
+	return selectedName
+}
+
+func fallbackOllamaModel() string {
+	if model := strings.TrimSpace(os.Getenv("OLLAMA_MODEL")); model != "" {
+		return model
+	}
+	return "codellama"
 }

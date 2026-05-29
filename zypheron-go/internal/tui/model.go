@@ -19,6 +19,7 @@ import (
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tui/components"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tui/styles"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tui/views"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -96,6 +97,7 @@ type Model struct {
 	chatHistory       []aibridge.Message
 	runtimeSessionID  string
 	lastRuntimeTaskID string
+	activeAuthSession string
 
 	// Session stats
 	sessionStart int64 // Unix timestamp
@@ -122,20 +124,25 @@ func NewModel() Model {
 	cfg := config.Get()
 
 	// Smart Default Logic
-	// Indices: 0=claude-opus-4-6, 1=claude-sonnet-4-6, 2=gpt-5.4, 3=gemini-3.1-pro-preview,
-	//          4=gemini-3-flash-preview, 5=deepseek-r1, 6=kimi-k2, 7=ollama-qwen3-coder, 8=ollama-llama3.2:3b
+	// Indices: 0=Claude, 1=Gemini, 2=ChatGPT, 3=Kimi, 4=local ai
 	if idx := views.FindModelIndex([]string{
-		"claude-opus-4-6",
-		"claude-sonnet-4-6",
-		"gpt-5.4",
-		"gemini-3.1-pro-preview",
-		"gemini-3-flash-preview",
-		"deepseek-r1",
-		"kimi-k2",
-		"ollama-qwen3-coder",
-		"ollama-llama3.2:3b",
+		views.ClaudeModelLabel,
+		views.GeminiModelLabel,
+		views.ChatGPTModelLabel,
+		views.KimiModelLabel,
+		views.LocalAIModelLabel,
 	}, cfg.AIModel); idx >= 0 {
 		ms.SetIndex(idx)
+	} else if strings.HasPrefix(cfg.AIModel, "ollama-") || strings.EqualFold(strings.TrimSpace(cfg.AIProvider), "ollama") {
+		ms.SetIndex(4)
+	} else if strings.HasPrefix(cfg.AIModel, "claude-") || strings.EqualFold(strings.TrimSpace(cfg.AIProvider), "claude") || strings.EqualFold(strings.TrimSpace(cfg.AIProvider), "anthropic") {
+		ms.SetIndex(0)
+	} else if strings.HasPrefix(cfg.AIModel, "gemini-") || strings.EqualFold(strings.TrimSpace(cfg.AIProvider), "gemini") || strings.EqualFold(strings.TrimSpace(cfg.AIProvider), "google") {
+		ms.SetIndex(1)
+	} else if strings.HasPrefix(cfg.AIModel, "gpt-") || strings.EqualFold(strings.TrimSpace(cfg.AIProvider), "openai") {
+		ms.SetIndex(2)
+	} else if strings.HasPrefix(cfg.AIModel, "kimi-") || strings.EqualFold(strings.TrimSpace(cfg.AIProvider), "kimi") {
+		ms.SetIndex(3)
 	} else {
 		configuredProviders := make(map[string]bool)
 		for _, provider := range config.ListProviders() {
@@ -144,18 +151,15 @@ func NewModel() Model {
 
 		switch {
 		case configuredProviders["anthropic"]:
-			ms.SetIndex(0) // Default to Claude Opus
+			ms.SetIndex(0)
 		case configuredProviders["google"]:
-			ms.SetIndex(3) // Default to Gemini 3.1 Pro
+			ms.SetIndex(1)
 		case configuredProviders["openai"]:
-			ms.SetIndex(2) // Default to GPT-5.4
-		case configuredProviders["deepseek"]:
-			ms.SetIndex(5)
+			ms.SetIndex(2)
 		case configuredProviders["kimi"]:
-			ms.SetIndex(6)
+			ms.SetIndex(3)
 		default:
-			// No cloud API keys found, default to local Ollama
-			ms.SetIndex(7) // Default to ollama-qwen3-coder
+			ms.SetIndex(4)
 		}
 	}
 
@@ -223,6 +227,7 @@ type AIResponseMsg struct {
 	SessionID       string
 	TaskID          string
 	TaskStatus      string
+	ToolResults     []map[string]interface{}
 	ProgressEvents  []map[string]interface{}
 	ApprovalRequest map[string]interface{}
 }
@@ -244,11 +249,20 @@ type ApprovalResultMsg struct {
 	SessionID       string
 	TaskID          string
 	TaskStatus      string
+	ToolResults     []map[string]interface{}
 	ProgressEvents  []map[string]interface{}
 	ApprovalRequest map[string]interface{}
 }
 type ApprovalErrorMsg struct {
 	Err error
+}
+
+type quitCompleteMsg struct{}
+
+func beginQuitSequence() tea.Cmd {
+	return tea.Tick(450*time.Millisecond, func(time.Time) tea.Msg {
+		return quitCompleteMsg{}
+	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -257,11 +271,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds []tea.Cmd
 	)
 
+	if _, ok := msg.(quitCompleteMsg); ok {
+		return m, tea.Quit
+	}
+
 	// Global Key handling
 	if k, ok := msg.(tea.KeyMsg); ok {
 		if key.Matches(k, m.keys.Quit) {
 			m.quitting = true
-			return m, tea.Quit
+			return m, beginQuitSequence()
 		}
 
 		if key.Matches(k, m.keys.Settings) && m.state == stateDashboard {
@@ -436,6 +454,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openApprovalPrompt(msg.TaskID, msg.ApprovalRequest)
 			return m, nil
 		}
+		m.ingestRuntimeToolResults(msg.ToolResults)
 		m.console.AppendLog("\n" + styles.AIResponseStyle.Render(msg.Content) + "\n")
 		// Add AI response to conversation history for context
 		m.chatHistory = append(m.chatHistory, aibridge.Message{
@@ -563,6 +582,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if msg.Content != "" {
+			m.ingestRuntimeToolResults(msg.ToolResults)
 			m.console.AppendLog("\n" + styles.AIResponseStyle.Render(msg.Content) + "\n")
 			m.chatHistory = append(m.chatHistory, aibridge.Message{
 				Role:    "assistant",
@@ -1001,7 +1021,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Commands that need arguments: put in input for user to complete
 						needsArgs := map[string]bool{
 							"/scan": true, "/recon": true, "/autopent": true,
-							"/ai": true, "/agent": true, "/dork": true,
+							"/ai": true, "/auth": true, "/auth test": true, "/agent": true, "/dork": true,
 						}
 						if needsArgs[selected] {
 							m.input.SetValue(selected + " ")
@@ -1128,6 +1148,7 @@ func submitTaskApprovalCmd(bridge *aibridge.AIBridge, taskID, requestID, decisio
 			SessionID:       resp.SessionID,
 			TaskID:          resp.TaskID,
 			TaskStatus:      resp.TaskStatus,
+			ToolResults:     resp.ToolResults,
 			ProgressEvents:  resp.ProgressEvents,
 			ApprovalRequest: resp.ApprovalRequest,
 		}
@@ -1371,6 +1392,64 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 			m.header = m.header.Update("ai")
 			return m.handleCommand(query) // Re-route as chat
 
+		case "/auth":
+			m.header = m.header.Update("ai")
+			if len(parts) < 2 {
+				m.console.AppendLog(styles.WarningStyle.Render("Usage: /auth use <session-id> | /auth status | /auth clear | /auth test <url> [idor|sqli|authz] [key=value ...]"))
+				return nil
+			}
+			switch parts[1] {
+			case "use":
+				if len(parts) < 3 {
+					m.console.AppendLog(styles.WarningStyle.Render("Usage: /auth use <session-id>"))
+					return nil
+				}
+				m.activeAuthSession = strings.TrimSpace(parts[2])
+				m.console.AppendLog(styles.SuccessStyle.Render(fmt.Sprintf("Authenticated runtime session set: %s", m.activeAuthSession)))
+				m.refreshSystemPromptWithFindings()
+				return nil
+			case "clear":
+				m.activeAuthSession = ""
+				m.console.AppendLog(styles.WarningStyle.Render("Cleared authenticated runtime session"))
+				m.refreshSystemPromptWithFindings()
+				return nil
+			case "status":
+				if m.activeAuthSession == "" {
+					m.console.AppendLog(styles.MutedStyle.Render("No authenticated runtime session is active"))
+				} else {
+					m.console.AppendLog(styles.SuccessStyle.Render(fmt.Sprintf("Active authenticated runtime session: %s", m.activeAuthSession)))
+				}
+				return nil
+			case "test":
+				if len(parts) < 3 {
+					m.console.AppendLog(styles.WarningStyle.Render("Usage: /auth test <url> [idor|sqli|authz] [key=value ...]"))
+					return nil
+				}
+				testType := "idor"
+				argStart := 3
+				if len(parts) >= 4 && !strings.Contains(parts[3], "=") {
+					testType = strings.ToLower(parts[3])
+					argStart = 4
+				}
+				target := parts[2]
+				metadata := m.buildAuthTestMetadata(parts[argStart:])
+				if _, ok := metadata["session_id"]; !ok && m.activeAuthSession != "" {
+					metadata["session_id"] = m.activeAuthSession
+				}
+				if sessionID, _ := metadata["session_id"].(string); strings.TrimSpace(sessionID) == "" {
+					m.console.AppendLog(styles.WarningStyle.Render("Set an authenticated runtime session first with /auth use <session-id> or pass session_id=<value>"))
+					return nil
+				}
+				query := fmt.Sprintf("run authenticated %s checks on %s", mapAuthTestKind(testType), target)
+				if method, ok := metadata["method"].(string); ok && method != "" {
+					query += fmt.Sprintf(" using method %s", method)
+				}
+				return m.handleAIChat(query, metadata)
+			default:
+				m.console.AppendLog(styles.WarningStyle.Render("Usage: /auth use <session-id> | /auth status | /auth clear | /auth test <url> [idor|sqli|authz] [key=value ...]"))
+				return nil
+			}
+
 		case "/agent":
 			m.header = m.header.Update("ai")
 			if len(parts) < 2 {
@@ -1571,6 +1650,7 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 				}
 			}
 			m.chatHistory = make([]aibridge.Message, 0)
+			m.activeAuthSession = ""
 			m.summary.ScanCount = 0
 			m.summary.FindingCount = 0
 			m.console.AppendLog(styles.SuccessStyle.Render("\n[Reset] Pentest context cleared for new engagement"))
@@ -1581,7 +1661,7 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 
 		case "/quit", "/exit":
 			m.quitting = true
-			return tea.Quit
+			return beginQuitSequence()
 
 		default:
 			m.console.AppendLog(styles.ErrorStyle.Render("Unknown command: " + parts[0]))
@@ -1591,8 +1671,6 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 	}
 
 	// Use rule-based intent classifier
-	modelName := m.modelSelector.SelectedModel()
-
 	intent := ClassifyIntent(cmd, m.summary.FindingCount > 0)
 
 	switch intent.Type {
@@ -1624,34 +1702,38 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 		// Fall through to normal chat with enhanced context
 	}
 
-	// IntentChat or IntentFollowUp: Continue to normal AI chat flow
+	return m.handleAIChat(cmd, nil)
+}
+
+func (m *Model) handleAIChat(cmd string, overrideMetadata map[string]interface{}) tea.Cmd {
+	modelName := m.modelSelector.SelectedModel()
 	m.aiProcessing = true
 	spinnerCmd := m.summary.SetStatus("Processing", fmt.Sprintf("AI: %s (Esc to cancel)", modelName), "THINKING", true)
 
-	// Initialize or refresh system prompt with current context
 	if len(m.chatHistory) == 0 {
 		m.chatHistory = append(m.chatHistory, aibridge.Message{
 			Role:    "system",
 			Content: m.buildContextAwareSystemPrompt(),
 		})
-	} else if m.summary.FindingCount > 0 {
-		// Refresh system prompt with latest findings
+	} else if m.summary.FindingCount > 0 || m.activeAuthSession != "" {
 		m.refreshSystemPromptWithFindings()
 	}
 
-	// Add user message to conversation history
+	messageMetadata := m.buildRuntimeMessageMetadata(cmd)
+	for key, value := range overrideMetadata {
+		messageMetadata[key] = value
+	}
+
 	m.chatHistory = append(m.chatHistory, aibridge.Message{
-		Role:    "user",
-		Content: cmd,
+		Role:     "user",
+		Content:  cmd,
+		Metadata: messageMetadata,
 	})
 
-	// Keep history manageable (last 20 messages + system prompt)
 	if len(m.chatHistory) > 21 {
-		// Keep system prompt and trim old messages
 		m.chatHistory = append(m.chatHistory[:1], m.chatHistory[len(m.chatHistory)-20:]...)
 	}
 
-	// Capture cancel channel and history for closure
 	cancelCh := m.cancelAI
 	messages := make([]aibridge.Message, len(m.chatHistory))
 	copy(messages, m.chatHistory)
@@ -1661,29 +1743,28 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 		provider := views.ModelToProvider(modelName)
 		engineModel := views.ModelToEngineModel(modelName)
 		if provider == "" {
-			provider = "ollama" // Fallback to local
+			provider = "ollama"
 		}
 
-		// Create a channel for the result
 		resultCh := make(chan tea.Msg, 1)
 
 		go func() {
 			resp, err := m.bridge.ChatDetailed(messages, provider, engineModel, 0.7, 1500, sessionID)
 			if err != nil {
 				resultCh <- AIErrorMsg{Err: err}
-			} else {
-				resultCh <- AIResponseMsg{
-					Content:         resp.Content,
-					SessionID:       resp.SessionID,
-					TaskID:          resp.TaskID,
-					TaskStatus:      resp.TaskStatus,
-					ProgressEvents:  resp.ProgressEvents,
-					ApprovalRequest: resp.ApprovalRequest,
-				}
+				return
+			}
+			resultCh <- AIResponseMsg{
+				Content:         resp.Content,
+				SessionID:       resp.SessionID,
+				TaskID:          resp.TaskID,
+				TaskStatus:      resp.TaskStatus,
+				ToolResults:     resp.ToolResults,
+				ProgressEvents:  resp.ProgressEvents,
+				ApprovalRequest: resp.ApprovalRequest,
 			}
 		}()
 
-		// Wait for either result or cancellation
 		select {
 		case result := <-resultCh:
 			return result
@@ -1693,6 +1774,96 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 	}
 
 	return tea.Batch(spinnerCmd, aiCmd)
+}
+
+func (m *Model) buildRuntimeMessageMetadata(cmd string) map[string]interface{} {
+	metadata := map[string]interface{}{}
+	if m.activeAuthSession != "" && queryNeedsAuthenticatedRuntime(cmd) {
+		metadata["session_id"] = m.activeAuthSession
+	}
+	for key, value := range parseInlineRuntimeMetadata(cmd) {
+		metadata[key] = value
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func (m *Model) buildAuthTestMetadata(args []string) map[string]interface{} {
+	metadata := map[string]interface{}{}
+	for key, value := range parseRuntimeKeyValuePairs(args) {
+		metadata[key] = value
+	}
+	return metadata
+}
+
+func queryNeedsAuthenticatedRuntime(cmd string) bool {
+	lower := strings.ToLower(cmd)
+	keywords := []string{"authenticated", "idor", "bola", "bfla", "authorization", "privilege escalation", "session", "cookie"}
+	for _, keyword := range keywords {
+		if strings.Contains(lower, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseInlineRuntimeMetadata(cmd string) map[string]interface{} {
+	return parseRuntimeKeyValuePairs(strings.Fields(cmd))
+}
+
+func parseRuntimeKeyValuePairs(tokens []string) map[string]interface{} {
+	metadata := map[string]interface{}{}
+	headers := map[string]string{}
+	for _, token := range tokens {
+		parts := strings.SplitN(token, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(parts[0]))
+		value := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+		if value == "" {
+			continue
+		}
+
+		switch key {
+		case "session_id", "auth_session_id":
+			metadata["session_id"] = value
+		case "method":
+			metadata["method"] = strings.ToUpper(value)
+		case "data":
+			metadata["data"] = value
+		case "required_role":
+			metadata["required_role"] = value
+		case "actual_role":
+			metadata["actual_role"] = value
+		case "target_user_id":
+			metadata["target_user_id"] = value
+		default:
+			if strings.HasPrefix(key, "header.") {
+				headerName := strings.TrimSpace(parts[0][len("header."):])
+				if headerName != "" {
+					headers[headerName] = value
+				}
+			}
+		}
+	}
+	if len(headers) > 0 {
+		metadata["headers"] = headers
+	}
+	return metadata
+}
+
+func mapAuthTestKind(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "sqli", "sqlmap", "sql":
+		return "sql injection"
+	case "authz", "authorization", "bfla":
+		return "authorization"
+	default:
+		return "idor"
+	}
 }
 
 // startAgentTask initiates an AI agent for a security task
@@ -1838,6 +2009,10 @@ Use them intentionally:
 - code and secret discovery: grep.app, Searchcode, PublicWWW
 - broader OSINT and attack surface: Intelligence X, FullHunt, urlscan, Hunter, SOCRadar, Onyphe, WiGLE`
 
+	if m.activeAuthSession != "" {
+		basePrompt += fmt.Sprintf("\n\nAuthenticated runtime context:\n- Active session_id: %s\n- If the user asks for authenticated testing, prefer using this stored session unless they override it.\n", m.activeAuthSession)
+	}
+
 	// Add deep pentest context if available
 	if m.pentestCtx != nil {
 		stats := m.pentestCtx.GetSummaryStats()
@@ -1869,6 +2044,68 @@ Use them intentionally:
 	}
 
 	return basePrompt
+}
+
+func (m *Model) ingestRuntimeToolResults(toolResults []map[string]interface{}) {
+	if len(toolResults) == 0 {
+		return
+	}
+
+	findingsAdded := 0
+	for _, result := range toolResults {
+		toolName, _ := result["tool_name"].(string)
+		data, _ := result["data"].(map[string]interface{})
+		evidence, _ := data["evidence"].(map[string]interface{})
+		target, _ := evidence["target"].(string)
+		if target == "" {
+			if value, ok := data["url"].(string); ok {
+				target = value
+			}
+		}
+		if target != "" && m.pentestCtx != nil {
+			m.pentestCtx.AddTarget(target)
+		}
+
+		if findings, ok := evidence["findings"].([]interface{}); ok {
+			for _, rawFinding := range findings {
+				findingMap, ok := rawFinding.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				title, _ := findingMap["title"].(string)
+				if title == "" {
+					continue
+				}
+				severity, _ := findingMap["severity"].(string)
+				description, _ := findingMap["description"].(string)
+				findingEvidence, _ := findingMap["evidence"].(string)
+				affectedURL, _ := findingMap["url"].(string)
+				if affectedURL == "" {
+					affectedURL = target
+				}
+
+				if m.pentestCtx != nil {
+					m.pentestCtx.AddVulnerability(VulnerabilityFinding{
+						Type:        toolName,
+						Title:       title,
+						Description: description,
+						Severity:    severity,
+						AffectedURL: affectedURL,
+						Evidence:    findingEvidence,
+						Tool:        toolName,
+						Exploitable: strings.EqualFold(severity, "critical") || strings.EqualFold(severity, "high"),
+					})
+				}
+				m.console.AppendLog(styles.WarningStyle.Render(fmt.Sprintf("[Validated %s] %s", strings.ToUpper(severity), title)))
+				findingsAdded++
+			}
+		}
+	}
+
+	if findingsAdded > 0 {
+		m.summary.AddFindings(findingsAdded)
+		m.refreshSystemPromptWithFindings()
+	}
 }
 
 // refreshSystemPromptWithFindings updates system prompt with current findings
@@ -2396,7 +2633,7 @@ func (m *Model) renderDoctorCheck() string {
 
 func (m Model) View() string {
 	if m.quitting {
-		return "Shutting down Zypheron Elite...\n"
+		return m.renderClosingScreen()
 	}
 
 	if m.state == stateSplash {
@@ -2446,6 +2683,62 @@ func (m Model) View() string {
 		inputArea,
 		m.renderBottomBar(), // Combined stats + model selector
 	)
+}
+
+func (m Model) renderClosingScreen() string {
+	lines := ui.BannerLines()
+	logoStyle := lipgloss.NewStyle().Foreground(styles.ColorAccent).Bold(true)
+	for i, line := range lines {
+		lines[i] = logoStyle.Render(line)
+	}
+
+	logo := strings.Join(lines, "\n")
+	width := lipgloss.Width(logo)
+	if m.width > 0 && m.width-8 < width {
+		width = m.width - 8
+	}
+	if width < 48 {
+		width = 48
+	}
+
+	metaStyle := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Width(width).
+		Align(lipgloss.Center)
+
+	meta := lipgloss.JoinVertical(
+		lipgloss.Center,
+		metaStyle.Render("v2.0.0  |  AI-Powered Penetration Testing Platform"),
+		metaStyle.Render("by Zero/Harrison"),
+	)
+	tagline := lipgloss.NewStyle().
+		Foreground(styles.ColorAqua).
+		Bold(true).
+		Width(width).
+		Align(lipgloss.Center).
+		Render("[ Session secured. Operator exit complete. ]")
+	status := lipgloss.NewStyle().
+		Foreground(styles.ColorMuted).
+		Width(width).
+		Align(lipgloss.Center).
+		Render("Shutting down Zypheron...")
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Center,
+		logo,
+		lipgloss.NewStyle().Foreground(styles.ColorBorder).Width(width).Align(lipgloss.Center).Render(ui.BannerDivider(width)),
+		meta,
+		"",
+		tagline,
+		"",
+		status,
+	)
+
+	return lipgloss.NewStyle().
+		Width(m.width).
+		Height(m.height).
+		Align(lipgloss.Center, lipgloss.Center).
+		Render(content)
 }
 
 type apiKeyStoredMsg struct {

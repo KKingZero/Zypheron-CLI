@@ -16,10 +16,32 @@ from dataclasses import dataclass
 from .attack_path_graph import GraphEdge
 from contracts.runtime import PolicyMode
 from core.policy import authorize_tool_call, PolicyDecision
+from mcp_interface.security import CommandInjectionError, InputValidator
 from tools.base import ExecutionContext
 from tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_target_argv(target: str, tool_name: str) -> Optional[str]:
+    """Validate an edge target before passing it as a CLI argument.
+
+    Rejects empty/argument-flag-style values (e.g. ``--script=...``) and any
+    target that fails the shared ``InputValidator`` host/URL allowlist. Returns
+    the cleaned target string if safe, otherwise ``None``.
+    """
+    candidate = (target or "").strip()
+    if not candidate or candidate.startswith("-"):
+        logger.warning("Rejected %s target '%s': argument-flag injection", tool_name, target)
+        return None
+    try:
+        if not InputValidator.validate_target(candidate):
+            logger.warning("Rejected %s target '%s': failed validator", tool_name, target)
+            return None
+    except CommandInjectionError as exc:
+        logger.warning("Rejected %s target '%s': %s", tool_name, target, exc)
+        return None
+    return candidate
 
 
 @dataclass
@@ -231,7 +253,15 @@ class ToolExecutor:
                 error='nmap not found'
             )
 
-        target = edge.target_id
+        target = _safe_target_argv(edge.target_id, "nmap")
+        if target is None:
+            return ToolResult(
+                success=False,
+                tool='nmap',
+                output='',
+                parsed_data={},
+                error=f"Invalid target rejected: {edge.target_id!r}",
+            )
         logger.info(f"Executing nmap scan on {target}")
 
         # Build nmap command (fast scan for demo)
@@ -241,7 +271,8 @@ class ToolExecutor:
             '-T4',  # Timing template
             '--top-ports', '100',  # Top 100 ports
             '-oX', '-',  # XML output to stdout
-            target
+            '--',  # End-of-options sentinel guards against flag-style targets
+            target,
         ]
 
         try:
@@ -299,7 +330,15 @@ class ToolExecutor:
                 error='sqlmap not found'
             )
 
-        target = edge.target_id
+        target = _safe_target_argv(edge.target_id, "sqlmap")
+        if target is None:
+            return ToolResult(
+                success=False,
+                tool='sqlmap',
+                output='',
+                parsed_data={},
+                error=f"Invalid target rejected: {edge.target_id!r}",
+            )
         logger.info(f"Executing sqlmap on {target}")
 
         # Build sqlmap command (basic test)
@@ -369,7 +408,15 @@ class ToolExecutor:
                 error='nikto not found'
             )
 
-        target = edge.target_id
+        target = _safe_target_argv(edge.target_id, "nikto")
+        if target is None:
+            return ToolResult(
+                success=False,
+                tool='nikto',
+                output='',
+                parsed_data={},
+                error=f"Invalid target rejected: {edge.target_id!r}",
+            )
         logger.info(f"Executing nikto on {target}")
 
         cmd = [
@@ -423,7 +470,15 @@ class ToolExecutor:
                 error='nuclei not found'
             )
 
-        target = edge.target_id
+        target = _safe_target_argv(edge.target_id, "nuclei")
+        if target is None:
+            return ToolResult(
+                success=False,
+                tool='nuclei',
+                output='',
+                parsed_data={},
+                error=f"Invalid target rejected: {edge.target_id!r}",
+            )
         logger.info(f"Executing nuclei on {target}")
 
         cmd = [
@@ -474,15 +529,30 @@ class ToolExecutor:
         # This would use credentials from edge.credential_id
         # For safety, we'll just verify SSH is accessible
 
-        target = edge.target_id
+        raw_target = (edge.target_id or "").strip()
 
         # Extract host and port
-        if ':' in target:
-            host, port = target.rsplit(':', 1)
+        if raw_target.startswith("[") and "]" in raw_target:
+            close_idx = raw_target.index("]")
+            host = raw_target[1:close_idx]
+            remainder = raw_target[close_idx + 1:]
+            port = remainder.lstrip(":") or "22"
+        elif raw_target.count(":") == 1:
+            host, port = raw_target.rsplit(":", 1)
         else:
-            host, port = target, '22'
+            host, port = raw_target, "22"
 
-        cmd = ['nc', '-zv', host, port]
+        validated_host = _safe_target_argv(host, "ssh")
+        if validated_host is None or not port.isdigit() or not (1 <= int(port) <= 65535):
+            return ToolResult(
+                success=False,
+                tool='ssh',
+                output='',
+                parsed_data={},
+                error=f"Invalid SSH target rejected: {edge.target_id!r}",
+            )
+
+        cmd = ['nc', '-zv', validated_host, port]
 
         try:
             proc = await asyncio.create_subprocess_exec(

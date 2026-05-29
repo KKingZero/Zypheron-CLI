@@ -36,6 +36,8 @@ var SlashMenuItems = []SlashMenuItem{
 
 	// AI
 	{Command: "/ai", Description: "Direct AI query", Icon: "", Category: "AI"},
+	{Command: "/auth", Description: "Manage authenticated testing session", Icon: "", Category: "AI"},
+	{Command: "/auth test", Description: "Run authenticated runtime checks", Icon: "", Category: "AI"},
 	{Command: "/agent", Description: "Create custom AI agent", Icon: "", Category: "AI"},
 	{Command: "/agents", Description: "List/manage saved agents", Icon: "", Category: "AI"},
 	{Command: "/dork", Description: "AI-enhanced dorking", Icon: "", Category: "AI"},

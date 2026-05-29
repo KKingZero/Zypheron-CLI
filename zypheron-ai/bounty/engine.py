@@ -8,7 +8,6 @@ Orchestrates bounty-mode scanning:
   4. Generate platform-specific submission drafts (H1/Bugcrowd)
 """
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,6 +15,9 @@ from typing import Any, Dict, List, Optional
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 
+from contracts.runtime import PolicyMode
+from core.query_engine import QueryRequest, query_engine
+from providers.base import AIMessage
 from core.loot import LootManager
 from report.models import Vulnerability, Severity
 
@@ -114,36 +116,58 @@ class BountyEngine:
 
         return False
 
-    async def analyze_target(self, target: str) -> List[Dict[str, Any]]:
-        """Run AI-guided analysis on a single target."""
-        if not self.ai_provider:
-            logger.warning("No AI provider available for bounty analysis")
-            return []
-
-        from providers.base import AIMessage
-
+    async def analyze_target(self, target: str) -> Dict[str, Any]:
+        """Run the canonical runtime assessment against a single target."""
         prompt = (
-            f"You are a professional bug bounty hunter analyzing {target} "
-            f"for the {self.program or 'unknown'} program on {self.platform}.\n\n"
-            f"Based on the target, suggest the top 5 most likely vulnerability "
-            f"types to check and the tools to use for each.\n"
-            f"Respond in JSON: [{{\"vuln_type\": \"...\", \"tool\": \"...\", \"check\": \"...\"}}]"
+            f"Run bug bounty web assessment for {target}. "
+            "Use httpx, ffuf, nuclei, nikto, and sqlmap where applicable. "
+            "Only return evidence from real tool execution."
         )
-
-        try:
-            response = await self.ai_provider.chat(
+        response = await query_engine.execute(
+            QueryRequest(
                 messages=[AIMessage(role="user", content=prompt)],
-                temperature=0.3,
-                max_tokens=1500,
+                provider="zypheron-query-engine",
+                model="runtime-bounty",
+                session_id=self.session_id,
+                policy_mode=PolicyMode.AUTONOMOUS_LAB,
             )
-            suggestions = json.loads(response.content)
-            self.loot.save_loot_json(
-                "findings", f"suggestions_{target.replace('.', '_')}.json", suggestions
-            )
-            return suggestions
-        except Exception as e:
-            logger.error(f"AI bounty analysis failed for {target}: {e}")
-            return []
+        )
+        return response.to_result()
+
+    def _severity_from_text(self, value: str) -> Severity:
+        normalized = str(value or "").strip().lower()
+        try:
+            return Severity(normalized)
+        except ValueError:
+            return Severity.MEDIUM
+
+    def _materialize_findings(self, target: str, runtime_result: Dict[str, Any]) -> List[Vulnerability]:
+        """Convert runtime evidence into submission-eligible findings."""
+        vulnerabilities: List[Vulnerability] = []
+        tool_results = runtime_result.get("tool_results", [])
+
+        for tool_result in tool_results:
+            evidence = (tool_result.get("data") or {}).get("evidence", {})
+            findings = evidence.get("findings", [])
+            for finding in findings:
+                severity = self._severity_from_text(finding.get("severity", "medium"))
+                title = finding.get("title") or f"{tool_result.get('tool_name', 'runtime')} finding"
+                vuln = Vulnerability(
+                    vuln_id=f"{tool_result.get('tool_name', 'finding')}_{len(self.findings) + len(vulnerabilities)}",
+                    title=title[:180],
+                    severity=severity,
+                    affected_target=target,
+                    affected_component=evidence.get("target", target),
+                    description=finding.get("description") or title,
+                    evidence=finding.get("evidence") or evidence.get("summary", ""),
+                    tool_output=tool_result.get("content", ""),
+                    tool_name=tool_result.get("tool_name", "runtime"),
+                    remediation=finding.get("remediation", ""),
+                    cwe_ids=[finding.get("cwe_id")] if finding.get("cwe_id") else [],
+                    references=[finding.get("url")] if finding.get("url") else [],
+                )
+                vulnerabilities.append(vuln)
+        return vulnerabilities
 
     def generate_submission(self, vuln: Vulnerability) -> BountySubmission:
         """Generate a platform-specific submission draft."""
@@ -198,10 +222,22 @@ class BountyEngine:
             self.loot.log_timeline("bounty", "target_start",
                                     tool="analyze", detail=target)
 
-            suggestions = await self.analyze_target(target)
+            runtime_result = await self.analyze_target(target)
+            target_findings = self._materialize_findings(target, runtime_result)
+            self.findings.extend(target_findings)
+
             results["targets_analyzed"].append({
                 "target": target,
-                "suggestions": suggestions,
+                "runtime_result": runtime_result,
+                "validated_findings": [
+                    {
+                        "vuln_id": vuln.vuln_id,
+                        "title": vuln.title,
+                        "severity": vuln.severity.value if isinstance(vuln.severity, Severity) else str(vuln.severity),
+                        "tool_name": vuln.tool_name,
+                    }
+                    for vuln in target_findings
+                ],
             })
 
         # Generate submissions for any findings

@@ -743,6 +743,100 @@ class FfufScanTool(BaseTool):
         )
 
 
+class AuthenticatedWebScanTool(BaseTool):
+    """Run authenticated web checks through the shared runtime."""
+
+    spec = ToolSpec(
+        name="authenticated_web_scan",
+        description="Run authenticated SQLi, IDOR, or authorization checks using a stored session.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "scan_type": {"type": "string"},
+                "session_id": {"type": "string"},
+                "url": {"type": "string"},
+                "method": {"type": "string"},
+                "data": {"type": "string"},
+                "headers": {"type": "object"},
+                "required_role": {"type": "string"},
+                "actual_role": {"type": "string"},
+                "target_user_id": {"type": "string"},
+            },
+        },
+        risk_category=RiskCategory.HIGH,
+        requires_approval=True,
+        read_only=False,
+    )
+
+    def __init__(self):
+        from analysis.authenticated_scanner import AuthenticatedScanner
+        from auth.session_manager import SessionManager
+
+        self.validator = InputValidator()
+        self.session_manager = SessionManager()
+        self.scanner = AuthenticatedScanner(self.session_manager)
+
+    async def execute(self, arguments: dict, context: ExecutionContext) -> ToolResult:
+        scan_type = str(arguments.get("scan_type", "")).strip().lower()
+        session_id = str(arguments.get("session_id", "")).strip()
+        url = str(arguments.get("url", "")).strip()
+        method = str(arguments.get("method", "GET")).strip().upper()
+        data = str(arguments.get("data", "")).strip()
+        headers = arguments.get("headers") or {}
+
+        if not session_id:
+            return ToolResult(tool_name=self.spec.name, success=False, content="", error="session_id is required for authenticated testing")
+        if not self.validator.validate_target(url):
+            return ToolResult(tool_name=self.spec.name, success=False, content="", error=f"Invalid target: {url}")
+        if not isinstance(headers, dict):
+            return ToolResult(tool_name=self.spec.name, success=False, content="", error="headers must be a dictionary")
+
+        findings = []
+        try:
+            if scan_type == "sql_injection":
+                findings = await self.scanner.test_sql_injection(
+                    session_id=session_id,
+                    targets=[{"url": url, "method": method, "data": data or None, "headers": headers}],
+                )
+            elif scan_type == "idor":
+                findings = await self.scanner.test_idor(
+                    session_id=session_id,
+                    test_urls=[url],
+                    target_user_id=arguments.get("target_user_id"),
+                )
+            elif scan_type == "broken_authorization":
+                findings = await self.scanner.test_broken_authorization(
+                    session_id=session_id,
+                    api_endpoints=[{
+                        "url": url,
+                        "method": method,
+                        "required_role": str(arguments.get("required_role", "admin")),
+                        "actual_role": str(arguments.get("actual_role", "user")),
+                    }],
+                )
+            else:
+                return ToolResult(tool_name=self.spec.name, success=False, content="", error=f"Unsupported authenticated scan type: {scan_type}")
+        except Exception as exc:
+            return ToolResult(tool_name=self.spec.name, success=False, content="", error=str(exc))
+
+        finding_dicts = [finding.to_dict() for finding in findings]
+        if finding_dicts:
+            summary = f"Validated {len(finding_dicts)} authenticated finding(s) against {url}."
+        else:
+            summary = f"No authenticated findings were validated against {url}."
+        return ToolResult(
+            tool_name=self.spec.name,
+            success=True,
+            content=summary,
+            data={
+                "scan_type": scan_type,
+                "session_id": session_id,
+                "url": url,
+                "findings": finding_dicts,
+            },
+        )
+
+
 class ToolRegistry:
     """Lookup and expose typed tool implementations."""
 
@@ -769,6 +863,7 @@ class ToolRegistry:
             GobusterScanTool(),
             HttpxProbeTool(),
             FfufScanTool(),
+            AuthenticatedWebScanTool(),
         ]
 
     def register(self, tool: BaseTool) -> None:

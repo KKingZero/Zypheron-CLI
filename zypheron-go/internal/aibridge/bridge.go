@@ -178,8 +178,9 @@ type Response struct {
 
 // Message represents a chat message
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role     string                 `json:"role"`
+	Content  string                 `json:"content"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ChatResponse contains the full runtime envelope for chat turns.
@@ -191,6 +192,7 @@ type ChatResponse struct {
 	SessionID       string
 	TaskID          string
 	TaskStatus      string
+	ToolResults     []map[string]interface{}
 	ProgressEvents  []map[string]interface{}
 	ApprovalRequest map[string]interface{}
 }
@@ -200,6 +202,7 @@ type ApprovalResponse struct {
 	SessionID       string
 	TaskID          string
 	TaskStatus      string
+	ToolResults     []map[string]interface{}
 	ProgressEvents  []map[string]interface{}
 	ApprovalRequest map[string]interface{}
 }
@@ -786,6 +789,9 @@ func (b *AIBridge) ChatDetailed(messages []Message, provider string, model strin
 	if events, ok := resp.Result["progress_events"].([]interface{}); ok {
 		detailed.ProgressEvents = asMapSlice(events)
 	}
+	if results, ok := resp.Result["tool_results"].([]interface{}); ok {
+		detailed.ToolResults = asMapSlice(results)
+	}
 	if approval, ok := resp.Result["approval_request"].(map[string]interface{}); ok {
 		detailed.ApprovalRequest = approval
 	}
@@ -1061,6 +1067,9 @@ func (b *AIBridge) SubmitTaskApproval(taskID string, requestID string, decision 
 	}
 	if events, ok := resp.Result["progress_events"].([]interface{}); ok {
 		result.ProgressEvents = asMapSlice(events)
+	}
+	if results, ok := resp.Result["tool_results"].([]interface{}); ok {
+		result.ToolResults = asMapSlice(results)
 	}
 	if approval, ok := resp.Result["approval_request"].(map[string]interface{}); ok {
 		result.ApprovalRequest = approval

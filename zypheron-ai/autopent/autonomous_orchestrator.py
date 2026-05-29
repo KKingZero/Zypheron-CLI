@@ -409,8 +409,6 @@ class AutonomousOrchestrator:
         try:
             self.actions_executed += 1
 
-            # TODO: Integrate with actual tool execution
-            # For now, simulate execution
             result = await self._simulate_step_execution(edge, shared_approval_granted=shared_approval_granted)
 
             # Mark as attempted in graph
@@ -899,10 +897,8 @@ class AutonomousOrchestrator:
         return True
 
     async def _simulate_step_execution(self, edge: GraphEdge, shared_approval_granted: bool = False) -> Dict[str, Any]:
-        """Execute step using real tools or simulation"""
-        # Try real tool execution first
+        """Execute a step through the shared tool runtime only."""
         try:
-            # Execute with real tools
             tool_result = await self._get_tool_executor().execute_edge(
                 edge,
                 approval_granted=shared_approval_granted,
@@ -925,35 +921,9 @@ class AutonomousOrchestrator:
 
             return result
 
-        except ImportError:
-            logger.warning("Tool executor not available, using simulation")
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
             raise
-
-        # Fallback to simulation
-        import random
-        await asyncio.sleep(0.5)
-
-        success = random.random() < edge.success_probability
-
-        result = {
-            'success': success,
-            'tool': edge.tool,
-            'technique': edge.technique,
-            'output': f"Simulated output from {edge.tool}",
-        }
-
-        if success and random.random() < 0.3:
-            result['credentials'] = [{
-                'username': 'discovered_user',
-                'credential': 'discovered_pass',
-                'type': 'password',
-                'source_host': edge.target_id,
-                'tool': edge.tool,
-            }]
-
-        return result
 
     def _get_tool_executor(self) -> ToolExecutor:
         """Lazily create the shared tool executor with the current policy mode."""

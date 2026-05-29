@@ -4,6 +4,7 @@ Session Manager - Handle authenticated sessions across scan runs
 
 import logging
 import json
+import re
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Optional, Any
@@ -11,7 +12,26 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import requests
 
+from cryptography.fernet import Fernet, InvalidToken
+
 logger = logging.getLogger(__name__)
+
+# Session IDs are used verbatim as filenames; allow only a safe character set.
+SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+SESSION_FILE_SUFFIX = ".session"
+
+
+class InvalidSessionIdError(ValueError):
+    """Raised when a caller supplies a session_id that fails validation."""
+
+
+def _validate_session_id(session_id: str) -> str:
+    """Return the session_id if it conforms to SESSION_ID_PATTERN, else raise."""
+    if not isinstance(session_id, str) or not SESSION_ID_PATTERN.match(session_id):
+        raise InvalidSessionIdError(
+            f"Invalid session_id (must match {SESSION_ID_PATTERN.pattern}): {session_id!r}"
+        )
+    return session_id
 
 
 @dataclass
@@ -96,10 +116,39 @@ class SessionManager:
             self.storage_dir = Path(storage_dir)
         else:
             self.storage_dir = Path.home() / '.zypheron' / 'sessions'
-        
+
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.storage_dir.chmod(0o700)
+        except OSError:
+            pass
+        self._cipher = Fernet(self._load_or_create_key())
         self.sessions: Dict[str, Session] = {}
         self._load_sessions()
+
+    def _load_or_create_key(self) -> bytes:
+        """Load (or create) the Fernet key used to encrypt session blobs."""
+        key_file = self.storage_dir / "sessions.key"
+        if key_file.exists():
+            return key_file.read_bytes()
+        key = Fernet.generate_key()
+        key_file.write_bytes(key)
+        try:
+            key_file.chmod(0o600)
+        except OSError:
+            pass
+        return key
+
+    def _session_path(self, session_id: str) -> Path:
+        """Resolve the encrypted file path for a validated session_id."""
+        validated = _validate_session_id(session_id)
+        path = (self.storage_dir / f"{validated}{SESSION_FILE_SUFFIX}").resolve()
+        storage_real = self.storage_dir.resolve()
+        if storage_real not in path.parents and path.parent != storage_real:
+            raise InvalidSessionIdError(
+                f"Session path escapes storage directory: {session_id!r}"
+            )
+        return path
     
     def create_session(
         self,
@@ -110,10 +159,11 @@ class SessionManager:
         expires_in_seconds: Optional[int] = None
     ) -> Session:
         """Create a new session"""
+        _validate_session_id(session_id)
         expires_at = None
         if expires_in_seconds:
             expires_at = datetime.now() + timedelta(seconds=expires_in_seconds)
-        
+
         session = Session(
             session_id=session_id,
             target_url=target_url,
@@ -121,7 +171,7 @@ class SessionManager:
             username=username,
             expires_at=expires_at
         )
-        
+
         self.sessions[session_id] = session
         self._save_session(session)
         
@@ -191,14 +241,18 @@ class SessionManager:
         """Delete a session"""
         if session_id not in self.sessions:
             return False
-        
+
         del self.sessions[session_id]
-        
-        # Delete file
-        session_file = self.storage_dir / f"{session_id}.json"
+
+        try:
+            session_file = self._session_path(session_id)
+        except InvalidSessionIdError as exc:
+            logger.error("Refusing to delete file for invalid session_id: %s", exc)
+            return True
+
         if session_file.exists():
             session_file.unlink()
-        
+
         logger.info(f"Deleted session {session_id}")
         return True
     
@@ -330,37 +384,50 @@ class SessionManager:
             return None
     
     def _save_session(self, session: Session):
-        """Save session to disk"""
-        session_file = self.storage_dir / f"{session.session_id}.json"
-        
+        """Persist an encrypted session blob to disk."""
         try:
-            with open(session_file, 'w') as f:
-                json.dump(session.to_dict(), f, indent=2)
-            
-            # Secure file permissions
-            session_file.chmod(0o600)
-            
-        except Exception as e:
-            logger.error(f"Failed to save session {session.session_id}: {e}")
-    
+            session_file = self._session_path(session.session_id)
+        except InvalidSessionIdError as exc:
+            logger.error("Refusing to persist session with invalid id: %s", exc)
+            return
+
+        try:
+            plaintext = json.dumps(session.to_dict()).encode("utf-8")
+            ciphertext = self._cipher.encrypt(plaintext)
+            tmp_file = session_file.with_suffix(session_file.suffix + ".tmp")
+            tmp_file.write_bytes(ciphertext)
+            try:
+                tmp_file.chmod(0o600)
+            except OSError:
+                pass
+            tmp_file.replace(session_file)
+        except Exception as exc:
+            logger.error("Failed to save session %s: %s", session.session_id, exc)
+
     def _load_sessions(self):
-        """Load sessions from disk"""
+        """Decrypt and load sessions from disk."""
         if not self.storage_dir.exists():
             return
-        
-        for session_file in self.storage_dir.glob('*.json'):
+
+        for session_file in self.storage_dir.glob(f"*{SESSION_FILE_SUFFIX}"):
+            stem = session_file.stem
             try:
-                with open(session_file, 'r') as f:
-                    data = json.load(f)
-                
+                _validate_session_id(stem)
+            except InvalidSessionIdError:
+                logger.warning("Skipping session file with invalid id: %s", session_file.name)
+                continue
+            try:
+                ciphertext = session_file.read_bytes()
+                plaintext = self._cipher.decrypt(ciphertext)
+                data = json.loads(plaintext.decode("utf-8"))
                 session = Session.from_dict(data)
                 self.sessions[session.session_id] = session
-                
-                logger.debug(f"Loaded session {session.session_id}")
-                
-            except Exception as e:
-                logger.error(f"Failed to load session from {session_file}: {e}")
-        
+                logger.debug("Loaded session %s", session.session_id)
+            except (InvalidToken, ValueError, json.JSONDecodeError) as exc:
+                logger.error("Failed to load encrypted session %s: %s", session_file.name, exc)
+            except Exception as exc:
+                logger.error("Unexpected failure loading %s: %s", session_file.name, exc)
+
         logger.info(f"Loaded {len(self.sessions)} sessions")
     
     def export_session(self, session_id: str, output_file: str) -> bool:

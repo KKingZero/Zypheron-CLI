@@ -141,7 +141,7 @@ func TestMessageStruct(t *testing.T) {
 	messages := []Message{
 		{Role: "user", Content: "Hello, analyze this target"},
 		{Role: "assistant", Content: "I'll analyze the target for vulnerabilities"},
-		{Role: "system", Content: "You are a security analyst"},
+		{Role: "system", Content: "You are a security analyst", Metadata: map[string]interface{}{"session_id": "sess-1"}},
 	}
 
 	for _, msg := range messages {
@@ -162,6 +162,11 @@ func TestMessageStruct(t *testing.T) {
 			}
 			if decoded.Content != msg.Content {
 				t.Errorf("Content mismatch: got %s, want %s", decoded.Content, msg.Content)
+			}
+			if expected, ok := msg.Metadata["session_id"].(string); ok {
+				if got, _ := decoded.Metadata["session_id"].(string); got != expected {
+					t.Errorf("Metadata mismatch: got %v, want %v", decoded.Metadata["session_id"], expected)
+				}
 			}
 		})
 	}

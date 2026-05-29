@@ -3,6 +3,8 @@ package export_test
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/export"
@@ -41,7 +43,7 @@ func Example_basicExport() {
 	}
 
 	// Export to SARIF file
-	err := export.ExportScanResultToSARIF(scanResult, "output.sarif")
+	err := export.ExportScanResultToSARIF(scanResult, filepath.Join(tempDir(), "output.sarif"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +87,7 @@ func Example_advancedExport() {
 	}
 
 	// Export to file
-	if err := exporter.ExportToFile("advanced-output.sarif"); err != nil {
+	if err := exporter.ExportToFile(filepath.Join(tempDir(), "advanced-output.sarif")); err != nil {
 		log.Fatal(err)
 	}
 
@@ -146,7 +148,7 @@ func Example_withInvocationMetadata() {
 	}
 
 	// Export
-	if err := exporter.ExportToFile("with-invocation.sarif"); err != nil {
+	if err := exporter.ExportToFile(filepath.Join(tempDir(), "with-invocation.sarif")); err != nil {
 		log.Fatal(err)
 	}
 
@@ -176,7 +178,7 @@ func Example_filteringBySeverity() {
 		}
 	}
 
-	if err := exporter.ExportToFile("critical-high-only.sarif"); err != nil {
+	if err := exporter.ExportToFile(filepath.Join(tempDir(), "critical-high-only.sarif")); err != nil {
 		log.Fatal(err)
 	}
 
@@ -215,7 +217,7 @@ func Example_multipleScans() {
 		}
 	}
 
-	if err := exporter.ExportToFile("combined-scans.sarif"); err != nil {
+	if err := exporter.ExportToFile(filepath.Join(tempDir(), "combined-scans.sarif")); err != nil {
 		log.Fatal(err)
 	}
 
@@ -258,15 +260,15 @@ func Example_withCVEInformation() {
 	port := 443
 
 	vuln := types.Vulnerability{
-		ID:          "vuln-cve-001",
-		Title:       "Remote Code Execution",
-		Description: "A critical remote code execution vulnerability exists in the authentication module",
-		Severity:    "critical",
-		CVEID:       &cveID,
-		CVSSScore:   &cvssScore,
-		Host:        &host,
-		Port:        &port,
-		Remediation: &remediation,
+		ID:               "vuln-cve-001",
+		Title:            "Remote Code Execution",
+		Description:      "A critical remote code execution vulnerability exists in the authentication module",
+		Severity:         "critical",
+		CVEID:            &cveID,
+		CVSSScore:        &cvssScore,
+		Host:             &host,
+		Port:             &port,
+		Remediation:      &remediation,
 		ExploitAvailable: true,
 		References: []string{
 			"https://nvd.nist.gov/vuln/detail/CVE-2023-12345",
@@ -278,10 +280,14 @@ func Example_withCVEInformation() {
 		log.Fatal(err)
 	}
 
-	if err := exporter.ExportToFile("cve-details.sarif"); err != nil {
+	if err := exporter.ExportToFile(filepath.Join(tempDir(), "cve-details.sarif")); err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println("SARIF with CVE information exported")
 	// Output: SARIF with CVE information exported
+}
+
+func tempDir() string {
+	return filepath.Clean(os.TempDir())
 }

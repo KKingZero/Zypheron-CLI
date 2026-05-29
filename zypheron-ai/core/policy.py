@@ -73,7 +73,11 @@ class PolicyEngine:
             return PolicyDecision(allowed=True, requires_approval=False, reason="guided auto policy permits tool")
 
         if policy_mode == PolicyMode.AUTONOMOUS_LAB:
-            if tool_spec.risk_category == RiskCategory.CRITICAL and tool_spec.requires_approval:
+            needs_approval = tool_spec.requires_approval and tool_spec.risk_category in {
+                RiskCategory.HIGH,
+                RiskCategory.CRITICAL,
+            }
+            if needs_approval:
                 return PolicyDecision(
                     allowed=False,
                     requires_approval=True,

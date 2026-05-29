@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="zypheron-ai",
-    version="1.0.0",
+    version="2.0.0",
     description="Zypheron AI Engine - Advanced AI-Powered Penetration Testing",
     author="Zypheron Team",
     author_email="team@zypheron.io",
@@ -51,4 +51,3 @@ setup(
         ],
     },
 )
-

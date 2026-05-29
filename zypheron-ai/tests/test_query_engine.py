@@ -60,9 +60,12 @@ class TestQueryEngine:
     async def test_submit_approval_resumes_pending_tool(self, tmp_path):
         """Approval decisions should resume a waiting tool call."""
         engine = QueryEngine(task_store=TaskStore(str(tmp_path / "runtime.db")))
+        session_id = "test-session"
+        engine.task_store.set_session_scope(session_id, ["example.com"])
         request = QueryRequest(
             messages=[AIMessage(role="user", content="run nmap scan against example.com")],
             policy_mode=PolicyMode.INTERACTIVE_SAFE,
+            session_id=session_id,
         )
         mock_tool = MagicMock()
         mock_tool.spec = ToolSpec(
@@ -95,13 +98,70 @@ class TestQueryEngine:
         mock_tool.execute.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_web_prompt_executes_multiple_real_tools(self, tmp_path):
+        """Web-app prompts should compose multiple shared-tool executions."""
+        engine = QueryEngine(task_store=TaskStore(str(tmp_path / "runtime.db")))
+        session_id = "web-session"
+        engine.task_store.set_session_scope(session_id, ["example.com"])
+        request = QueryRequest(
+            messages=[AIMessage(role="user", content="scan https://example.com for web vulnerabilities and fuzz directories")],
+            policy_mode=PolicyMode.AUTONOMOUS_LAB,
+            session_id=session_id,
+        )
+
+        tools = {}
+        for name in ("httpx_probe", "ffuf_scan", "nuclei_scan", "nikto_scan"):
+            mock_tool = MagicMock()
+            mock_tool.spec = ToolSpec(
+                name=name,
+                description="scan",
+                risk_category=RiskCategory.MEDIUM,
+                requires_approval=True,
+                read_only=True,
+            )
+            async def execute_side_effect(arguments, context, tool_name=name):
+                target = arguments.get("target") or arguments.get("url")
+                return ToolResult(
+                    tool_name=tool_name,
+                    success=True,
+                    content=f"{tool_name} ok for {target}",
+                    data={},
+                )
+
+            mock_tool.execute = AsyncMock(side_effect=execute_side_effect)
+            tools[name] = mock_tool
+
+        with patch("core.query_engine.tool_registry.get", side_effect=lambda name: tools.get(name)):
+            response = await engine.execute(request)
+
+        assert response.task_status.value == "completed"
+        assert [result.tool_name for result in response.tool_results] == ["httpx_probe", "ffuf_scan", "nuclei_scan", "nikto_scan"]
+
+    @pytest.mark.asyncio
+    async def test_authenticated_prompt_without_session_requests_follow_up(self, tmp_path):
+        """Authenticated testing must stop and ask for a session id when missing."""
+        engine = QueryEngine(task_store=TaskStore(str(tmp_path / "runtime.db")))
+        request = QueryRequest(
+            messages=[AIMessage(role="user", content="run authenticated IDOR checks on https://example.com/api/users/1")],
+            policy_mode=PolicyMode.INTERACTIVE_SAFE,
+        )
+
+        response = await engine.execute(request)
+
+        assert response.task_status.value == "paused"
+        assert "session_id" in response.content
+
+    @pytest.mark.asyncio
     async def test_submit_approval_marks_failed_on_tool_exception(self, tmp_path):
         """Resumed tool exceptions should fail the task instead of stranding it."""
         store = TaskStore(str(tmp_path / "runtime.db"))
         engine = QueryEngine(task_store=store)
+        session_id = "exception-session"
+        store.set_session_scope(session_id, ["example.com"])
         request = QueryRequest(
             messages=[AIMessage(role="user", content="run nmap scan against example.com")],
             policy_mode=PolicyMode.INTERACTIVE_SAFE,
+            session_id=session_id,
         )
         mock_tool = MagicMock()
         mock_tool.spec = ToolSpec(
@@ -130,9 +190,12 @@ class TestQueryEngine:
     async def test_failed_tool_result_marks_task_failed(self, tmp_path):
         """ToolResult(success=False) should persist a failed task state."""
         engine = QueryEngine(task_store=TaskStore(str(tmp_path / "runtime.db")))
+        session_id = "failed-session"
+        engine.task_store.set_session_scope(session_id, ["example.com"])
         request = QueryRequest(
             messages=[AIMessage(role="user", content="run nmap scan against example.com")],
             policy_mode=PolicyMode.INTERACTIVE_SAFE,
+            session_id=session_id,
         )
         mock_tool = MagicMock()
         mock_tool.spec = ToolSpec(
@@ -186,7 +249,9 @@ class TestQueryEngine:
             )
         )
 
-        engine = QueryEngine(task_store=TaskStore(db_path))
+        store = TaskStore(db_path)
+        store.set_session_scope("session-1", ["example.com"])
+        engine = QueryEngine(task_store=store)
         with patch("core.query_engine.tool_registry.get", return_value=mock_tool):
             pending = await engine.execute(request)
             await engine.submit_approval(

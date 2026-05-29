@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Set
 from datetime import datetime, timedelta
 
+from core.scope import scope_match
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,18 +45,10 @@ class Authorization:
         return self.start_date <= now <= self.end_date
     
     def is_target_authorized(self, target: str) -> bool:
-        """Check if specific target is authorized"""
-        # Check exclusions first
-        for exclusion in self.exclusions:
-            if exclusion in target:
-                return False
-        
-        # Check scope
-        for scope_item in self.scope:
-            if scope_item in target:
-                return True
-        
-        return False
+        """Check if specific target is authorized via host-suffix matching."""
+        if scope_match(target, self.exclusions):
+            return False
+        return scope_match(target, self.scope)
 
 
 class AuthorizationManager:

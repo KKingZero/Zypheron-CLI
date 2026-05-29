@@ -15,8 +15,10 @@ class TaskStore:
     """Persist task state and audit events in a local SQLite database."""
 
     def __init__(self, db_path: Optional[str] = None):
-        default_path = Path.home() / ".zypheron" / "runtime.db"
-        self.db_path = str(db_path or default_path)
+        env_db_path = os.environ.get("ZYPHERON_RUNTIME_DB")
+        state_dir = Path(os.environ.get("ZYPHERON_STATE_DIR", Path.home() / ".zypheron"))
+        default_path = state_dir / "runtime.db"
+        self.db_path = str(db_path or env_db_path or default_path)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
         self._harden_db_permissions()
@@ -76,6 +78,16 @@ class TaskStore:
                     tool_name TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (session_id, tool_name)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS session_scope (
+                    session_id TEXT NOT NULL,
+                    host TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (session_id, host)
                 )
                 """
             )
@@ -244,6 +256,36 @@ class TaskStore:
                 (session_id, tool_name),
             ).fetchone()
         return row is not None
+
+    def set_session_scope(self, session_id: str, hosts: List[str]) -> None:
+        """Replace the session scope with the given host suffix entries."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM session_scope WHERE session_id = ?", (session_id,))
+            for host in hosts:
+                normalized = (host or "").strip().lower().rstrip(".")
+                if not normalized:
+                    continue
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO session_scope (session_id, host, created_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    (session_id, normalized, utc_now_iso()),
+                )
+
+    def get_session_scope(self, session_id: str) -> List[str]:
+        """Return the scope host suffixes recorded for a session."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT host FROM session_scope WHERE session_id = ?",
+                (session_id,),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def clear_session_scope(self, session_id: str) -> None:
+        """Remove all scope entries for a session."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM session_scope WHERE session_id = ?", (session_id,))
 
     def claim_pending_approval(self, task_id: str, request_id: str) -> TaskRecord:
         """

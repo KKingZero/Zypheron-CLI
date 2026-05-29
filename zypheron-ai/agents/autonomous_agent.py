@@ -331,9 +331,10 @@ Create a step-by-step plan."""
     async def _execute_action(self, action: AgentAction) -> Optional[str]:
         """Execute a single action"""
         if not self.tool_executor:
-            # Simulate execution for now
-            logger.info(f"    ℹ Simulated: {action.tool} {action.parameters}")
-            return f"Simulated output from {action.tool}"
+            raise RuntimeError(
+                f"No real tool executor is configured for autonomous action `{action.tool}`. "
+                "Simulation is disabled in production."
+            )
         
         # Call the actual tool executor
         return await self.tool_executor(action.tool, action.parameters)

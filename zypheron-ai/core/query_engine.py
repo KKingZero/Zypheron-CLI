@@ -2,29 +2,24 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from loguru import logger
 
-from contracts.runtime import (
-    AuditEvent,
-    PolicyMode,
-    QueryResponse,
-    TaskRecord,
-    TaskStatus,
-    ToolCall,
-    ToolProgressEvent,
-    ApprovalRequest,
-)
+from contracts.runtime import AuditEvent, PolicyMode, QueryResponse, RiskCategory, TaskRecord, TaskStatus, ToolCall, ToolProgressEvent
 from core.policy import authorize_tool_call
+from core.scope import normalize_scope_host, scope_match
 from providers.base import AIMessage
 from providers.manager import ai_manager, normalize_provider_name
 from tasks.store import TaskStore
 from tools.base import ExecutionContext
 from tools.registry import tool_registry
+
+_TARGET_ARG_KEYS = ("target", "url", "domain", "host")
+_SCOPE_GATED_RISK = {RiskCategory.MEDIUM, RiskCategory.HIGH, RiskCategory.CRITICAL}
 
 
 @dataclass
@@ -39,6 +34,14 @@ class QueryRequest:
     session_id: Optional[str] = None
     task_id: Optional[str] = None
     policy_mode: PolicyMode = PolicyMode.INTERACTIVE_SAFE
+
+
+@dataclass
+class PlanOutcome:
+    """Planning output for a single user turn."""
+
+    tool_calls: List[ToolCall]
+    follow_up: Optional[str] = None
 
 
 class QueryEngine:
@@ -71,65 +74,32 @@ class QueryEngine:
         self.task_store.upsert_task(task)
         self.task_store.append_event(AuditEvent(task_id=task_id, event_type="task_running"))
 
-        tool_call = self._plan_tool_call(latest_user.content if latest_user else "")
+        plan = self._plan_tool_calls(
+            latest_user.content if latest_user else "",
+            latest_user.metadata if latest_user else None,
+        )
 
         try:
-            if tool_call:
-                tool = tool_registry.get(tool_call.tool_name)
-                if tool is not None:
-                    approval_granted = self.task_store.has_session_approval(session_id, tool.spec.name)
-                    decision = authorize_tool_call(
-                        tool_spec=tool.spec,
-                        policy_mode=request.policy_mode,
-                        reason=tool_call.rationale or f"query engine selected {tool_call.tool_name}",
-                        arguments=tool_call.arguments,
-                        approval_granted=approval_granted,
-                    )
-                    if decision.requires_approval and decision.approval_request is not None:
-                        task.status = TaskStatus.WAITING_APPROVAL
-                        task.metadata.update({
-                            "pending_tool_call": {
-                                "tool_name": tool_call.tool_name,
-                                "arguments": tool_call.arguments,
-                                "rationale": tool_call.rationale,
-                            },
-                            "pending_approval_request": decision.approval_request.to_dict(),
-                            "policy_mode": request.policy_mode.value,
-                        })
-                        self.task_store.upsert_task(task)
-                        self.task_store.append_event(
-                            AuditEvent(
-                                task_id=task_id,
-                                event_type="approval_required",
-                                payload={
-                                    "tool_name": tool.spec.name,
-                                    "reason": decision.reason,
-                                    "risk_category": tool.spec.risk_category.value,
-                                    "request_id": decision.approval_request.request_id,
-                                    "arguments": tool_call.arguments,
-                                },
-                            )
-                        )
-                        return QueryResponse(
-                            content=(
-                                f"The requested action needs approval before I can run "
-                                f"`{tool.spec.name}` in {request.policy_mode.value} mode."
-                            ),
-                            provider="zypheron-query-engine",
-                            model=request.model or "runtime-policy",
-                            session_id=session_id,
-                            task_id=task_id,
-                            task_status=task.status,
-                            approval_request=decision.approval_request,
-                        )
+            if plan.follow_up:
+                task.status = TaskStatus.PAUSED
+                task.metadata["follow_up"] = plan.follow_up
+                self.task_store.upsert_task(task)
+                return QueryResponse(
+                    content=plan.follow_up,
+                    provider="zypheron-query-engine",
+                    model=request.model or "runtime-policy",
+                    session_id=session_id,
+                    task_id=task_id,
+                    task_status=task.status,
+                )
 
-                    if decision.allowed:
-                        return await self._execute_tool_call(
-                            task=task,
-                            tool_call=tool_call,
-                            policy_mode=request.policy_mode,
-                            provider_model=request.model,
-                        )
+            if plan.tool_calls:
+                return await self._execute_tool_calls(
+                    task=task,
+                    tool_calls=plan.tool_calls,
+                    policy_mode=request.policy_mode,
+                    provider_model=request.model,
+                )
 
             provider = normalize_provider_name(request.provider)
             model = request.model
@@ -197,12 +167,11 @@ class QueryEngine:
         if pending_request.get("request_id") != request_id:
             raise ValueError("Approval request id does not match pending task")
 
-        tool_call_data = task.metadata.get("pending_tool_call") or {}
-        tool_call = ToolCall(
-            tool_name=tool_call_data.get("tool_name", ""),
-            arguments=tool_call_data.get("arguments", {}),
-            rationale=tool_call_data.get("rationale", ""),
-        )
+        tool_calls = self._deserialize_tool_calls(task.metadata.get("pending_tool_calls") or [])
+        tool_index = int(task.metadata.get("pending_tool_call_index", 0))
+        if tool_index >= len(tool_calls):
+            raise ValueError("Pending tool sequence is missing or corrupt")
+        tool_call = tool_calls[tool_index]
         policy_mode = task.metadata.get("policy_mode", PolicyMode.INTERACTIVE_SAFE.value)
 
         self.task_store.append_event(
@@ -218,9 +187,7 @@ class QueryEngine:
 
         if normalized_decision == "deny":
             task.status = TaskStatus.ABORTED
-            task.metadata.pop("pending_tool_call", None)
-            task.metadata.pop("pending_approval_request", None)
-            task.metadata.pop("approval_claimed", None)
+            self._clear_pending_task_metadata(task)
             self.task_store.upsert_task(task)
             return QueryResponse(
                 content=f"Denied `{tool_call.tool_name}`. The pending runtime action was not executed.",
@@ -236,12 +203,15 @@ class QueryEngine:
 
         claimed_task = self.task_store.claim_pending_approval(task_id, request_id)
         try:
-            return await self._execute_tool_call(
+            completed_results = self._deserialize_tool_results(claimed_task.metadata.get("completed_tool_results") or [])
+            return await self._execute_tool_calls(
                 task=claimed_task,
-                tool_call=tool_call,
+                tool_calls=tool_calls,
                 policy_mode=PolicyMode(policy_mode),
                 provider_model="tool-runtime",
-                approval_granted=True,
+                start_index=tool_index,
+                approval_granted_index=tool_index,
+                completed_results=completed_results,
             )
         except Exception as exc:
             logger.error(f"Approval-resumed tool execution failed: {exc}")
@@ -264,22 +234,26 @@ class QueryEngine:
                 return message
         return messages[-1] if messages else None
 
-    def _plan_tool_call(self, text: str) -> Optional[ToolCall]:
+    def _plan_tool_calls(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> PlanOutcome:
         query = (text or "").strip()
         lowered = query.lower()
         if not lowered:
-            return None
+            return PlanOutcome(tool_calls=[])
 
         if lowered.startswith("remember ") or lowered.startswith("remember that "):
             value = query.split(" ", 1)[1].strip() if " " in query else query
-            return ToolCall(
-                tool_name="store_memory",
-                arguments={
-                    "key": f"note_{uuid4().hex[:8]}",
-                    "value": value,
-                    "tier": "session",
-                },
-                rationale="User explicitly asked Zypheron to remember information.",
+            return PlanOutcome(
+                tool_calls=[
+                    ToolCall(
+                        tool_name="store_memory",
+                        arguments={
+                            "key": f"note_{uuid4().hex[:8]}",
+                            "value": value,
+                            "tier": "session",
+                        },
+                        rationale="User explicitly asked Zypheron to remember information.",
+                    )
+                ]
             )
 
         if "what do you remember" in lowered or lowered.startswith("recall "):
@@ -288,80 +262,75 @@ class QueryEngine:
                 if lowered.startswith(prefix):
                     search_query = query[len(prefix):].strip() or query
                     break
-            return ToolCall(
-                tool_name="search_memory",
-                arguments={"query": search_query, "limit": 5},
-                rationale="User asked to retrieve stored memory.",
+            return PlanOutcome(
+                tool_calls=[
+                    ToolCall(
+                        tool_name="search_memory",
+                        arguments={"query": search_query, "limit": 5},
+                        rationale="User asked to retrieve stored memory.",
+                    )
+                ]
             )
 
         if "configured provider" in lowered or "configured providers" in lowered:
-            return ToolCall(
-                tool_name="list_configured_providers",
-                arguments={},
-                rationale="User asked which providers are configured.",
+            return PlanOutcome(
+                tool_calls=[
+                    ToolCall(
+                        tool_name="list_configured_providers",
+                        arguments={},
+                        rationale="User asked which providers are configured.",
+                    )
+                ]
             )
 
         if "available provider" in lowered or "available providers" in lowered:
-            return ToolCall(
-                tool_name="list_available_providers",
-                arguments={},
-                rationale="User asked which providers are available.",
+            return PlanOutcome(
+                tool_calls=[
+                    ToolCall(
+                        tool_name="list_available_providers",
+                        arguments={},
+                        rationale="User asked which providers are available.",
+                    )
+                ]
             )
 
         if "what providers" in lowered and "config" in lowered:
-            return ToolCall(
-                tool_name="list_configured_providers",
-                arguments={},
-                rationale="Provider configuration question matched configured providers tool.",
+            return PlanOutcome(
+                tool_calls=[
+                    ToolCall(
+                        tool_name="list_configured_providers",
+                        arguments={},
+                        rationale="Provider configuration question matched configured providers tool.",
+                    )
+                ]
             )
 
         if "what providers" in lowered:
-            return ToolCall(
-                tool_name="list_available_providers",
-                arguments={},
-                rationale="Provider availability question matched provider listing tool.",
+            return PlanOutcome(
+                tool_calls=[
+                    ToolCall(
+                        tool_name="list_available_providers",
+                        arguments={},
+                        rationale="Provider availability question matched provider listing tool.",
+                    )
+                ]
             )
 
         target = self._extract_target(query)
         if target:
-            if "nmap" in lowered:
-                return ToolCall(
-                    tool_name="nmap_scan",
-                    arguments={"target": target, "scan_type": "-sV"},
-                    rationale="User explicitly requested an nmap scan.",
-                )
-            if "amass" in lowered:
-                return ToolCall(
-                    tool_name="amass_enum",
-                    arguments={"domain": target, "mode": "enum"},
-                    rationale="User explicitly requested amass enumeration.",
-                )
-            if "subfinder" in lowered:
-                return ToolCall(
-                    tool_name="subfinder_scan",
-                    arguments={"domain": target, "silent": True, "all_sources": False},
-                    rationale="User explicitly requested subfinder enumeration.",
-                )
-            if "gobuster" in lowered:
-                return ToolCall(
-                    tool_name="gobuster_scan",
-                    arguments={"url": target, "mode": "dir", "wordlist": "/usr/share/wordlists/dirb/common.txt"},
-                    rationale="User explicitly requested gobuster enumeration.",
-                )
-            if "httpx" in lowered:
-                return ToolCall(
-                    tool_name="httpx_probe",
-                    arguments={"target": target, "probe": True, "tech_detect": True, "status_code": True, "threads": 50},
-                    rationale="User explicitly requested httpx probing.",
-                )
-            if "ffuf" in lowered:
-                return ToolCall(
-                    tool_name="ffuf_scan",
-                    arguments={"url": target, "wordlist": "/usr/share/wordlists/dirb/common.txt", "mode": "directory"},
-                    rationale="User explicitly requested ffuf enumeration.",
-                )
+            auth_plan = self._plan_authenticated_scan(query, lowered, target, metadata or {})
+            if auth_plan is not None:
+                return auth_plan
 
-        return None
+            explicit_calls = self._plan_explicit_tool_calls(lowered, target)
+            if explicit_calls:
+                return PlanOutcome(tool_calls=explicit_calls)
+
+            web_calls = self._plan_web_tool_calls(query, lowered, target)
+            if web_calls:
+                return PlanOutcome(tool_calls=web_calls)
+
+        return PlanOutcome(tool_calls=[])
 
     def _render_tool_response(self, tool_result) -> str:
         if tool_result.tool_name == "store_memory":
@@ -373,6 +342,10 @@ class QueryEngine:
             return tool_result.content
         if tool_result.tool_name == "search_memory":
             return tool_result.content
+        evidence = tool_result.data.get("evidence", {})
+        summary = evidence.get("summary")
+        if summary:
+            return summary
         return tool_result.content
 
     def _extract_target(self, text: str) -> Optional[str]:
@@ -382,21 +355,276 @@ class QueryEngine:
             return match.group(1).rstrip(".,)")
         return None
 
-    async def _execute_tool_call(
+    def _plan_authenticated_scan(
+        self,
+        query: str,
+        lowered: str,
+        target: str,
+        metadata: Dict[str, Any],
+    ) -> Optional[PlanOutcome]:
+        auth_keywords = ("authenticated", "session", "cookie", "idor", "bola", "bfla", "authorization", "privilege")
+        if not any(keyword in lowered for keyword in auth_keywords):
+            return None
+
+        session_id = self._extract_session_id(query, metadata)
+        if not session_id:
+            return PlanOutcome(
+                tool_calls=[],
+                follow_up=(
+                    "Authenticated testing needs a stored `session_id`. "
+                    "Provide one in the request metadata or include `session_id=<value>` in the prompt."
+                ),
+            )
+
+        if "sql injection" in lowered or "sqli" in lowered:
+            scan_type = "sql_injection"
+        elif "idor" in lowered or "bola" in lowered:
+            scan_type = "idor"
+        else:
+            scan_type = "broken_authorization"
+
+        arguments: Dict[str, Any] = {
+            "scan_type": scan_type,
+            "session_id": session_id,
+            "url": target,
+            "method": str(metadata.get("method", "GET")).upper(),
+            "data": metadata.get("data", ""),
+            "headers": metadata.get("headers", {}),
+            "required_role": metadata.get("required_role", "admin"),
+            "actual_role": metadata.get("actual_role", "user"),
+            "target_user_id": metadata.get("target_user_id"),
+        }
+        return PlanOutcome(
+            tool_calls=[
+                ToolCall(
+                    tool_name="authenticated_web_scan",
+                    arguments=arguments,
+                    rationale=f"User requested authenticated {scan_type.replace('_', ' ')} testing.",
+                )
+            ]
+        )
+
+    def _plan_explicit_tool_calls(self, lowered: str, target: str) -> List[ToolCall]:
+        calls: List[ToolCall] = []
+        if "nmap" in lowered:
+            calls.append(ToolCall("nmap_scan", {"target": target, "scan_type": "-sV"}, "User explicitly requested an nmap scan."))
+        if "amass" in lowered:
+            calls.append(ToolCall("amass_enum", {"domain": target, "mode": "enum"}, "User explicitly requested amass enumeration."))
+        if "subfinder" in lowered:
+            calls.append(ToolCall("subfinder_scan", {"domain": target, "silent": True, "all_sources": False}, "User explicitly requested subfinder enumeration."))
+        if "gobuster" in lowered:
+            calls.append(ToolCall("gobuster_scan", {"url": target, "mode": "dir", "wordlist": "/usr/share/wordlists/dirb/common.txt"}, "User explicitly requested gobuster enumeration."))
+        if "httpx" in lowered:
+            calls.append(ToolCall("httpx_probe", {"target": target, "probe": True, "tech_detect": True, "status_code": True, "threads": 50}, "User explicitly requested httpx probing."))
+        if "ffuf" in lowered:
+            calls.append(ToolCall("ffuf_scan", {"url": target, "wordlist": "/usr/share/wordlists/dirb/common.txt", "mode": "directory"}, "User explicitly requested ffuf enumeration."))
+        if "nuclei" in lowered:
+            calls.append(ToolCall("nuclei_scan", {"target": target}, "User explicitly requested nuclei scanning."))
+        if "nikto" in lowered:
+            calls.append(ToolCall("nikto_scan", {"target": target}, "User explicitly requested nikto scanning."))
+        if "sqlmap" in lowered:
+            calls.append(ToolCall("sqlmap_scan", {"url": target}, "User explicitly requested sqlmap scanning."))
+        return calls
+
+    def _plan_web_tool_calls(self, query: str, lowered: str, target: str) -> List[ToolCall]:
+        looks_like_web = target.startswith("http://") or target.startswith("https://") or any(
+            keyword in lowered for keyword in ("web", "url", "site", "endpoint", "api", "directory", "vuln", "vulnerability", "scan", "recon", "fuzz")
+        )
+        if not looks_like_web:
+            return []
+
+        calls: List[ToolCall] = [
+            ToolCall(
+                "httpx_probe",
+                {"target": target, "probe": True, "tech_detect": True, "status_code": True, "threads": 50},
+                "Probe the target and fingerprint the web stack before deeper testing.",
+            )
+        ]
+
+        if any(keyword in lowered for keyword in ("fuzz", "directory", "content discovery", "paths", "dirbust")):
+            calls.append(
+                ToolCall(
+                    "ffuf_scan",
+                    {"url": target, "wordlist": "/usr/share/wordlists/dirb/common.txt", "mode": "directory"},
+                    "User requested content discovery or directory fuzzing.",
+                )
+            )
+
+        if any(keyword in lowered for keyword in ("subdomain", "subdomains", "recon")) and not target.startswith("http"):
+            calls.insert(0, ToolCall("subfinder_scan", {"domain": target, "silent": True, "all_sources": False}, "Enumerate subdomains before probing the target."))
+
+        if any(keyword in lowered for keyword in ("vuln", "vulnerability", "scan", "check", "test")):
+            calls.append(ToolCall("nuclei_scan", {"target": target}, "Run template-based web vulnerability checks."))
+            calls.append(ToolCall("nikto_scan", {"target": target}, "Run signature-based web server checks."))
+
+        if any(keyword in lowered for keyword in ("sql injection", "sqli", "database")):
+            calls.append(ToolCall("sqlmap_scan", {"url": target}, "Validate SQL injection exposure against the target URL."))
+
+        deduped: List[ToolCall] = []
+        seen = set()
+        for call in calls:
+            fingerprint = (call.tool_name, tuple(sorted(call.arguments.items())))
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+            deduped.append(call)
+        return deduped
+
+    def _extract_session_id(self, text: str, metadata: Dict[str, Any]) -> Optional[str]:
+        for key in ("session_id", "auth_session_id"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        match = re.search(r"session(?:_id)?\s*[:=]\s*([A-Za-z0-9._-]+)", text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        return None
+
+    async def _execute_tool_calls(
+        self,
+        task: TaskRecord,
+        tool_calls: List[ToolCall],
+        policy_mode: PolicyMode,
+        provider_model: Optional[str],
+        start_index: int = 0,
+        approval_granted_index: Optional[int] = None,
+        completed_results: Optional[List[Any]] = None,
+    ) -> QueryResponse:
+        """Execute one or more tool calls and persist the runtime state."""
+        task.status = TaskStatus.RUNNING
+        self.task_store.upsert_task(task)
+
+        progress_events: List[ToolProgressEvent] = []
+        results = list(completed_results or [])
+
+        for index in range(start_index, len(tool_calls)):
+            tool_call = tool_calls[index]
+            tool = tool_registry.get(tool_call.tool_name)
+            if tool is None:
+                raise ValueError(f"Unknown tool: {tool_call.tool_name}")
+
+            scope_block_reason = self._scope_block_reason(task.session_id, tool, tool_call)
+            if scope_block_reason is not None:
+                task.status = TaskStatus.FAILED
+                task.metadata["error"] = scope_block_reason
+                self._clear_pending_task_metadata(task)
+                self.task_store.upsert_task(task)
+                self.task_store.append_event(
+                    AuditEvent(
+                        task_id=task.task_id,
+                        event_type="scope_blocked",
+                        payload={
+                            "tool_name": tool.spec.name,
+                            "reason": scope_block_reason,
+                            "arguments": tool_call.arguments,
+                        },
+                    )
+                )
+                return QueryResponse(
+                    content=scope_block_reason,
+                    provider="zypheron-query-engine",
+                    model=provider_model or "tool-runtime",
+                    session_id=task.session_id,
+                    task_id=task.task_id,
+                    task_status=task.status,
+                    tool_results=results,
+                    progress_events=progress_events,
+                )
+
+            approval_granted = index == approval_granted_index or self.task_store.has_session_approval(task.session_id, tool.spec.name)
+            decision = authorize_tool_call(
+                tool_spec=tool.spec,
+                policy_mode=policy_mode,
+                reason=tool_call.rationale or f"query engine selected {tool_call.tool_name}",
+                arguments=tool_call.arguments,
+                approval_granted=approval_granted,
+            )
+            if decision.requires_approval and decision.approval_request is not None:
+                task.status = TaskStatus.WAITING_APPROVAL
+                task.metadata.update({
+                    "pending_tool_calls": self._serialize_tool_calls(tool_calls),
+                    "pending_tool_call_index": index,
+                    "completed_tool_results": [asdict(result) for result in results],
+                    "pending_approval_request": decision.approval_request.to_dict(),
+                    "policy_mode": policy_mode.value,
+                })
+                self.task_store.upsert_task(task)
+                self.task_store.append_event(
+                    AuditEvent(
+                        task_id=task.task_id,
+                        event_type="approval_required",
+                        payload={
+                            "tool_name": tool.spec.name,
+                            "reason": decision.reason,
+                            "risk_category": tool.spec.risk_category.value,
+                            "request_id": decision.approval_request.request_id,
+                            "arguments": tool_call.arguments,
+                        },
+                    )
+                )
+                return QueryResponse(
+                    content=(
+                        f"I need approval before running `{tool.spec.name}` "
+                        f"({index + 1}/{len(tool_calls)}) in {policy_mode.value} mode."
+                    ),
+                    provider="zypheron-query-engine",
+                    model=provider_model or "runtime-policy",
+                    session_id=task.session_id,
+                    task_id=task.task_id,
+                    task_status=task.status,
+                    tool_results=results,
+                    progress_events=progress_events,
+                    approval_request=decision.approval_request,
+                )
+
+            tool_result, new_events = await self._run_tool_call(
+                task=task,
+                tool_call=tool_call,
+                policy_mode=policy_mode,
+                approval_granted=approval_granted,
+            )
+            results.append(tool_result)
+            progress_events.extend(new_events)
+            if not tool_result.success:
+                task.status = TaskStatus.FAILED
+                task.metadata["error"] = tool_result.error or tool_result.content
+                self._clear_pending_task_metadata(task)
+                self.task_store.upsert_task(task)
+                return QueryResponse(
+                    content=self._render_tool_sequence(results),
+                    provider="zypheron-query-engine",
+                    model=provider_model or "tool-runtime",
+                    session_id=task.session_id,
+                    task_id=task.task_id,
+                    task_status=task.status,
+                    tool_results=results,
+                    progress_events=progress_events,
+                )
+
+        task.status = TaskStatus.COMPLETED
+        self._clear_pending_task_metadata(task)
+        self.task_store.upsert_task(task)
+        return QueryResponse(
+            content=self._render_tool_sequence(results),
+            provider="zypheron-query-engine",
+            model=provider_model or "tool-runtime",
+            session_id=task.session_id,
+            task_id=task.task_id,
+            task_status=task.status,
+            tool_results=results,
+            progress_events=progress_events,
+        )
+
+    async def _run_tool_call(
         self,
         task: TaskRecord,
         tool_call: ToolCall,
         policy_mode: PolicyMode,
-        provider_model: Optional[str],
         approval_granted: bool = False,
-    ) -> QueryResponse:
-        """Execute a tool call and persist the runtime state."""
+    ) -> tuple[Any, List[ToolProgressEvent]]:
         tool = tool_registry.get(tool_call.tool_name)
         if tool is None:
             raise ValueError(f"Unknown tool: {tool_call.tool_name}")
-
-        task.status = TaskStatus.RUNNING
-        self.task_store.upsert_task(task)
 
         progress_events: List[ToolProgressEvent] = [
             ToolProgressEvent(
@@ -415,45 +643,117 @@ class QueryEngine:
                 metadata={"approval_granted": approval_granted},
             ),
         )
+        tool_result = self._annotate_tool_result(tool_result, tool_call)
         progress_events.append(
             ToolProgressEvent(
                 task_id=task.task_id,
                 tool_name=tool.spec.name,
                 status="completed" if tool_result.success else "failed",
-                message=(
-                    f"Completed {tool.spec.name}"
-                    if tool_result.success
-                    else f"Failed {tool.spec.name}"
-                ),
+                message=f"Completed {tool.spec.name}" if tool_result.success else f"Failed {tool.spec.name}",
             )
         )
-        task.status = TaskStatus.COMPLETED if tool_result.success else TaskStatus.FAILED
-        task.metadata.pop("pending_tool_call", None)
-        task.metadata.pop("pending_approval_request", None)
-        task.metadata.pop("approval_claimed", None)
-        if not tool_result.success and tool_result.error:
-            task.metadata["error"] = tool_result.error
-        self.task_store.upsert_task(task)
         self.task_store.append_event(
             AuditEvent(
                 task_id=task.task_id,
                 event_type="tool_executed" if tool_result.success else "tool_failed",
-                payload={
-                    "tool_name": tool.spec.name,
-                    "success": tool_result.success,
-                },
+                payload={"tool_name": tool.spec.name, "success": tool_result.success},
             )
         )
-        return QueryResponse(
-            content=self._render_tool_response(tool_result),
-            provider="zypheron-query-engine",
-            model=provider_model or "tool-runtime",
-            session_id=task.session_id,
-            task_id=task.task_id,
-            task_status=task.status,
-            tool_results=[tool_result],
-            progress_events=progress_events,
-        )
+        return tool_result, progress_events
+
+    def _annotate_tool_result(self, tool_result, tool_call: ToolCall):
+        data = dict(tool_result.data or {})
+        evidence = {
+            "tool": tool_result.tool_name,
+            "target": tool_call.arguments.get("target") or tool_call.arguments.get("url") or tool_call.arguments.get("domain", ""),
+            "summary": tool_result.content.strip() or tool_result.error or "",
+            "findings": self._extract_findings(tool_result),
+        }
+        data["evidence"] = evidence
+        tool_result.data = data
+        return tool_result
+
+    def _extract_findings(self, tool_result) -> List[Dict[str, Any]]:
+        if tool_result.tool_name == "authenticated_web_scan":
+            return tool_result.data.get("findings", [])
+
+        findings: List[Dict[str, Any]] = []
+        for raw_line in tool_result.content.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if tool_result.tool_name == "nuclei_scan":
+                findings.append({"title": line, "severity": self._infer_severity(line), "evidence": line})
+            elif tool_result.tool_name == "nikto_scan" and line.startswith("+"):
+                findings.append({"title": line[1:].strip(), "severity": "medium", "evidence": line})
+            elif tool_result.tool_name == "sqlmap_scan" and ("sql injection" in line.lower() or "is vulnerable" in line.lower()):
+                findings.append({"title": line, "severity": "high", "evidence": line})
+        return findings
+
+    def _infer_severity(self, text: str) -> str:
+        lowered = text.lower()
+        for severity in ("critical", "high", "medium", "low", "info"):
+            if severity in lowered:
+                return severity
+        return "medium"
+
+    def _render_tool_sequence(self, tool_results: List[Any]) -> str:
+        rendered = [self._render_tool_response(result) for result in tool_results if self._render_tool_response(result)]
+        return "\n\n".join(rendered)
+
+    def _scope_block_reason(self, session_id: str, tool, tool_call: ToolCall) -> Optional[str]:
+        """Return a block-reason string if the tool call violates session scope."""
+        if tool.spec.risk_category not in _SCOPE_GATED_RISK:
+            return None
+
+        target_value: Optional[str] = None
+        for key in _TARGET_ARG_KEYS:
+            value = tool_call.arguments.get(key)
+            if isinstance(value, str) and value.strip():
+                target_value = value.strip()
+                break
+        if target_value is None:
+            return None
+
+        scope_entries = self.task_store.get_session_scope(session_id)
+        if not scope_entries:
+            return (
+                f"Refusing to run `{tool.spec.name}` (risk={tool.spec.risk_category.value}) "
+                "because no in-scope hosts are configured for this session. "
+                "Set scope first (e.g. via /scope add <host>)."
+            )
+
+        target_host = normalize_scope_host(target_value)
+        if not target_host:
+            return f"Refusing to run `{tool.spec.name}`: unable to parse host from {target_value!r}."
+
+        if not scope_match(target_value, scope_entries):
+            return (
+                f"Refusing to run `{tool.spec.name}` against {target_host}: "
+                f"target is outside session scope ({', '.join(sorted(scope_entries))})."
+            )
+        return None
+
+    def _serialize_tool_calls(self, tool_calls: List[ToolCall]) -> List[Dict[str, Any]]:
+        return [asdict(tool_call) for tool_call in tool_calls]
+
+    def _deserialize_tool_calls(self, data: List[Dict[str, Any]]) -> List[ToolCall]:
+        return [ToolCall(**item) for item in data]
+
+    def _deserialize_tool_results(self, data: List[Dict[str, Any]]) -> List[Any]:
+        from contracts.runtime import ToolResult
+        return [ToolResult(**item) for item in data]
+
+    def _clear_pending_task_metadata(self, task: TaskRecord) -> None:
+        for key in (
+            "pending_tool_calls",
+            "pending_tool_call_index",
+            "completed_tool_results",
+            "pending_approval_request",
+            "approval_claimed",
+            "follow_up",
+        ):
+            task.metadata.pop(key, None)
 
 
 query_engine = QueryEngine()
