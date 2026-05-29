@@ -4,9 +4,10 @@
 
 | Document | Description |
 |----------|-------------|
+| [QUICKSTART.md](QUICKSTART.md) | Fast install and first run |
 | [INSTALL.md](INSTALL.md) | Install from source or release binary |
 | [SETUP_AND_USE.md](SETUP_AND_USE.md) | First-time config and daily workflows |
-| [API_KEY_SETUP.md](../API_KEY_SETUP.md) | Configure AI provider keys |
+| [API_KEY_SETUP.md](API_KEY_SETUP.md) | Configure AI provider keys |
 
 ## CLI Reference
 
@@ -40,7 +41,8 @@
 | Document | Description |
 |----------|-------------|
 | [Changelog](CHANGELOG.md) | Release history |
-| [Troubleshooting](../HELP.md) | Common issues and fixes |
+| [BUILD_AND_TEST.md](BUILD_AND_TEST.md) | Local build and validation |
+| [Troubleshooting](HELP.md) | Common issues and fixes |
 | [Security Policy](../SECURITY.md) | Vulnerability reporting |
 | [Code of Conduct](../CODE_OF_CONDUCT.md) | Community guidelines |
 

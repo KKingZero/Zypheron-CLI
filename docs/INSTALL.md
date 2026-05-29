@@ -6,10 +6,10 @@ This guide covers the current supported install paths for Zypheron CLI.
 
 There are four supported install paths:
 
-1. Source bootstrap — [setup-hybrid.sh](../setup-hybrid.sh) (Zypheron CLI itself)
+1. Source bootstrap — [setup-hybrid.sh](../scripts/install/setup-hybrid.sh) (Zypheron CLI itself)
 2. Release binary — [scripts/install.sh](../scripts/install.sh) (packaged CLI download)
 3. Pentest tool ecosystem — per-distro installers (`install-tools.sh`, `install-tools-arch.sh`, `install-tools-rpm.sh`)
-4. C2 frameworks — optional interactive [install-c2.sh](../install-c2.sh) (Sliver, Empire)
+4. C2 frameworks — optional interactive [install-c2.sh](../scripts/install/install-c2.sh) (Sliver, Empire)
 
 ## Option 1: Bootstrap From Source
 
@@ -18,7 +18,7 @@ Use this when you want the repository, local build flow, and automated dependenc
 ```bash
 git clone https://github.com/KKingZero/Zypheron-CLI.git
 cd Zypheron-CLI
-bash ./setup-hybrid.sh
+bash scripts/install/setup-hybrid.sh
 ```
 
 By default, the bootstrap script:
@@ -31,11 +31,11 @@ By default, the bootstrap script:
 Useful options:
 
 ```bash
-ZYPHERON_INSTALL_DIR="$HOME/.local/bin" bash ./setup-hybrid.sh
-ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
-ZYPHERON_INSTALL_TOOLS=critical bash ./setup-hybrid.sh
-ZYPHERON_INSTALL_TOOLS=all bash ./setup-hybrid.sh
-ZYPHERON_DEP_PACKS=core bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_DIR="$HOME/.local/bin" bash scripts/install/setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=none bash scripts/install/setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=critical bash scripts/install/setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=all bash scripts/install/setup-hybrid.sh
+ZYPHERON_DEP_PACKS=core bash scripts/install/setup-hybrid.sh
 ```
 
 ## Option 2: Install a Release Binary
@@ -68,13 +68,13 @@ These are independent of the CLI install — run them on any supported distro af
 
 ```bash
 # Debian / Ubuntu / Kali / Parrot / Mint / Pop!_OS / elementary
-sudo bash install-tools.sh
+sudo bash scripts/install/install-tools.sh
 
 # Arch / Manjaro / EndeavourOS / Garuda / BlackArch
-sudo bash install-tools-arch.sh
+sudo bash scripts/install/install-tools-arch.sh
 
 # Fedora / RHEL 8+ / CentOS Stream / Rocky / Alma / Oracle Linux / Amazon Linux 2023
-sudo bash install-tools-rpm.sh
+sudo bash scripts/install/install-tools-rpm.sh
 ```
 
 All three share the same env-flag surface:
@@ -105,7 +105,7 @@ Each installer writes a structured log to `$ZYPHERON_INSTALL_LOG`, tracks per-st
 Never auto-installed. Run the interactive installer when you want them:
 
 ```bash
-sudo bash install-c2.sh
+sudo bash scripts/install/install-c2.sh
 ```
 
 Per-framework behavior:
@@ -120,7 +120,7 @@ Override Sliver pin when bumping versions:
 ZYPHERON_SLIVER_VERSION=v1.7.3 \
 ZYPHERON_SLIVER_SHA256_AMD64=<sha256> \
 ZYPHERON_SLIVER_SHA256_ARM64=<sha256> \
-sudo -E bash install-c2.sh
+sudo -E bash scripts/install/install-c2.sh
 ```
 
 Empire usage after install (via `zypheron exploit --c2 empire`):
@@ -196,7 +196,7 @@ If the bootstrap fails:
 - verify `go version`
 - verify `python3 --version`
 - run `zypheron doctor`
-- check [../HELP.md](../HELP.md)
+- check [HELP.md](HELP.md)
 
 If the release installer fails:
 

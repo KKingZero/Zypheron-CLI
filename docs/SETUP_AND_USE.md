@@ -151,7 +151,7 @@ If you installed from source, update by pulling the repo and rerunning the boots
 
 ```bash
 git pull
-bash ./setup-hybrid.sh
+bash scripts/install/setup-hybrid.sh
 ```
 
 ## Notes

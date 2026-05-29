@@ -569,7 +569,7 @@ zypheron forensics memory.dump --chain memory_forensics
 | **checksec** | PWN | Binary security checker |
 | **pwntools** | PWN | CTF framework |
 
-C2 frameworks are not installed by the main installer. Use `sudo bash install-c2.sh` from the repo root to opt in to Sliver or Empire installation; Havoc remains manual.
+C2 frameworks are not installed by the main installer. Use `sudo bash scripts/install/install-c2.sh` from the repo root to opt in to Sliver or Empire installation; Havoc remains manual.
 | **volatility** | Forensics | Memory forensics |
 | **sleuthkit** | Forensics | Disk forensics |
 | **binwalk** | Forensics | Firmware analysis |

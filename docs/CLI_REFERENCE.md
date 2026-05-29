@@ -119,7 +119,7 @@ zypheron tools install-all [--critical-only]   # Install all tools
 Optional C2 frameworks are not installed by the main installer. To opt in:
 
 ```bash
-sudo bash install-c2.sh
+sudo bash scripts/install/install-c2.sh
 ```
 
 ### Exploitation and C2

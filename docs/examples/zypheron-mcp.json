@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "zypheron-ai": {
+      "command": "python3",
+      "args": [
+        "/path/to/Cobra-AI-Zypheron-CLI/zypheron-ai/mcp_interface/server.py",
+        "--server",
+        "http://localhost:8080"
+      ],
+      "description": "Zypheron AI v1.0 - AI-Powered Penetration Testing Platform with 30+ security tools",
+      "timeout": 300,
+      "alwaysAllow": []
+    }
+  }
+}
+

@@ -49,7 +49,7 @@ Full repo, local development workflow, automated dependency setup.
 ```bash
 git clone https://github.com/KKingZero/Zypheron-CLI.git
 cd Zypheron-CLI
-bash ./setup-hybrid.sh
+bash scripts/install/setup-hybrid.sh
 ```
 
 `setup-hybrid.sh` builds the Go CLI into `~/.local/bin/zypheron`, runs `zypheron install-deps` for Python dependencies, and installs bash/zsh completion.
@@ -58,13 +58,13 @@ Common overrides:
 
 ```bash
 # Custom install dir
-ZYPHERON_INSTALL_DIR="$HOME/.local/bin" bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_DIR="$HOME/.local/bin" bash scripts/install/setup-hybrid.sh
 
 # Skip external tool install (manage them yourself)
-ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=none bash scripts/install/setup-hybrid.sh
 
 # Install every supported external tool
-ZYPHERON_INSTALL_TOOLS=all bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=all bash scripts/install/setup-hybrid.sh
 ```
 
 ### Manual setup / repair commands
@@ -130,13 +130,13 @@ Standalone installers for external tools (hydra, nuclei, amass, metasploit, ropp
 
 ```bash
 # Debian / Ubuntu / Kali / Parrot / Mint / Pop!_OS / elementary
-sudo bash install-tools.sh
+sudo bash scripts/install/install-tools.sh
 
 # Arch / Manjaro / EndeavourOS / Garuda / BlackArch
-sudo bash install-tools-arch.sh
+sudo bash scripts/install/install-tools-arch.sh
 
 # Fedora / RHEL 8+ / CentOS Stream / Rocky / Alma / Oracle Linux / Amazon Linux 2023
-sudo bash install-tools-rpm.sh
+sudo bash scripts/install/install-tools-rpm.sh
 ```
 
 All three installers share the same env-flag surface:
@@ -162,7 +162,7 @@ Arch-only flags:
 Interactive installer, never auto-runs from the main installers.
 
 ```bash
-sudo bash install-c2.sh
+sudo bash scripts/install/install-c2.sh
 ```
 
 - **Sliver** installs from Kali/Parrot apt when available, otherwise from a pinned GitHub release tarball verified against an embedded SHA256. Set `ZYPHERON_ALLOW_UNVERIFIED_SLIVER=1` to fall through to the upstream `curl | bash` installer (not recommended).
@@ -187,12 +187,12 @@ Shortest end-to-end path for a new box:
 # 1. Clone + bootstrap
 git clone https://github.com/KKingZero/Zypheron-CLI.git
 cd Zypheron-CLI
-bash ./setup-hybrid.sh
+bash scripts/install/setup-hybrid.sh
 
 # 2. Install the external pentest tool ecosystem (pick one)
-sudo bash install-tools.sh          # Debian / Ubuntu / Kali / Parrot / Mint
-sudo bash install-tools-arch.sh     # Arch / Manjaro / BlackArch
-sudo bash install-tools-rpm.sh      # Fedora / RHEL / Rocky / Alma
+sudo bash scripts/install/install-tools.sh          # Debian / Ubuntu / Kali / Parrot / Mint
+sudo bash scripts/install/install-tools-arch.sh     # Arch / Manjaro / BlackArch
+sudo bash scripts/install/install-tools-rpm.sh      # Fedora / RHEL / Rocky / Alma
 
 # 3. Verify
 zypheron doctor
@@ -206,7 +206,7 @@ Optional follow-ups:
 
 ```bash
 # C2 frameworks (Sliver, Empire) — interactive, opt-in per framework
-sudo bash install-c2.sh
+sudo bash scripts/install/install-c2.sh
 
 # Install Python-side AI/ML dependencies
 zypheron install-deps --all
@@ -292,18 +292,18 @@ zypheron
 Many workflows call external tools. Either let `setup-hybrid.sh` install the critical set:
 
 ```bash
-ZYPHERON_INSTALL_TOOLS=critical bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=critical bash scripts/install/setup-hybrid.sh
 ```
 
 Or skip that step and run the dedicated per-distro installer afterwards (bigger tool set, hardened with pinned versions + SHA256-verified remote installers):
 
 ```bash
-ZYPHERON_INSTALL_TOOLS=none bash ./setup-hybrid.sh
+ZYPHERON_INSTALL_TOOLS=none bash scripts/install/setup-hybrid.sh
 
 # Then one of:
-sudo bash install-tools.sh          # Debian / Ubuntu / Kali / Parrot
-sudo bash install-tools-arch.sh     # Arch family
-sudo bash install-tools-rpm.sh      # RedHat / Fedora family
+sudo bash scripts/install/install-tools.sh          # Debian / Ubuntu / Kali / Parrot
+sudo bash scripts/install/install-tools-arch.sh     # Arch family
+sudo bash scripts/install/install-tools-rpm.sh      # RedHat / Fedora family
 
 zypheron tools check
 ```
@@ -313,7 +313,7 @@ zypheron tools check
 Sliver and Empire are not installed by the main installer. Opt in with:
 
 ```bash
-sudo bash install-c2.sh
+sudo bash scripts/install/install-c2.sh
 ```
 
 See the [Install](#install) section for details on verification and env flags.
@@ -332,13 +332,15 @@ Kali or a similarly equipped Linux environment is recommended for heavier offens
 
 | Guide | Description |
 |---|---|
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Fast install and first run |
 | [docs/INSTALL.md](docs/INSTALL.md) | Installation and environment setup |
 | [docs/SETUP_AND_USE.md](docs/SETUP_AND_USE.md) | Practical setup and usage |
 | [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) | CLI command reference |
 | [docs/AI_GUIDE.md](docs/AI_GUIDE.md) | AI providers, keys, and model behavior |
 | [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md) | MCP and integration details |
 | [docs/TOOL_CHAINS.md](docs/TOOL_CHAINS.md) | Toolchain workflows |
-| [HELP.md](HELP.md) | Troubleshooting |
+| [docs/BUILD_AND_TEST.md](docs/BUILD_AND_TEST.md) | Local build and validation |
+| [docs/HELP.md](docs/HELP.md) | Troubleshooting |
 
 ## Repository Notes
 
