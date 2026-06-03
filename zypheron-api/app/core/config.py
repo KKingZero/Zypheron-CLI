@@ -49,8 +49,23 @@ class Settings(BaseSettings):
 
     # Legacy hosted database settings retained for compatibility with older configs
     supabase_url: str | None = None
-    supabase_key: str | None = None
-    supabase_service_key: str | None = None
+    supabase_key: str | None = None  # anon/public key
+    supabase_service_key: str | None = None  # service_role key (bypasses RLS) - server only
+
+    # Dashboard webapp (app.zypheron.net) integration
+    # SECURITY: supabase_jwt_secret verifies tokens minted by Supabase Auth for
+    # the dashboard + desktop sync. This is the project's JWT secret (Supabase
+    # dashboard -> Settings -> API -> JWT Secret), distinct from jwt_secret_key
+    # which signs this API's own CLI sessions.
+    supabase_jwt_secret: str | None = None
+    webapp_url: str = "https://app.zypheron.net"  # used for portal links + report render
+    report_render_secret: str | None = None  # short-lived token gate for /report-render
+
+    # Dashboard entitlement gate. The web dashboard is the $499/mo platform tier.
+    # Access is granted when the user's (or their firm owner's) active plan
+    # exposes this feature flag, OR via a free-access grant / developer access.
+    # The $499 "Mid" plan + Enterprise carry web_dashboard=true in launch.sql.
+    dashboard_required_feature: str = "web_dashboard"
 
     # Redis (optional for caching and rate limiting)
     redis_url: str | None = None

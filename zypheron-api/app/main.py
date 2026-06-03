@@ -31,7 +31,9 @@ from app.routers import (
     auth_router,
     byok_router,
     devices_router,
+    firms_router,
     license_router,
+    sync_router,
     teams_router,
     tokens_router,
 )
@@ -159,6 +161,8 @@ app.include_router(tokens_router)
 app.include_router(ai_proxy_router)
 app.include_router(byok_router)
 app.include_router(teams_router)
+app.include_router(sync_router)
+app.include_router(firms_router)
 app.include_router(webhooks_router)
 
 
