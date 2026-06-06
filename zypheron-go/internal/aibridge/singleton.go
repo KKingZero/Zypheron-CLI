@@ -18,8 +18,6 @@ var (
 func GetSharedBridge() *AIBridge {
 	bridgeOnce.Do(func() {
 		sharedBridge = NewAIBridge()
-		sharedBridge.EnsureReadyAsync(5 * time.Second)
-		sharedBridge.ensurePersistentEngine()
 	})
 	return sharedBridge
 }
