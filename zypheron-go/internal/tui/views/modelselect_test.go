@@ -3,6 +3,8 @@ package views
 import (
 	"os"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestModelToCredentialProvider(t *testing.T) {
@@ -57,6 +59,19 @@ func TestFindModelIndex(t *testing.T) {
 	}
 	if got := FindModelIndex(models, "missing"); got != -1 {
 		t.Errorf("FindModelIndex() = %d, want -1", got)
+	}
+}
+
+func TestModelSelectorHeight(t *testing.T) {
+	selector := NewModelSelector(100)
+	if got := selector.Height(); got != 1 {
+		t.Fatalf("closed selector Height() = %d, want 1", got)
+	}
+
+	selector.Open()
+	wantOpenHeight := lipgloss.Height(selector.View())
+	if got := selector.Height(); got != wantOpenHeight {
+		t.Fatalf("open selector Height() = %d, want %d", got, wantOpenHeight)
 	}
 }
 

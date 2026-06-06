@@ -353,7 +353,6 @@ func NewAIBridge() *AIBridge {
 	token, err := loadAuthToken()
 	if err != nil {
 		// Token will be loaded later when AI engine is started or on first request
-		fmt.Println(ui.Muted.Sprint("Auth token not loaded yet (AI engine may not be running)"))
 		token = ""
 	}
 
@@ -388,17 +387,30 @@ func NewAIBridge() *AIBridge {
 
 // Start starts the Python AI engine
 func (b *AIBridge) Start() error {
+	return b.start(true)
+}
+
+// StartQuiet starts the Python AI engine without writing lifecycle logs to stdout.
+func (b *AIBridge) StartQuiet() error {
+	return b.start(false)
+}
+
+func (b *AIBridge) start(verbose bool) error {
 	b.lifecycleMu.Lock()
 	defer b.lifecycleMu.Unlock()
 
 	// Check if already running
 	if b.IsRunning() {
-		ui.Success.Println("AI Engine already running")
+		if verbose {
+			ui.Success.Println("AI Engine already running")
+		}
 		b.connected = true
 		return nil
 	}
 
-	fmt.Println(ui.InfoMsg("Starting AI Engine..."))
+	if verbose {
+		fmt.Println(ui.InfoMsg("Starting AI Engine..."))
+	}
 
 	// Get the Python engine path
 	pythonPath := getPythonEnginePath()
@@ -414,18 +426,24 @@ func (b *AIBridge) Start() error {
 			"  Example: export ZYPHERON_AI_PATH=/path/to/zypheron-ai/core/server.py", pythonPath)
 	}
 
-	fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  Using AI engine at: %s", pythonPath)))
+	if verbose {
+		fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  Using AI engine at: %s", pythonPath)))
+	}
 
 	// Find Python interpreter (prefer venv if it exists)
 	pythonCmd := getPythonCommand(pythonPath)
 
-	fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  Using Python: %s", pythonCmd)))
+	if verbose {
+		fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  Using Python: %s", pythonCmd)))
+	}
 
 	// Set working directory to zypheron-ai root (parent of core/)
 	serverDir := filepath.Dir(pythonPath)
 	aiEngineDir := filepath.Dir(serverDir)
 
-	fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  Working directory: %s", aiEngineDir)))
+	if verbose {
+		fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  Working directory: %s", aiEngineDir)))
+	}
 
 	// Start Python server in stdio mode.
 	b.pythonProcess = exec.Command(pythonCmd, pythonPath)
@@ -465,16 +483,22 @@ func (b *AIBridge) Start() error {
 		if b.IsRunning() {
 			token, err := loadAuthToken()
 			if err != nil {
-				fmt.Printf(".")
+				if verbose {
+					fmt.Printf(".")
+				}
 				continue
 			}
 			b.authToken = token
 			b.connected = true
 
-			ui.Success.Println("AI Engine started successfully")
+			if verbose {
+				ui.Success.Println("AI Engine started successfully")
+			}
 			return nil
 		}
-		fmt.Printf(".")
+		if verbose {
+			fmt.Printf(".")
+		}
 	}
 
 	return fmt.Errorf("AI engine failed to start after %d retries.\n  The AI engine process started but is not responding.\n  Possible causes:\n    1. Python dependencies missing\n    2. Port/socket permissions issue\n    3. AI engine crashed during startup\n  How to fix:\n    1. Check AI engine logs in ~/.zypheron/logs/\n    2. Install Python dependencies: cd zypheron-ai && pip3 install -r requirements.txt\n    3. Try manual start for debugging: cd zypheron-ai && python3 core/server.py", MaxRetries)
@@ -589,7 +613,7 @@ func (b *AIBridge) IsRunning() bool {
 // SendRequest sends a request to the Python AI engine (with connection pooling)
 func (b *AIBridge) SendRequest(method string, params map[string]interface{}) (*Response, error) {
 	if !b.IsRunning() {
-		if err := b.Start(); err != nil {
+		if err := b.StartQuiet(); err != nil {
 			return nil, fmt.Errorf("AI engine not running and failed to auto-start: %w", err)
 		}
 	}

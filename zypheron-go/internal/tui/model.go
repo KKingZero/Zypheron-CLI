@@ -35,7 +35,6 @@ const (
 
 const (
 	dashboardHeaderHeight = 1
-	dashboardBottomHeight = 1
 	minConsoleHeight      = 5
 )
 
@@ -413,7 +412,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Selector: Dynamic (but overlay or below?)
 		// Used available space for Console
 
-		availableHeight := m.height - dashboardHeaderHeight - m.summary.Height() - dashboardBottomHeight
+		availableHeight := m.height - dashboardHeaderHeight - m.summary.Height() - m.bottomAreaHeight()
 
 		inputHeight := m.input.Height()
 		var inputCmd tea.Cmd
@@ -1094,7 +1093,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Reflow layout when input height changes to avoid clipping on small terminals.
 		if m.width > 0 && m.height > 0 {
-			consoleHeight := m.height - dashboardHeaderHeight - m.summary.Height() - m.input.Height() - dashboardBottomHeight
+			consoleHeight := m.height - dashboardHeaderHeight - m.summary.Height() - m.input.Height() - m.bottomAreaHeight()
 			if consoleHeight < minConsoleHeight {
 				consoleHeight = minConsoleHeight
 			}
@@ -2805,7 +2804,7 @@ func (m *Model) confirmModelSelection(idx int) {
 func (m *Model) storeAPIKeyAndActivateModel(provider, apiKey string) tea.Cmd {
 	return func() tea.Msg {
 		if !m.bridge.IsRunning() {
-			if err := m.bridge.Start(); err != nil {
+			if err := m.bridge.StartQuiet(); err != nil {
 				return apiKeyStoreErrorMsg{Err: err}
 			}
 		}
@@ -2920,6 +2919,10 @@ func (m Model) renderBottomBar() string {
 	}
 
 	return styles.MutedStyle.Render(left) + strings.Repeat(" ", gap) + styles.MutedStyle.Render(right)
+}
+
+func (m Model) bottomAreaHeight() int {
+	return m.modelSelector.Height()
 }
 
 func truncateText(s string, max int) string {
