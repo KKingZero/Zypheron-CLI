@@ -134,9 +134,10 @@ class AuthorizationManager:
             True if valid
         """
         # Find authorization by token
+        # SECURITY (H-03): constant-time compare to avoid a timing oracle.
         authorization = None
         for auth in self.authorizations.values():
-            if auth.token == token:
+            if secrets.compare_digest(auth.token, token):
                 authorization = auth
                 break
         
@@ -175,8 +176,9 @@ class AuthorizationManager:
     
     def get_authorization(self, token: str) -> Optional[Authorization]:
         """Get authorization by token"""
+        # SECURITY (H-03): constant-time compare to avoid a timing oracle.
         for auth in self.authorizations.values():
-            if auth.token == token:
+            if secrets.compare_digest(auth.token, token):
                 return auth
         return None
     
@@ -253,27 +255,11 @@ class SafetyController:
         self.emergency_stop = False
         logger.info("Emergency stop deactivated")
     
-    def is_safe_target(self, target: str) -> bool:
-        """Check if target is safe to test"""
-        # Check against known production indicators
-        unsafe_keywords = [
-            'production',
-            'prod',
-            'live',
-            'www',
-            'api',
-            'payment',
-            'bank'
-        ]
-        
-        target_lower = target.lower()
-        for keyword in unsafe_keywords:
-            if keyword in target_lower:
-                logger.warning(f"Potentially unsafe target: {target} (contains '{keyword}')")
-                return False
-        
-        return True
-    
+    # SECURITY (H-06): is_safe_target() removed. Substring keyword matching
+    # ('prod','www','api',...) gave false safety assurance — trivially bypassed
+    # (api-v2-staging passes) and blocked legitimate targets (www.authorised...).
+    # The enforced control is AuthorizationScope.exclusions in auth/authorization.py.
+
     def validate_attack_chain(self, chain_steps: List[str]) -> bool:
         """Validate attack chain steps are safe"""
         dangerous_operations = [

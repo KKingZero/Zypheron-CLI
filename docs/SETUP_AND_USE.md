@@ -37,7 +37,9 @@ For repo-level local validation of the optional API service path:
 
 ```bash
 ./scripts/setup_api_test_env.sh --allow-online
-./scripts/local_smoke_test.sh
+./scripts/setup_ai_test_env.sh --allow-online
+./scripts/run_all_tests.sh --ci
+./scripts/local_smoke_test.sh --setup-api-env --allow-online
 ```
 
 If you are running on Kali or WSL and want environment-specific checks:
@@ -160,3 +162,4 @@ bash scripts/install/setup-hybrid.sh
 - AI features depend on either configured hosted keys or a local model runtime
 - optional API, Redis, and Prometheus services are not required for core CLI usage
 - not every command is equally mature; use `zypheron --help` and command help output as the source of truth for your build
+- Enterprise Teams, streaming chat protocol support, and full autonomous exploitation are deferred for the OSS release candidate

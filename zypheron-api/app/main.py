@@ -10,6 +10,7 @@ Entry point for the API server with:
 
 import json
 import logging
+import os
 import structlog
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -26,6 +27,7 @@ from app.core.database import close_db, get_db, init_db
 from app.core.redis_client import close_redis_client, get_redis_client
 from app.middleware.metrics import MetricsMiddleware
 from app.middleware.rate_limiter import RateLimitMiddleware
+from app.middleware.token_check import add_token_quota_middleware
 from app.routers import (
     ai_proxy_router,
     auth_router,
@@ -63,7 +65,7 @@ structlog.configure(
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     context_class=dict,
-    logger_factory=structlog.PrintLoggerFactory(),
+    logger_factory=structlog.stdlib.LoggerFactory(),
     cache_logger_on_first_use=True,
 )
 
@@ -91,6 +93,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Yields:
         None during application runtime
     """
+    # SECURITY (H-07): require ENVIRONMENT to be set explicitly. The Settings
+    # default is "development", which enables permissive CORS (allow_origins=*)
+    # and accepts the public default JWT secret. A deployment that forgets to set
+    # ENVIRONMENT would silently inherit those unsafe defaults, so fail loud.
+    if not any(k.lower() == "environment" for k in os.environ):
+        raise RuntimeError(
+            "ENVIRONMENT is not set. Set ENVIRONMENT=development|staging|production "
+            "explicitly before starting. Refusing to run with implicit "
+            "'development' defaults (wildcard CORS + public JWT secret)."
+        )
+
     # Startup: Initialize database
     print("🚀 Initializing database...")
     await init_db()
@@ -148,6 +161,11 @@ app.add_middleware(
 # Add rate limiting middleware (before routers)
 # This should be added after CORS but before route handlers
 app.add_middleware(RateLimitMiddleware)
+
+# SECURITY (C-02): register the token-quota middleware. It was previously
+# defined but never wired into the app, so quota was never enforced at this
+# layer. It fails open on errors and only blocks genuinely over-quota users.
+add_token_quota_middleware(app)
 
 # Add Prometheus metrics middleware
 app.add_middleware(MetricsMiddleware)

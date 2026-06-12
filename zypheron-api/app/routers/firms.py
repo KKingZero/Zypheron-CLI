@@ -163,7 +163,11 @@ async def list_members(
     return MemberListResponse(members=members)
 
 
-@router.delete("/firms/{firm_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/firms/{firm_id}/members/{member_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def remove_member(
     firm_id: str,
     member_id: str,
@@ -233,7 +237,11 @@ async def list_invites(
     return InviteListResponse(invites=[InviteMeta(**r) for r in rows])
 
 
-@router.delete("/firms/{firm_id}/invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/firms/{firm_id}/invites/{invite_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def revoke_invite(
     firm_id: str,
     invite_id: str,

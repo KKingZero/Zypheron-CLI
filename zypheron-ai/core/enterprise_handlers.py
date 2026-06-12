@@ -169,9 +169,14 @@ class EnterpriseHandlers:
     async def handle_test_idor(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle IDOR testing"""
         try:
-            self._ensure_auth_scanner()
+            self._ensure_session_manager()
+            from analysis.authenticated_scanner import AuthenticatedScanner
             
             session_id = params.get('session_id')
+            session = self.session_manager.get_session(session_id)
+            if not session or not session.is_valid:
+                return {'success': False, 'error': f'Invalid or expired session: {session_id}'}
+
             test_urls = params.get('test_urls', [])
             
             # Auto-discover URLs if not provided
@@ -179,7 +184,13 @@ class EnterpriseHandlers:
                 # Would implement URL discovery logic
                 test_urls = [params.get('target_url') + '/api/users/1']
             
-            vulns = await self.auth_scanner.test_idor(session_id, test_urls)
+            scanner = AuthenticatedScanner(
+                self.session_manager,
+                base_url=session.target_url,
+                scope_hosts=self._scope_hosts_from_params(params),
+                allow_private_targets=bool(params.get('allow_private_targets', False)),
+            )
+            vulns = await scanner.test_idor(session_id, test_urls)
             
             return {
                 'success': True,
@@ -190,6 +201,14 @@ class EnterpriseHandlers:
         except Exception as e:
             logger.error(f"IDOR testing failed: {e}")
             return {'success': False, 'error': str(e)}
+
+    def _scope_hosts_from_params(self, params: Dict[str, Any]) -> list:
+        scope = params.get('scope_hosts') or params.get('scope') or []
+        if isinstance(scope, str):
+            return [scope]
+        if isinstance(scope, list):
+            return [str(item) for item in scope if str(item).strip()]
+        return []
     
     async def handle_test_privilege_escalation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle privilege escalation testing"""
@@ -583,4 +602,3 @@ class EnterpriseHandlers:
             'verify_exploit': self.handle_verify_exploit,
             'generate_compliance_report': self.handle_generate_compliance_report,
         }
-

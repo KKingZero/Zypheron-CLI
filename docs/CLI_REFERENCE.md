@@ -86,9 +86,12 @@ zypheron api-pentest [url] [flags]   # API security testing
 
 **API pentest flags:**
 - `--bola` -- test Broken Object Level Auth
-- `--bfla` -- test Broken Function Level Auth
+- `--bfla` -- test Broken Function Level Auth; defaults to safe `GET` probes
 - `--rate-limit` -- test rate limiting
+- `--destructive` -- enable state-changing BFLA probes (`POST`, `PUT`, `PATCH`, `DELETE`); requires `--yes` in non-interactive mode
 - `-o, --output <file>` -- save results
+
+By default, `api-pentest` does not send guessed state-changing API methods. Python API/web scanner flows also enforce same-host or configured scope and block private, loopback, link-local, and metadata targets unless private targets are explicitly enabled and in scope.
 
 ### AI Features
 
@@ -99,6 +102,9 @@ zypheron ai start|stop|status        # AI engine management
 zypheron ai providers                # List providers
 zypheron ai test --provider claude   # Test provider
 ```
+
+Streaming chat protocol support is deferred for the OSS release candidate. Chat
+uses the standard non-streaming path when streaming is requested.
 
 **Dork flags:**
 - `--ai-guided` -- AI-enhanced queries
@@ -166,6 +172,9 @@ zypheron session list           # List sessions
 zypheron history list           # Command history
 ```
 
+`autopent` is safety-first and approval-gated in the OSS release candidate. Full
+autonomous exploitation is deferred.
+
 ### MCP (Model Context Protocol)
 
 ```bash
@@ -176,7 +185,7 @@ zypheron mcp status   # Check MCP status
 
 ## Additional Commands
 
-The CLI also includes: `ad`, `cloud`, `mitre`, `compliance`, `exploit`, `pwn`, `api-pentest`, `plugin`, `schedule`, `scheduler`, `team`, and others. Some are more mature than others -- check `--help` before scripting.
+The CLI also includes: `ad`, `cloud`, `mitre`, `compliance`, `exploit`, `pwn`, `api-pentest`, `plugin`, `schedule`, `scheduler`, `team`, and others. Some are more mature than others -- check `--help` before scripting. Enterprise Teams API behavior is deferred for the OSS release candidate and server endpoints may return `501 Not Implemented`.
 
 ## Example Workflows
 
@@ -186,6 +195,7 @@ zypheron recon example.com
 zypheron scan example.com --full
 zypheron scan https://example.com --web --ai-analysis
 zypheron api-pentest https://api.example.com
+zypheron api-pentest https://api.example.com --bfla --destructive --yes --no-input
 ```
 
 ### Binary Analysis

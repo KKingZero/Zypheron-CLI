@@ -27,6 +27,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field, asdict
 from loguru import logger
+from utils.secure_files import (
+    contained_path,
+    ensure_private_dir,
+    validate_session_id,
+    write_private_atomic,
+)
 
 
 LOOT_SUBDIRS = [
@@ -72,9 +78,11 @@ class LootManager:
     def __init__(self, session_id: Optional[str] = None):
         if not session_id:
             session_id = f"session-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        self.session_id = session_id
-        self.base_dir = base_loot_dir()
-        self.session_dir = self.base_dir / session_id
+        self.session_id = validate_session_id(session_id)
+        self.base_dir = ensure_private_dir(base_loot_dir())
+        self.session_dir = contained_path(self.base_dir, self.session_id)
+        if self.session_dir != self.base_dir and self.base_dir.resolve() not in self.session_dir.parents:
+            raise ValueError(f"Session path escapes loot directory: {session_id!r}")
 
     def init(
         self,
@@ -117,8 +125,13 @@ class LootManager:
         )
         timeline_path = self.session_dir / "timeline.log"
         timeline_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(timeline_path, "a") as f:
-            f.write(json.dumps(asdict(entry)) + "\n")
+        payload = (json.dumps(asdict(entry)) + "\n").encode()
+        flags = os.O_CREAT | os.O_WRONLY | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(timeline_path, flags, 0o600)
+        try:
+            os.write(fd, payload)
+        finally:
+            os.close(fd)
 
     def save_loot(self, category: str, filename: str, data: bytes | str) -> Path:
         """Write data to the appropriate subdirectory."""
@@ -138,10 +151,16 @@ class LootManager:
             raise ValueError(
                 f"Symlink escape detected: '{filename}' resolves outside session directory"
             )
-        if isinstance(data, str):
-            path.write_text(data)
-        else:
-            path.write_bytes(data)
+        # SECURITY (M-09): open with O_NOFOLLOW so a symlink swapped in at the
+        # final component after the recheck is not followed outside the session
+        # directory. O_TRUNC keeps overwrite semantics.
+        payload = data.encode() if isinstance(data, str) else data
+        flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(path, flags, 0o600)
+        try:
+            os.write(fd, payload)
+        finally:
+            os.close(fd)
         return path
 
     def save_loot_json(self, category: str, filename: str, obj: Any) -> Path:
@@ -168,8 +187,7 @@ class LootManager:
 
     def _write_json(self, filename: str, obj: Any) -> None:
         path = self.session_dir / filename
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(obj, indent=2, default=str))
+        write_private_atomic(path, json.dumps(obj, indent=2, default=str))
 
     @staticmethod
     def list_sessions() -> List[str]:
@@ -177,15 +195,31 @@ class LootManager:
         base = base_loot_dir()
         if not base.exists():
             return []
+        base_real = base.resolve()
         return sorted(
-            [d.name for d in base.iterdir() if d.is_dir()],
+            [
+                d.name for d in base.iterdir()
+                if d.is_dir()
+                and _is_valid_session_dir(base_real, d)
+            ],
             reverse=True,
         )
 
     @staticmethod
     def load_session_meta(session_id: str) -> Optional[Dict]:
         """Load session.json for a given session."""
-        meta_path = base_loot_dir() / session_id / "session.json"
+        base = base_loot_dir()
+        validate_session_id(session_id)
+        meta_path = contained_path(base, session_id, "session.json")
         if meta_path.exists():
             return json.loads(meta_path.read_text())
         return None
+
+
+def _is_valid_session_dir(base_real: Path, session_dir: Path) -> bool:
+    try:
+        validate_session_id(session_dir.name)
+        resolved = session_dir.resolve()
+    except Exception:
+        return False
+    return base_real in resolved.parents

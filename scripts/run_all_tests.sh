@@ -5,8 +5,9 @@
 #
 # Runs comprehensive test suite including:
 # 1. Python unit tests (pytest) for API
-# 2. Go unit tests (go test) for CLI
-# 3. Integration tests (auth, license, webhooks, compliance)
+# 2. Python unit tests (pytest) for AI runtime
+# 3. Go unit tests (go test) for CLI
+# 4. Integration tests (auth, license, webhooks, compliance)
 # 4. Code coverage reporting
 # 5. Summary output with detailed results
 #
@@ -42,6 +43,7 @@ BOLD='\033[1m'
 # Project paths
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_DIR="${PROJECT_ROOT}/zypheron-api"
+AI_DIR="${PROJECT_ROOT}/zypheron-ai"
 CLI_DIR="${PROJECT_ROOT}/zypheron-go"
 SCRIPTS_DIR="${PROJECT_ROOT}/scripts"
 
@@ -203,7 +205,13 @@ record_test_result() {
 # Python unit tests (API)
 ################################################################################
 
-run_python_tests() {
+setup_args() {
+    if [ "$CI_MODE" = true ]; then
+        echo "--allow-online"
+    fi
+}
+
+run_api_python_tests() {
     print_section "Running Python Unit Tests (API)"
 
     if [ ! -d "$API_DIR" ]; then
@@ -218,7 +226,7 @@ run_python_tests() {
     if [ ! -d ".venv" ]; then
         print_warning "Virtual environment not found in ${API_DIR}/.venv"
         print_info "Attempting locked test environment setup..."
-        if ! "${SCRIPTS_DIR}/setup_api_test_env.sh"; then
+        if ! "${SCRIPTS_DIR}/setup_api_test_env.sh" $(setup_args); then
             print_error "Offline setup failed. Provide zypheron-api/wheelhouse or run ${SCRIPTS_DIR}/setup_api_test_env.sh --allow-online"
             record_test_result "Python Tests" 1 "0s"
             return 1
@@ -231,20 +239,109 @@ run_python_tests() {
     if ! python -m pytest --version &> /dev/null; then
         print_warning "pytest not installed in the API virtualenv"
         print_info "Rebuilding test environment from requirements.lock..."
-        if ! "${SCRIPTS_DIR}/setup_api_test_env.sh"; then
+        if ! "${SCRIPTS_DIR}/setup_api_test_env.sh" $(setup_args); then
             print_error "Failed to provision locked API test environment"
             record_test_result "Python Tests" 1 "0s"
             return 1
         fi
         source .venv/bin/activate
     fi
+    export ENVIRONMENT="${ENVIRONMENT:-development}"
+    export DATABASE_TYPE="${DATABASE_TYPE:-sqlite}"
+    export DATABASE_URL="${DATABASE_URL:-sqlite+aiosqlite:///./zypheron_test.db}"
+    export REDIS_ENABLED="${REDIS_ENABLED:-false}"
+    export ENABLE_RATE_LIMITING="${ENABLE_RATE_LIMITING:-false}"
+    export JWT_SECRET_KEY="${JWT_SECRET_KEY:-test-secret-key-for-ci-tests-only-32chars-minimum}"
 
     # Run tests
     local start_time=$(date +%s)
     local pytest_args="-v"
+    local api_test_scope="${API_TEST_SCOPE:-oss-rc}"
+    local api_test_targets="tests/"
+
+    if [ "$api_test_scope" = "oss-rc" ]; then
+        api_test_targets="tests/test_ai_providers.py tests/test_cache.py tests/test_load_balancer.py tests/test_ollama_provider.py tests/test_security_remediation.py tests/test_token_reservation_race_condition.py tests/test_token_tracking.py"
+    elif [ "$api_test_scope" != "full" ]; then
+        print_error "Unknown API_TEST_SCOPE=${api_test_scope}; expected oss-rc or full"
+        record_test_result "API Python Tests" 1 "0s"
+        cd "$PROJECT_ROOT"
+        return 1
+    fi
+
+    print_info "API test scope: ${api_test_scope}"
 
     if [ "$SKIP_COVERAGE" = false ] && [ "$FAST_MODE" = false ]; then
         pytest_args="${pytest_args} --cov=app --cov-report=term --cov-report=html:htmlcov"
+    fi
+
+    set +e
+    python -m pytest $pytest_args $api_test_targets
+    local exit_code=$?
+    set -e
+
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+
+    if [ "$exit_code" -eq 0 ]; then
+        print_success "API Python tests passed (${duration}s)"
+    else
+        print_error "API Python tests failed (${duration}s)"
+    fi
+
+    if [ "$SKIP_COVERAGE" = false ] && [ "$FAST_MODE" = false ]; then
+        print_info "Coverage report: ${API_DIR}/htmlcov/index.html"
+    fi
+
+    record_test_result "API Python Tests" "$exit_code" "${duration}s"
+    cd "$PROJECT_ROOT"
+    return "$exit_code"
+}
+
+################################################################################
+# Python unit tests (AI)
+################################################################################
+
+run_ai_python_tests() {
+    print_section "Running Python Unit Tests (AI Runtime)"
+
+    if [ ! -d "$AI_DIR" ]; then
+        print_warning "AI directory not found: ${AI_DIR}"
+        record_test_result "AI Python Tests" 1 "0s"
+        return 1
+    fi
+
+    cd "$AI_DIR"
+
+    if [ ! -d ".venv" ]; then
+        print_warning "Virtual environment not found in ${AI_DIR}/.venv"
+        print_info "Attempting locked AI test environment setup..."
+        if ! "${SCRIPTS_DIR}/setup_ai_test_env.sh" $(setup_args); then
+            print_error "Offline setup failed. Provide zypheron-ai/wheelhouse or run ${SCRIPTS_DIR}/setup_ai_test_env.sh --allow-online"
+            record_test_result "AI Python Tests" 1 "0s"
+            return 1
+        fi
+    fi
+
+    source .venv/bin/activate
+
+    if ! python -m pytest --version &> /dev/null; then
+        print_warning "pytest not installed in the AI virtualenv"
+        print_info "Rebuilding AI test environment from requirements.lock..."
+        if ! "${SCRIPTS_DIR}/setup_ai_test_env.sh" $(setup_args); then
+            print_error "Failed to provision locked AI test environment"
+            record_test_result "AI Python Tests" 1 "0s"
+            return 1
+        fi
+        source .venv/bin/activate
+    fi
+
+    export ZYPHERON_STATE_DIR="${ZYPHERON_STATE_DIR:-${AI_DIR}/.pytest-state}"
+
+    local start_time=$(date +%s)
+    local pytest_args="-v"
+
+    if [ "$SKIP_COVERAGE" = false ] && [ "$FAST_MODE" = false ]; then
+        pytest_args="${pytest_args} --cov=core --cov=providers --cov=analysis --cov=ml --cov=agents --cov-report=term --cov-report=html:htmlcov"
     fi
 
     set +e
@@ -256,16 +353,16 @@ run_python_tests() {
     local duration=$((end_time - start_time))
 
     if [ "$exit_code" -eq 0 ]; then
-        print_success "Python tests passed (${duration}s)"
+        print_success "AI Python tests passed (${duration}s)"
     else
-        print_error "Python tests failed (${duration}s)"
+        print_error "AI Python tests failed (${duration}s)"
     fi
 
     if [ "$SKIP_COVERAGE" = false ] && [ "$FAST_MODE" = false ]; then
-        print_info "Coverage report: ${API_DIR}/htmlcov/index.html"
+        print_info "Coverage report: ${AI_DIR}/htmlcov/index.html"
     fi
 
-    record_test_result "Python Tests" "$exit_code" "${duration}s"
+    record_test_result "AI Python Tests" "$exit_code" "${duration}s"
     cd "$PROJECT_ROOT"
     return "$exit_code"
 }
@@ -294,6 +391,16 @@ run_go_tests() {
 
     # Run tests
     local start_time=$(date +%s)
+    local go_tmp="${CLI_DIR}/.gotmp"
+    local go_cache="${CLI_DIR}/.gocache"
+    local ccache_dir="${CLI_DIR}/.ccache"
+    mkdir -p "$go_tmp"
+    mkdir -p "$go_cache"
+    mkdir -p "$ccache_dir"
+    export GOTMPDIR="$go_tmp"
+    export GOCACHE="$go_cache"
+    export CCACHE_DIR="$ccache_dir"
+
     local go_test_args="-v ./..."
 
     if [ "$SKIP_COVERAGE" = false ] && [ "$FAST_MODE" = false ]; then
@@ -433,6 +540,7 @@ main() {
 
     print_info "Project root: ${PROJECT_ROOT}"
     print_info "API directory: ${API_DIR}"
+    print_info "AI directory: ${AI_DIR}"
     print_info "CLI directory: ${CLI_DIR}"
     echo ""
 
@@ -449,7 +557,9 @@ main() {
 
     # Run test suites
     if [ "$SKIP_UNIT" = false ]; then
-        run_python_tests || true
+        run_api_python_tests || true
+        echo ""
+        run_ai_python_tests || true
         echo ""
         run_go_tests || true
         echo ""
@@ -459,6 +569,9 @@ main() {
     fi
 
     if [ "$SKIP_INTEGRATION" = false ]; then
+        if [ "$CI_MODE" = true ]; then
+            export ZYPHERON_ALLOW_ONLINE_SETUP=true
+        fi
         run_integration_tests || true
         echo ""
     else

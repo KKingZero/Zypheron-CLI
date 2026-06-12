@@ -255,6 +255,8 @@ api_pentest:
 zypheron api-pentest https://api.example.com --chain api_pentest
 ```
 
+`api-pentest` uses safe BFLA probes by default and only sends guessed state-changing API methods when `--destructive` is set. In non-interactive runs, combine `--destructive` with `--yes`. Python API and web scanner components enforce same-host or configured scope and block private-network targets unless they are explicitly enabled and in scope.
+
 ### 7. AI-Powered Dorking
 
 Search engine reconnaissance.

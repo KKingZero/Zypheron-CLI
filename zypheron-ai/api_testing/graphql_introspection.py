@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 import requests
 import json
 
+from api_testing.scope import ScannerScope
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,8 +24,19 @@ class GraphQLScanner:
     - IDOR in GraphQL queries
     """
     
-    def __init__(self, endpoint: str):
+    def __init__(
+        self,
+        endpoint: str,
+        scope_hosts: Optional[List[str]] = None,
+        allow_private_targets: bool = False,
+        base_url: Optional[str] = None,
+    ):
         self.endpoint = endpoint
+        self.scope = ScannerScope(
+            base_url=base_url or endpoint,
+            scope_hosts=scope_hosts or [],
+            allow_private_targets=allow_private_targets,
+        )
         self.schema: Optional[Dict] = None
         self.types: List[Dict] = []
         self.queries: List[Dict] = []
@@ -36,6 +49,10 @@ class GraphQLScanner:
         Returns:
             True if introspection succeeded
         """
+        if not self.scope.validate_url(self.endpoint):
+            logger.warning("Refusing out-of-scope GraphQL introspection endpoint: %s", self.endpoint)
+            return False
+
         introspection_query = """
         query IntrospectionQuery {
             __schema {
@@ -123,6 +140,10 @@ class GraphQLScanner:
         Returns:
             True if depth limiting is NOT enforced (vulnerability)
         """
+        if not self.scope.validate_url(self.endpoint):
+            logger.warning("Refusing out-of-scope GraphQL depth test endpoint: %s", self.endpoint)
+            return False
+
         # Build deeply nested query
         deep_query = self._build_deep_query(max_depth)
         
@@ -169,6 +190,10 @@ class GraphQLScanner:
         Returns:
             True if batching is allowed without limits (vulnerability)
         """
+        if not self.scope.validate_url(self.endpoint):
+            logger.warning("Refusing out-of-scope GraphQL batch test endpoint: %s", self.endpoint)
+            return False
+
         # Create batch of queries
         batch = []
         for i in range(batch_size):
@@ -223,4 +248,3 @@ class GraphQLScanner:
         except Exception as e:
             logger.error(f"Failed to export schema: {e}")
             return False
-

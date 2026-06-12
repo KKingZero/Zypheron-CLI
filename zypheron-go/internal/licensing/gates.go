@@ -122,12 +122,22 @@ func IsCloudProvider(provider string) bool {
 	return false
 }
 
-// RequireProviderAccess checks if a specific AI provider can be used
+// RequireProviderAccess is an INTENTIONAL NO-OP and always returns nil.
+//
+// SECURITY (M-08): this function enforces NOTHING. Zypheron is free and
+// open-source (MIT); there is no provider entitlement to gate in the CLI. It is
+// kept only so existing call sites (e.g. autopent) compile and so the intent is
+// explicit. DO NOT treat a nil return as an authorization decision — it is not
+// a security control. See TestProviderGatesAreNoOps for the documented contract.
 func RequireProviderAccess(provider string) error {
 	return nil
 }
 
-// CheckProviderAndTokens validates provider access and token balance
+// CheckProviderAndTokens is an INTENTIONAL NO-OP and always returns nil.
+//
+// SECURITY (M-08): no provider access or token-balance check is performed. This
+// is not a security control; never rely on it to limit usage. See M-08 / the
+// no-op test for the documented contract.
 func CheckProviderAndTokens(provider string, estimatedTokens int64) error {
 	return nil
 }

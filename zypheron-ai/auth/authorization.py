@@ -5,10 +5,12 @@ This module enforces authorization requirements for all pentesting operations.
 NO security testing is allowed without explicit written authorization.
 """
 
+import os
+import stat
 import yaml
 import json
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import ipaddress
@@ -31,15 +33,22 @@ class AuthorizationScope:
     prohibited_actions: List[str] = field(default_factory=list)
     signature: Optional[str] = None
 
+    @staticmethod
+    def _as_aware(dt: datetime) -> datetime:
+        """Coerce a datetime to UTC-aware (treat naive values as UTC)."""
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
     def is_expired(self) -> bool:
         """Check if authorization has expired"""
-        return datetime.now() > self.expires
+        return datetime.now(timezone.utc) > self._as_aware(self.expires)
 
     def is_valid(self) -> bool:
         """Check if authorization is currently valid"""
         if self.is_expired():
             return False
-        if datetime.now() < self.signed_date:
+        if datetime.now(timezone.utc) < self._as_aware(self.signed_date):
             return False  # Not yet valid
         return True
 
@@ -95,8 +104,36 @@ class AuthorizationValidator:
             except Exception as e:
                 logger.error(f"Failed to load scope {scope_file}: {e}")
 
+    @staticmethod
+    def _verify_scope_file_perms(path: Path) -> None:
+        """
+        Enforce OS-level integrity guard on a scope document.
+
+        The `signature` field in scope YAML is ADVISORY ONLY and is never
+        cryptographically verified (see C-06). The real control preventing a
+        local user from forging an authorization scope is file ownership and
+        permissions: the file must be owned by the current user and must not be
+        readable/writable by group or other. Reject anything else.
+        """
+        st = path.stat()
+        # POSIX-only ownership/permission enforcement.
+        if hasattr(os, "geteuid"):
+            if st.st_uid != os.geteuid():
+                raise AuthorizationError(
+                    f"Refusing scope file not owned by current user: {path}"
+                )
+            if st.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+                raise AuthorizationError(
+                    f"Refusing scope file with group/other access "
+                    f"(must be 0600): {path}. Run: chmod 600 {path}"
+                )
+
     def _load_scope_file(self, path: Path) -> AuthorizationScope:
         """Load scope from YAML file"""
+        # SECURITY (C-06): the signature field is advisory; OS file permissions
+        # are the enforced integrity control.
+        self._verify_scope_file_perms(path)
+
         with open(path) as f:
             data = yaml.safe_load(f)
 
@@ -108,8 +145,8 @@ class AuthorizationValidator:
             authorization_id=auth_data['id'],
             client_name=auth_data['client'],
             signed_by=auth_data['signed_by'],
-            signed_date=datetime.fromisoformat(auth_data['signed_date']),
-            expires=datetime.fromisoformat(auth_data['expires']),
+            signed_date=self._parse_scope_datetime(auth_data['signed_date']),
+            expires=self._parse_scope_datetime(auth_data['expires']),
             targets=scope_data.get('targets', []),
             exclusions=scope_data.get('exclusions', []),
             restrictions=scope_data.get('restrictions', []),
@@ -117,6 +154,17 @@ class AuthorizationValidator:
             prohibited_actions=safety.get('prohibited_actions', []),
             signature=auth_data.get('signature')
         )
+
+    @staticmethod
+    def _parse_scope_datetime(value) -> datetime:
+        """Parse a scope timestamp as timezone-aware (assume UTC if naive)."""
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            dt = datetime.fromisoformat(str(value))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
 
     async def validate_target(self, target: str, auth_token: str = None) -> bool:
         """
@@ -234,16 +282,22 @@ class AuthorizationValidator:
         return True, requires_confirmation
 
     def _find_scope(self, auth_token: str = None) -> Optional[AuthorizationScope]:
-        """Find applicable authorization scope"""
-        if auth_token:
-            return self.active_scopes.get(auth_token)
+        """
+        Find applicable authorization scope.
 
-        # Return first valid scope if no token specified
-        for scope in self.active_scopes.values():
-            if scope.is_valid():
-                return scope
-
-        return None
+        SECURITY (C-05): an explicit auth_token is REQUIRED. The previous
+        behaviour silently fell back to the first loaded valid scope when no
+        token was supplied, which could authorise testing against a target
+        covered by an unrelated scope. We now refuse to guess: no token means
+        no scope (callers raise AuthorizationError).
+        """
+        if not auth_token:
+            logger.warning(
+                "Authorization check with no auth_token; refusing silent "
+                "scope fallback (C-05)."
+            )
+            return None
+        return self.active_scopes.get(auth_token)
 
     def _is_in_scope(self, target: str, scope: AuthorizationScope) -> bool:
         """Check if target matches any scope entry"""

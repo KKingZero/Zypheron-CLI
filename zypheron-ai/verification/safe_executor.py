@@ -189,19 +189,16 @@ class SafeExecutor:
         Returns:
             ExecutionContext with results
         """
-        # Write script to temporary file
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.sh',
-            delete=False
-        ) as f:
-            f.write(script_content)
-            script_path = f.name
-        
+        # SECURITY (M-02): create the script atomically with private perms and
+        # set the executable bit on the open fd (fchmod), not the path. This
+        # closes the TOCTOU window where another process could read or swap the
+        # file between creation and chmod. mkstemp() creates the file 0600.
+        fd, script_path = tempfile.mkstemp(suffix='.sh')
         try:
-            # Make executable
-            os.chmod(script_path, 0o700)
-            
+            os.fchmod(fd, 0o700)  # owner rwx only, on the fd (race-free)
+            with os.fdopen(fd, 'w') as f:
+                f.write(script_content)
+
             # Execute
             context = ExecutionContext(
                 command=interpreter,

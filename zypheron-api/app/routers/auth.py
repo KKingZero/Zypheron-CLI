@@ -363,11 +363,13 @@ async def login(
                 headers={"Retry-After": str(LOCKOUT_DURATION_MINUTES * 60)},
             )
 
-        # Calculate remaining attempts
-        remaining_attempts = MAX_FAILED_ATTEMPTS - user.failed_login_attempts
+        # SECURITY (H-01): return a generic error. Leaking the remaining attempt
+        # count gives an attacker a precise lockout oracle for credential
+        # stuffing (rotate IPs just before lockout). The count is still tracked
+        # server-side for lockout enforcement above.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid credentials. {remaining_attempts} attempts remaining.",
+            detail="Invalid credentials.",
         )
 
     # AUTH-H3: Reset failed login counter on successful login
@@ -714,7 +716,7 @@ async def github_oauth_callback(
     )
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def logout(
     current_user: CurrentUser,
     request: Request,

@@ -16,7 +16,7 @@ from mcp_interface.client import ZypheronClient
 from mcp_interface.colors import ZypheronColors, colorize, format_tool_output
 from mcp_interface.security import SecureCommandExecutor, InputValidator, CommandInjectionError
 from contracts.runtime import PolicyMode
-from core.policy import authorize_tool_call
+from core.policy import authorize_tool_call, coerce_policy_mode
 from tools.base import ExecutionContext
 from tools.registry import tool_registry
 
@@ -245,6 +245,8 @@ class ZypheronToolExecutor:
         arguments: Dict[str, Any],
         session_id: str = "mcp-session",
         task_id: str = "mcp-task",
+        policy_mode: PolicyMode | str = PolicyMode.INTERACTIVE_SAFE,
+        approval_granted: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
         Execute a shared runtime tool when one exists.
@@ -256,11 +258,13 @@ class ZypheronToolExecutor:
             return None
 
         try:
+            normalized_policy_mode = coerce_policy_mode(policy_mode)
             decision = authorize_tool_call(
                 tool_spec=tool.spec,
-                policy_mode=PolicyMode.GUIDED_AUTO,
+                policy_mode=normalized_policy_mode,
                 reason=f"mcp requested {tool_name}",
                 arguments=arguments,
+                approval_granted=approval_granted,
             )
             if decision.requires_approval and decision.approval_request is not None:
                 return {
@@ -285,8 +289,11 @@ class ZypheronToolExecutor:
                     ExecutionContext(
                         session_id=session_id,
                         task_id=task_id,
-                        policy_mode=PolicyMode.GUIDED_AUTO.value,
-                        metadata={"source": "mcp"},
+                        policy_mode=normalized_policy_mode.value,
+                        metadata={
+                            "source": "mcp",
+                            "approval_granted": approval_granted,
+                        },
                     ),
                 )
             )

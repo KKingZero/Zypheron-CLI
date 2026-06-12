@@ -9,12 +9,13 @@ For general setup, see [README.md](README.md), [docs/INSTALL.md](docs/INSTALL.md
 Required:
 
 - Go `1.24+`
-- Python `3.9+`
+- Python `3.11+` for `zypheron-ai`
+- Python `3.10+` for `zypheron-api`
 - `make`
 
 Recommended for runtime validation:
 
-- a working Python virtual environment under `zypheron-ai/venv`
+- working Python virtual environments under `zypheron-ai/.venv` and `zypheron-api/.venv`
 - local model runtime such as Ollama, or hosted provider keys
 - local security tools you intend to exercise, such as `nmap`, `httpx`, `sqlmap`, `nuclei`, `nikto`
 
@@ -32,21 +33,22 @@ This produces:
 
 - `zypheron-go/build/zypheron`
 
-### Python environment
+### Python environments
 
-If the Python runtime is not already prepared:
-
-```bash
-zypheron install-deps --all
-```
-
-Or manually:
+Prepare the API test environment:
 
 ```bash
-cd zypheron-ai
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
+./scripts/setup_api_test_env.sh --allow-online
 ```
+
+Prepare the AI runtime test environment:
+
+```bash
+./scripts/setup_ai_test_env.sh --allow-online
+```
+
+Both scripts prefer a local `wheelhouse/` when present. Without a wheelhouse,
+online package resolution requires the explicit `--allow-online` flag.
 
 ## Global Install
 
@@ -77,17 +79,46 @@ zypheron doctor
 zypheron ai status
 ```
 
-### Python test suite
+### Full release gate
 
-Targeted runtime and integration tests:
+```bash
+./scripts/run_all_tests.sh --ci
+```
+
+This provisions missing Python test environments with locked dependencies,
+runs API tests, AI runtime tests, Go tests, and integration checks. Go tests use
+a workspace `GOTMPDIR` so noexec `/tmp` mounts do not break the test binary
+execution step.
+
+By default the API portion runs the OSS RC subset. To run the broader legacy
+hosted/SaaS API suite:
+
+```bash
+API_TEST_SCOPE=full ./scripts/run_all_tests.sh --ci
+```
+
+The integration portion follows the same release posture. By default it runs
+the OSS RC integration subset and excludes legacy hosted auth/license flows
+whose contracts are not part of this RC. To run those legacy flows too:
+
+```bash
+INTEGRATION_TEST_SCOPE=full ./scripts/run_all_tests.sh --ci
+```
+
+### Python test suites
+
+API:
+
+```bash
+cd zypheron-api
+.venv/bin/python -m pytest tests/
+```
+
+AI runtime:
 
 ```bash
 cd zypheron-ai
-venv/bin/python -m pytest -o addopts='' \
-  tests/test_query_engine.py \
-  tests/test_server.py \
-  tests/test_mcp_shared_tools.py \
-  tests/test_autopent_runtime.py
+.venv/bin/python -m pytest tests/
 ```
 
 ### Go compile verification
@@ -96,14 +127,15 @@ Compile-oriented validation for the bridge, commands, and TUI packages:
 
 ```bash
 cd zypheron-go
-go test -exec /bin/true ./internal/aibridge ./internal/commands ./internal/tui/...
+mkdir -p .gotmp
+GOTMPDIR="$PWD/.gotmp" go test ./...
 ```
 
 ### Python compile check
 
 ```bash
 cd zypheron-ai
-venv/bin/python -m compileall autopent mcp_interface tools/registry.py
+.venv/bin/python -m compileall autopent mcp_interface tools/registry.py
 ```
 
 ## Dynamic Smoke Tests
@@ -180,6 +212,9 @@ What is still partial:
 - MCP is not fully migrated to the shared typed tool plane
 - autopent still has workflow-specific orchestration outside the query engine
 - context compaction and artifact summarization are not implemented yet
+- streaming chat protocol support falls back to the standard chat path
+- Enterprise Teams endpoints are deferred for the OSS RC and may return `501`
+- full autonomous exploitation is deferred; autopent remains approval-gated
 
 ## Troubleshooting
 

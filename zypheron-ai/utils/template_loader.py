@@ -8,6 +8,7 @@ the Strix pattern for modular prompt templates.
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from jinja2 import Environment, FileSystemLoader, select_autoescape, Template
+from jinja2.sandbox import SandboxedEnvironment
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,12 @@ class TemplateLoader:
             lstrip_blocks=True
         )
 
-        self.prompt_env = Environment(
+        # SECURITY (H-05): prompt templates receive context from scan output and
+        # other external/tool data. A plain Environment allows SSTI -> arbitrary
+        # code execution. Use SandboxedEnvironment, which blocks access to unsafe
+        # attributes/methods during rendering. autoescape stays False (prompts
+        # are LLM text, not HTML), but the sandbox neutralises payloads.
+        self.prompt_env = SandboxedEnvironment(
             loader=FileSystemLoader(self.prompts_dir),
             autoescape=False,  # Don't escape prompts
             trim_blocks=True,

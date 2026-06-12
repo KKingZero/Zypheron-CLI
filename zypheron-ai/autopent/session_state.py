@@ -5,14 +5,94 @@ Per user requirement: Save on request (manual save/resume)
 """
 
 import json
+import hmac
+import hashlib
 import logging
 import os
+import secrets
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from dataclasses import dataclass, asdict
 
+from utils.secure_files import (
+    InvalidSessionIdError,
+    create_private_file,
+    ensure_private_dir,
+    session_path,
+    validate_session_id,
+    write_private_atomic,
+)
+
 logger = logging.getLogger(__name__)
+
+
+def _session_hmac_key() -> bytes:
+    """
+    Key used to authenticate saved session files (M-01).
+
+    Prefers the existing IPC auth token (~/.zypheron/ipc.token, already 0600).
+    Falls back to a dedicated, generated 0600 key file. Returns raw bytes.
+    """
+    base = ensure_private_dir(Path.home() / ".zypheron")
+
+    ipc_token = base / "ipc.token"
+    if ipc_token.exists():
+        return ipc_token.read_text().strip().encode()
+
+    key_file = base / "session.key"
+    if key_file.exists():
+        return key_file.read_text().strip().encode()
+
+    key = secrets.token_hex(32)
+    try:
+        create_private_file(key_file, key)
+    except FileExistsError:
+        return key_file.read_text().strip().encode()
+    return key.encode()
+
+
+def _hmac_path(session_file: Path) -> Path:
+    return session_file.with_suffix(session_file.suffix + ".hmac")
+
+
+def write_session_file(session_file: Path, session_data: Dict[str, Any]) -> None:
+    """Atomically write a session JSON plus an HMAC sidecar (M-01)."""
+    payload = json.dumps(session_data, indent=2, default=str).encode()
+    sig = hmac.new(_session_hmac_key(), payload, hashlib.sha256).hexdigest()
+
+    write_private_atomic(session_file, payload)
+    sidecar = _hmac_path(session_file)
+    write_private_atomic(sidecar, sig)
+
+
+def read_session_file(session_file: Path) -> Optional[Dict[str, Any]]:
+    """
+    Read a session file only if its HMAC sidecar verifies (M-01).
+
+    Returns the parsed dict, or None if the file is missing, has no sidecar,
+    or fails integrity verification (tamper / wrong key).
+    """
+    if not session_file.exists():
+        return None
+
+    payload = session_file.read_bytes()
+    sidecar = _hmac_path(session_file)
+    if not sidecar.exists():
+        logger.error(
+            f"Refusing session without integrity sidecar (M-01): {session_file}"
+        )
+        return None
+
+    expected = sidecar.read_text().strip()
+    actual = hmac.new(_session_hmac_key(), payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, actual):
+        logger.error(
+            f"Session integrity check FAILED (tampered or wrong key): {session_file}"
+        )
+        return None
+
+    return json.loads(payload)
 
 
 @dataclass
@@ -37,6 +117,7 @@ class SessionMetadata:
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'SessionMetadata':
+        validate_session_id(data['session_id'])
         return SessionMetadata(
             session_id=data['session_id'],
             objective=data['objective'],
@@ -70,8 +151,12 @@ class SessionStateManager:
             home = Path.home()
             self.state_dir = home / '.zypheron' / 'sessions'
 
-        self.state_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.state_dir)
         logger.debug(f"Session state directory: {self.state_dir}")
+
+    def _session_file(self, session_id: str, *, autosave: bool = False) -> Path:
+        suffix = ".autosave.json" if autosave else ".json"
+        return session_path(self.state_dir, session_id, suffix)
 
     def save_session(
         self,
@@ -94,7 +179,7 @@ class SessionStateManager:
         Returns:
             Path to saved session file
         """
-        session_file = self.state_dir / f"{session_id}.json"
+        session_file = self._session_file(session_id)
 
         # Build session data
         session_data = {
@@ -131,9 +216,8 @@ class SessionStateManager:
             'saved_at': datetime.now().isoformat(),
         }
 
-        # Write to file
-        with open(session_file, 'w') as f:
-            json.dump(session_data, f, indent=2, default=str)
+        # Write to file with integrity sidecar (M-01)
+        write_session_file(session_file, session_data)
 
         logger.info(f"💾 Session saved: {session_id}")
         logger.info(f"   File: {session_file}")
@@ -150,15 +234,17 @@ class SessionStateManager:
         Returns:
             Session data dictionary or None if not found
         """
-        session_file = self.state_dir / f"{session_id}.json"
+        session_file = self._session_file(session_id)
 
         if not session_file.exists():
             logger.error(f"Session not found: {session_id}")
             return None
 
         try:
-            with open(session_file, 'r') as f:
-                session_data = json.load(f)
+            session_data = read_session_file(session_file)
+            if session_data is None:
+                logger.error(f"Session {session_id} rejected by integrity check")
+                return None
 
             logger.info(f"📂 Session loaded: {session_id}")
             return session_data
@@ -178,8 +264,12 @@ class SessionStateManager:
 
         for session_file in self.state_dir.glob("*.json"):
             try:
-                with open(session_file, 'r') as f:
-                    data = json.load(f)
+                data = read_session_file(session_file)
+                if data is None:
+                    logger.warning(
+                        f"Skipping session failing integrity check: {session_file}"
+                    )
+                    continue
 
                 metadata = SessionMetadata.from_dict(data['metadata'])
                 sessions.append(metadata)
@@ -203,7 +293,7 @@ class SessionStateManager:
         Returns:
             True if deleted, False otherwise
         """
-        session_file = self.state_dir / f"{session_id}.json"
+        session_file = self._session_file(session_id)
 
         if not session_file.exists():
             logger.warning(f"Session not found: {session_id}")
@@ -211,6 +301,10 @@ class SessionStateManager:
 
         try:
             session_file.unlink()
+            # Remove the integrity sidecar too (M-01)
+            sidecar = _hmac_path(session_file)
+            if sidecar.exists():
+                sidecar.unlink()
             logger.info(f"🗑️  Session deleted: {session_id}")
             return True
 
@@ -262,7 +356,7 @@ class SessionStateManager:
 
         This creates a backup that can be recovered
         """
-        backup_file = self.state_dir / f"{session_id}.autosave.json"
+        backup_file = self._session_file(session_id, autosave=True)
 
         try:
             session_data = {
@@ -295,8 +389,7 @@ class SessionStateManager:
                 'saved_at': datetime.now().isoformat(),
             }
 
-            with open(backup_file, 'w') as f:
-                json.dump(session_data, f, indent=2, default=str)
+            write_session_file(backup_file, session_data)
 
             logger.debug(f"Auto-saved session: {session_id}")
 

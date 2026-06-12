@@ -2,18 +2,47 @@
 
 ## Executive Summary
 
-The Zypheron AI-powered penetration testing CLI demonstrates good security awareness in several areas but contains multiple high and critical severity vulnerabilities. The project implements security controls including input validation, secure IPC communication, and API key encryption, but has gaps in command injection protection, authentication mechanisms, and secrets management.
+This report has been refreshed for the OSS release-candidate track. The current
+target is the local/self-hosted CLI, Python AI runtime, and optional FastAPI
+service. Hosted SaaS-only surfaces such as Enterprise Teams are explicitly
+deferred and are not treated as RC launch blockers when they return clear
+`501 Not Implemented` responses or are documented as unavailable.
+
+The prior audit findings below are retained for traceability. Several high-risk
+items have been remediated in the current working tree with focused regression
+tests, but the release is not security-signed-off until the full RC gate passes:
+
+```bash
+./scripts/run_all_tests.sh --ci
+./scripts/local_smoke_test.sh --setup-api-env --allow-online
+```
 
 ---
 
-## Vulnerability Summary
+## Current RC Security Status
 
-| Severity | Count | Must Fix Before Production |
-|----------|-------|---------------------------|
-| CRITICAL | 3 | YES |
-| HIGH | 4 | YES |
-| MEDIUM | 3 | RECOMMENDED |
-| LOW | 2 | OPTIONAL |
+| Area | Status | Notes |
+|------|--------|-------|
+| Go tool install shell recipes | Fixed, pending full gate | `zypheron-go/internal/kali/tools.go` no longer returns `bash -c` install commands; install recipes use direct argv commands. |
+| JWT production defaults | Fixed, pending full gate | Non-development environments reject the published unsafe secret and short secrets. |
+| API rate-limit client identity | Fixed, pending full gate | Forwarded IP headers are trusted only from configured proxy CIDRs. |
+| Token/quota middleware | Fixed, pending full gate | Token checking is registered in the API app and covered by remediation tests. |
+| Tool/API scanner scope controls | Fixed, pending full gate | API/web scanner paths enforce same-host or configured scope and private-target controls. |
+| Loot/session path safety | Fixed, pending full gate | Final writes use containment checks and nofollow protections. |
+| MSF TLS verification | Fixed, pending full gate | TLS verification defaults on; insecure mode is opt-in and warns for non-local/private hosts. |
+| Provider/token CLI gates | Deferred by OSS posture | CLI provider entitlement checks are intentional no-ops for the MIT/open-source release and are documented/tested as non-security controls. |
+| Enterprise Teams API | Deferred | Endpoints remain unavailable for OSS RC and may return `501`. |
+| Streaming chat protocol | Deferred | Streaming requests fall back to standard chat behavior. |
+| Full autonomous exploitation | Deferred | Autopent remains safety-first and approval-gated; full autonomous exploitation is not an OSS RC promise. |
+
+## Historical Vulnerability Summary
+
+| Severity | Historical Count | Current RC Treatment |
+|----------|------------------|----------------------|
+| CRITICAL | 3 | Fixed or deferred by explicit OSS scope; verify through full gate |
+| HIGH | 4 | Fixed, deferred, or pending full gate depending on item |
+| MEDIUM | 3 | Recommended hardening; do not block OSS RC unless tests fail |
+| LOW | 2 | Optional hardening |
 
 **Estimated Remediation:** 90-130 hours
 

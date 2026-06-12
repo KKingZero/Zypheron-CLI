@@ -761,6 +761,7 @@ class AuthenticatedWebScanTool(BaseTool):
                 "required_role": {"type": "string"},
                 "actual_role": {"type": "string"},
                 "target_user_id": {"type": "string"},
+                "allow_private_targets": {"type": "boolean"},
             },
         },
         risk_category=RiskCategory.HIGH,
@@ -771,10 +772,12 @@ class AuthenticatedWebScanTool(BaseTool):
     def __init__(self):
         from analysis.authenticated_scanner import AuthenticatedScanner
         from auth.session_manager import SessionManager
+        from tasks.store import TaskStore
 
         self.validator = InputValidator()
         self.session_manager = SessionManager()
-        self.scanner = AuthenticatedScanner(self.session_manager)
+        self.task_store = TaskStore()
+        self.scanner_class = AuthenticatedScanner
 
     async def execute(self, arguments: dict, context: ExecutionContext) -> ToolResult:
         scan_type = str(arguments.get("scan_type", "")).strip().lower()
@@ -783,29 +786,42 @@ class AuthenticatedWebScanTool(BaseTool):
         method = str(arguments.get("method", "GET")).strip().upper()
         data = str(arguments.get("data", "")).strip()
         headers = arguments.get("headers") or {}
+        allow_private_targets = bool(arguments.get("allow_private_targets", False))
 
         if not session_id:
             return ToolResult(tool_name=self.spec.name, success=False, content="", error="session_id is required for authenticated testing")
+        session = self.session_manager.get_session(session_id)
+        if not session or not session.is_valid:
+            return ToolResult(tool_name=self.spec.name, success=False, content="", error=f"Invalid or expired session: {session_id}")
+        if not session.target_url:
+            return ToolResult(tool_name=self.spec.name, success=False, content="", error=f"Session {session_id} has no target scope")
         if not self.validator.validate_target(url):
             return ToolResult(tool_name=self.spec.name, success=False, content="", error=f"Invalid target: {url}")
         if not isinstance(headers, dict):
             return ToolResult(tool_name=self.spec.name, success=False, content="", error="headers must be a dictionary")
 
         findings = []
+        scope_hosts = self._scope_hosts_for_context(context.session_id, session_id)
+        scanner = self.scanner_class(
+            self.session_manager,
+            base_url=session.target_url,
+            scope_hosts=scope_hosts,
+            allow_private_targets=allow_private_targets,
+        )
         try:
             if scan_type == "sql_injection":
-                findings = await self.scanner.test_sql_injection(
+                findings = await scanner.test_sql_injection(
                     session_id=session_id,
                     targets=[{"url": url, "method": method, "data": data or None, "headers": headers}],
                 )
             elif scan_type == "idor":
-                findings = await self.scanner.test_idor(
+                findings = await scanner.test_idor(
                     session_id=session_id,
                     test_urls=[url],
                     target_user_id=arguments.get("target_user_id"),
                 )
             elif scan_type == "broken_authorization":
-                findings = await self.scanner.test_broken_authorization(
+                findings = await scanner.test_broken_authorization(
                     session_id=session_id,
                     api_endpoints=[{
                         "url": url,
@@ -835,6 +851,19 @@ class AuthenticatedWebScanTool(BaseTool):
                 "findings": finding_dicts,
             },
         )
+
+    def _scope_hosts_for_context(self, runtime_session_id: str, auth_session_id: str) -> List[str]:
+        """Return broader stored engagement scope when present."""
+        for candidate in (runtime_session_id, auth_session_id):
+            if not candidate:
+                continue
+            try:
+                hosts = self.task_store.get_session_scope(candidate)
+            except Exception:
+                hosts = []
+            if hosts:
+                return hosts
+        return []
 
 
 class ToolRegistry:

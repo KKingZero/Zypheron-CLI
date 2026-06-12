@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tools"
@@ -16,7 +15,7 @@ import (
 // HealthCheck represents the result of a single health check
 type HealthCheck struct {
 	Name    string `json:"name"`
-	Status  string `json:"status"`  // "ok", "warning", "error"
+	Status  string `json:"status"` // "ok", "warning", "error"
 	Message string `json:"message"`
 	Details string `json:"details,omitempty"`
 	DocURL  string `json:"doc_url,omitempty"`
@@ -273,14 +272,12 @@ func checkDiskSpace(verbose bool) HealthCheck {
 	}
 
 	homeDir, _ := os.UserHomeDir()
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(homeDir, &stat); err != nil {
+	availableGB, err := availableDiskGB(homeDir)
+	if err != nil {
 		check.Status = "warning"
 		check.Message = "Cannot determine disk space"
 		return check
 	}
-
-	availableGB := float64(stat.Bavail*uint64(stat.Bsize)) / (1024 * 1024 * 1024)
 
 	if availableGB < 1.0 {
 		check.Status = "warning"

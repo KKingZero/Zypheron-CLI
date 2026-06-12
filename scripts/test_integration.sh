@@ -15,6 +15,11 @@
 # Options:
 #   --skip-api    Skip starting the API server (use if already running)
 #
+# Environment:
+#   INTEGRATION_TEST_SCOPE=oss-rc|full
+#     oss-rc (default): runs integration checks for the OSS RC launch surface.
+#     full: runs legacy hosted auth/license/billing flows as well.
+#
 # Exit codes:
 #   0 - All tests passed
 #   1 - One or more tests failed
@@ -43,6 +48,8 @@ API_HOST="localhost"
 API_PORT="8000"
 API_URL="http://${API_HOST}:${API_PORT}"
 SKIP_API_START=false
+ALLOW_ONLINE_SETUP="${ZYPHERON_ALLOW_ONLINE_SETUP:-false}"
+INTEGRATION_TEST_SCOPE="${INTEGRATION_TEST_SCOPE:-oss-rc}"
 
 # Test results tracking
 TESTS_RUN=0
@@ -169,11 +176,21 @@ start_api_server() {
     if [ ! -d ".venv" ]; then
         print_warning "Virtual environment not found in ${API_DIR}/.venv"
         print_info "Attempting locked setup with scripts/setup_api_test_env.sh ..."
-        "${SCRIPTS_DIR}/setup_api_test_env.sh"
+        if [ "$ALLOW_ONLINE_SETUP" = "true" ] || [ "$ALLOW_ONLINE_SETUP" = "1" ]; then
+            "${SCRIPTS_DIR}/setup_api_test_env.sh" --allow-online
+        else
+            "${SCRIPTS_DIR}/setup_api_test_env.sh"
+        fi
     fi
 
     # Start API server in background
     source .venv/bin/activate
+    export ENVIRONMENT="${ENVIRONMENT:-development}"
+    export DATABASE_TYPE="${DATABASE_TYPE:-sqlite}"
+    export DATABASE_URL="${DATABASE_URL:-sqlite+aiosqlite:///./zypheron_integration.db}"
+    export REDIS_ENABLED="${REDIS_ENABLED:-false}"
+    export ENABLE_RATE_LIMITING="${ENABLE_RATE_LIMITING:-false}"
+    export JWT_SECRET_KEY="${JWT_SECRET_KEY:-test-secret-key-for-integration-only-32chars}"
     python -m uvicorn app.main:app --host "$API_HOST" --port "$API_PORT" --log-level warning > /tmp/zypheron-api-test.log 2>&1 &
     API_PID=$!
 
@@ -249,6 +266,7 @@ main() {
     print_info "API directory: ${API_DIR}"
     print_info "CLI directory: ${CLI_DIR}"
     print_info "Scripts directory: ${SCRIPTS_DIR}"
+    print_info "Integration scope: ${INTEGRATION_TEST_SCOPE}"
 
     # Start API server unless skipped
     if [ "$SKIP_API_START" = false ]; then
@@ -269,18 +287,35 @@ main() {
     # Export API URL for test scripts
     export ZYPHERON_API_URL="$API_URL"
 
-    # Run all test suites
-    echo ""
-    run_test_suite "Authentication Flow Tests" "${SCRIPTS_DIR}/test_auth_flow.sh" || true
+    case "$INTEGRATION_TEST_SCOPE" in
+        oss-rc)
+            print_info "Running OSS RC integration subset. Set INTEGRATION_TEST_SCOPE=full for legacy hosted flows."
 
-    echo ""
-    run_test_suite "License Flow Tests" "${SCRIPTS_DIR}/test_license_flow.sh" || true
+            echo ""
+            run_test_suite "Stripe Webhook Tests" "${SCRIPTS_DIR}/test_stripe_webhooks.sh" || true
 
-    echo ""
-    run_test_suite "Stripe Webhook Tests" "${SCRIPTS_DIR}/test_stripe_webhooks.sh" || true
+            echo ""
+            run_test_suite "Compliance Tests" "${SCRIPTS_DIR}/test_compliance.sh" || true
+            ;;
+        full)
+            echo ""
+            run_test_suite "Authentication Flow Tests" "${SCRIPTS_DIR}/test_auth_flow.sh" || true
 
-    echo ""
-    run_test_suite "Compliance Tests" "${SCRIPTS_DIR}/test_compliance.sh" || true
+            echo ""
+            run_test_suite "License Flow Tests" "${SCRIPTS_DIR}/test_license_flow.sh" || true
+
+            echo ""
+            run_test_suite "Stripe Webhook Tests" "${SCRIPTS_DIR}/test_stripe_webhooks.sh" || true
+
+            echo ""
+            run_test_suite "Compliance Tests" "${SCRIPTS_DIR}/test_compliance.sh" || true
+            ;;
+        *)
+            print_error "Unknown INTEGRATION_TEST_SCOPE: ${INTEGRATION_TEST_SCOPE}"
+            print_error "Expected one of: oss-rc, full"
+            exit 1
+            ;;
+    esac
 
     # Final summary is printed by cleanup() trap
 }

@@ -34,6 +34,15 @@ class Settings(BaseSettings):
         ],
         description="Explicit allowed origins for local and self-hosted frontends",
     )
+    # SECURITY (H-02): IP ranges of reverse proxies we trust to set
+    # X-Forwarded-For / X-Real-IP. Empty by default => never trust those headers
+    # (use the direct socket peer). Set this to your load balancer's CIDR(s) when
+    # running behind a proxy. Otherwise an attacker can spoof their source IP and
+    # bypass rate limiting.
+    trusted_proxy_cidrs: list[str] = Field(
+        default_factory=list,
+        description="CIDRs of trusted reverse proxies allowed to set forwarded-IP headers",
+    )
 
     # Database - SQLite by default, optional self-hosted PostgreSQL
     database_type: Literal["sqlite", "postgresql"] = "sqlite"
@@ -88,16 +97,21 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context) -> None:
         """Validate critical security settings after initialization."""
-        # Validate JWT secret in production
-        if self.environment == "production":
+        # SECURITY (H-07): reject the known-unsafe default JWT secret in ANY
+        # non-development environment. The default is published in this
+        # open-source repo, so accepting it outside local dev allows token
+        # forgery. Previously this only fired for "production", leaving "staging"
+        # exposed.
+        if self.environment != "development":
             if "UNSAFE" in self.jwt_secret_key or self.jwt_secret_key == "dev-secret-UNSAFE-FOR-PRODUCTION":
                 raise ValueError(
-                    "CRITICAL: JWT_SECRET_KEY must be set in production! "
+                    f"CRITICAL: JWT_SECRET_KEY must be set in {self.environment}! "
+                    "The default secret is public in this open-source repo. "
                     "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
                 )
             if len(self.jwt_secret_key) < 32:
                 raise ValueError(
-                    "CRITICAL: JWT_SECRET_KEY must be at least 32 characters in production"
+                    f"CRITICAL: JWT_SECRET_KEY must be at least 32 characters in {self.environment}"
                 )
 
     # API Keys for AI Providers (server-side pool)

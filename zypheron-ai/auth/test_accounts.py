@@ -11,7 +11,12 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 
+from auth.secret_backend import store_secret, get_secret, delete_secret
+
 logger = logging.getLogger(__name__)
+
+# Keyring service namespace for test-account passwords (H-04).
+TEST_ACCOUNT_SERVICE = "Zypheron-TestAccounts"
 
 
 @dataclass
@@ -44,12 +49,20 @@ class TestAccount:
             return False
         return datetime.now() > self.expires_at
     
-    def to_dict(self) -> Dict:
-        """Convert to dictionary"""
+    def to_dict(self, include_secret: bool = False) -> Dict:
+        """Convert to dictionary.
+
+        SECURITY (H-04): by default the password is NOT included. Plaintext
+        passwords must never be written to disk; they live in the OS keyring
+        and are resolved on demand. Pass include_secret=True only for in-memory
+        use by a caller that explicitly needs it.
+        """
         data = asdict(self)
         data['created_at'] = self.created_at.isoformat()
         data['expires_at'] = self.expires_at.isoformat() if self.expires_at else None
         data.pop('cleanup_callback', None)  # Can't serialize callback
+        if not include_secret:
+            data['password'] = ''  # redacted; real value is in the keyring
         return data
     
     @classmethod
@@ -280,7 +293,10 @@ class TestAccountManager:
         
         # Remove from storage
         del self.accounts[account_id]
-        
+
+        # SECURITY (H-04): purge the password from the keyring too.
+        delete_secret(TEST_ACCOUNT_SERVICE, account_id)
+
         account_file = self.storage_dir / f"{account_id}.json"
         if account_file.exists():
             account_file.unlink()
@@ -380,17 +396,33 @@ class TestAccountManager:
         
         return password
     
+    def get_password(self, account_id: str) -> Optional[str]:
+        """Resolve a test account's password from the keyring (H-04)."""
+        return get_secret(TEST_ACCOUNT_SERVICE, account_id)
+
     def _save_account(self, account: TestAccount):
         """Save account to disk"""
         account_file = self.storage_dir / f"{account.account_id}.json"
-        
+
         try:
+            # SECURITY (H-04): store the password in the OS keyring; the JSON
+            # holds only metadata (password redacted via to_dict()).
+            if account.password:
+                durable = store_secret(
+                    TEST_ACCOUNT_SERVICE, account.account_id, account.password
+                )
+                if not durable:
+                    logger.warning(
+                        "No OS keyring available; test-account password kept "
+                        "in memory only and will not survive a restart."
+                    )
+
             with open(account_file, 'w') as f:
                 json.dump(account.to_dict(), f, indent=2)
-            
-            # Secure file permissions (passwords stored here)
+
+            # Defence in depth: metadata file is still owner-only.
             account_file.chmod(0o600)
-            
+
         except Exception as e:
             logger.error(f"Failed to save account {account.account_id}: {e}")
     
@@ -405,8 +437,21 @@ class TestAccountManager:
                     data = json.load(f)
                 
                 account = TestAccount.from_dict(data)
+                # SECURITY (H-04): resolve the password from the keyring; it is
+                # never stored in the JSON file going forward.
+                stored = get_secret(TEST_ACCOUNT_SERVICE, account.account_id)
+                if stored is None and account.password:
+                    # Migrate a legacy plaintext file: move secret to keyring
+                    # and re-save the file without the plaintext password.
+                    logger.info(
+                        f"Migrating plaintext password for account "
+                        f"{account.account_id} to keyring"
+                    )
+                    self._save_account(account)
+                else:
+                    account.password = stored or ""
                 self.accounts[account.account_id] = account
-                
+
                 logger.debug(f"Loaded test account {account.username}")
                 
             except Exception as e:

@@ -2,14 +2,56 @@
 Network Manager - Handle communication between coordinator and agents
 """
 
+import os
 import logging
 import asyncio
 import json
+import secrets
+from pathlib import Path
 from typing import Dict, Optional, Any, Callable
 from datetime import datetime
+import ipaddress
 import websockets
+from utils.secure_files import create_private_file, ensure_private_dir
 
 logger = logging.getLogger(__name__)
+
+
+def get_cluster_secret() -> str:
+    """
+    Shared secret used to authenticate distributed agent <-> coordinator.
+
+    SECURITY (C-03): the coordinator previously accepted ANY connection and
+    trusted the first 'register' message with no secret. We now require a
+    pre-shared secret on both ends. Sourced from the ZYPHERON_CLUSTER_SECRET
+    env var, falling back to a generated, 0600 file at ~/.zypheron/cluster.secret.
+    """
+    env = os.environ.get("ZYPHERON_CLUSTER_SECRET")
+    if env:
+        return env.strip()
+
+    secret_file = Path.home() / ".zypheron" / "cluster.secret"
+    ensure_private_dir(secret_file.parent)
+    if secret_file.exists():
+        return secret_file.read_text().strip()
+
+    secret = secrets.token_hex(32)
+    try:
+        create_private_file(secret_file, secret)
+    except FileExistsError:
+        return secret_file.read_text().strip()
+    logger.info(f"Generated new cluster secret at {secret_file}")
+    return secret
+
+
+def _is_loopback(host: str) -> bool:
+    """True if host is a loopback address (or hostname 'localhost')."""
+    if host in ("localhost",):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 class AgentConnection:
@@ -71,37 +113,61 @@ class NetworkManager:
         self.message_handlers: Dict[str, Callable] = {}
         self.server = None
         self.running = False
+        self._cluster_secret: Optional[str] = None
     
-    async def start_coordinator(self, host: str = '0.0.0.0', port: int = 8765):
+    async def start_coordinator(self, host: str = '127.0.0.1', port: int = 8765):
         """Start coordinator server"""
         if self.mode != 'coordinator':
             raise ValueError("Not in coordinator mode")
-        
+
+        # SECURITY (C-03): default to loopback. Binding to a routable interface
+        # exposes the coordinator to the network; without TLS that is plaintext.
+        if not _is_loopback(host):
+            logger.warning(
+                f"Coordinator bound to non-loopback host {host} without TLS. "
+                f"Agent traffic (scan targets, results) is unencrypted on the "
+                f"wire. Use a loopback bind or front with a TLS tunnel."
+            )
+
+        # Load (and cache) the shared secret used to authenticate agents.
+        self._cluster_secret = get_cluster_secret()
+
         logger.info(f"Starting coordinator server on {host}:{port}")
-        
+
         self.running = True
         self.server = await websockets.serve(
             self._handle_agent_connection,
             host,
             port
         )
-        
+
         logger.info(f"Coordinator server listening on ws://{host}:{port}")
-    
-    async def start_agent(self, coordinator_host: str, coordinator_port: int = 8765):
+
+    async def start_agent(self, coordinator_host: str, coordinator_port: int = 8765,
+                          agent_id: Optional[str] = None):
         """Start agent client"""
         if self.mode != 'agent':
             raise ValueError("Not in agent mode")
-        
+
         logger.info(f"Connecting to coordinator at {coordinator_host}:{coordinator_port}")
-        
+
         uri = f"ws://{coordinator_host}:{coordinator_port}"
-        
+        secret = get_cluster_secret()
+        agent_id = agent_id or secrets.token_hex(8)
+
         while self.running:
             try:
                 async with websockets.connect(uri) as websocket:
                     logger.info("Connected to coordinator")
-                    
+
+                    # SECURITY (C-03): authenticate to the coordinator with the
+                    # pre-shared cluster secret before doing anything else.
+                    await websocket.send(json.dumps({
+                        'type': 'register',
+                        'agent_id': agent_id,
+                        'secret': secret,
+                    }))
+
                     # Handle messages
                     async for message in websocket:
                         try:
@@ -109,7 +175,7 @@ class NetworkManager:
                             await self._handle_message(data, websocket)
                         except Exception as e:
                             logger.error(f"Message handling error: {e}")
-                    
+
             except Exception as e:
                 logger.error(f"Connection error: {e}")
                 if self.running:
@@ -149,10 +215,19 @@ class NetworkManager:
             )
             
             data = json.loads(message)
-            
+
             if data.get('type') == 'register':
+                # SECURITY (C-03): require the pre-shared cluster secret, compared
+                # in constant time. Reject before registering the connection.
+                expected = self._cluster_secret or get_cluster_secret()
+                provided = data.get('secret') or ""
+                if not secrets.compare_digest(str(provided), str(expected)):
+                    logger.warning("Agent registration rejected: invalid cluster secret")
+                    await websocket.close(code=4401, reason="unauthorized")
+                    return
+
                 agent_id = data.get('agent_id')
-                
+
                 # Create connection
                 connection = AgentConnection(websocket, agent_id)
                 self.connections[agent_id] = connection
@@ -236,4 +311,3 @@ class NetworkManager:
     def is_agent_connected(self, agent_id: str) -> bool:
         """Check if agent is connected"""
         return agent_id in self.connections
-

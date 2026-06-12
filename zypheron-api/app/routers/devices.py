@@ -425,7 +425,7 @@ async def update_device(
     return DeviceResponse.model_validate(device)
 
 
-@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def deactivate_device(
     device_id: int,
     current_user: CurrentUser,

@@ -13,6 +13,7 @@ SECURITY: Uses atomic Lua script for check-and-increment to prevent race conditi
 """
 
 import structlog
+import ipaddress
 import secrets
 import time
 from collections import defaultdict
@@ -414,8 +415,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _get_client_ip(self, request: Request) -> str:
         """Extract client IP address from request.
 
-        Checks X-Forwarded-For header first (for proxies/load balancers),
-        then falls back to direct client IP.
+        SECURITY (H-02): X-Forwarded-For / X-Real-IP are only honoured when the
+        DIRECT peer (request.client.host) is a configured trusted proxy. Without
+        that check an attacker could set X-Forwarded-For to a random value per
+        request, land in a fresh rate-limit bucket each time, and bypass rate
+        limiting entirely. With no trusted proxies configured (the default), we
+        always use the direct socket peer.
 
         Args:
             request: HTTP request
@@ -423,23 +428,37 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         Returns:
             Client IP address
         """
-        # Check X-Forwarded-For header (for proxies/load balancers)
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            # Take the first IP in the chain (original client)
-            return forwarded_for.split(",")[0].strip()
+        peer = request.client.host if request.client else None
 
-        # Check X-Real-IP header
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip.strip()
+        if peer and self._is_trusted_proxy(peer):
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                # Left-most entry is the original client.
+                return forwarded_for.split(",")[0].strip()
 
-        # Fall back to direct client IP
-        if request.client:
-            return request.client.host
+            real_ip = request.headers.get("X-Real-IP")
+            if real_ip:
+                return real_ip.strip()
 
-        # Default fallback (should never happen)
-        return "unknown"
+        # Default: trust only the direct socket peer.
+        return peer or "unknown"
+
+    def _is_trusted_proxy(self, ip: str) -> bool:
+        """True if ip falls within any configured trusted proxy CIDR (H-02)."""
+        cidrs = get_settings().trusted_proxy_cidrs
+        if not cidrs:
+            return False
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        for cidr in cidrs:
+            try:
+                if addr in ipaddress.ip_network(cidr, strict=False):
+                    return True
+            except ValueError:
+                logger.warning("Invalid trusted_proxy_cidr", cidr=cidr)
+        return False
 
     async def _check_rate_limit(
         self,
