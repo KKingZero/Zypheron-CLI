@@ -107,6 +107,10 @@ func (m ModelSelector) View() string {
 		Render(list.String())
 }
 
+func (m ModelSelector) Height() int {
+	return lipgloss.Height(m.View())
+}
+
 // Helper methods for parent
 func (m *ModelSelector) Toggle() {
 	m.isOpen = !m.isOpen

@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -19,12 +21,12 @@ import (
 type Client struct {
 	mu sync.RWMutex
 
-	host     string
-	port     int
-	token    string
-	ssl      bool
-	client   *http.Client
-	timeout  time.Duration
+	host    string
+	port    int
+	token   string
+	ssl     bool
+	client  *http.Client
+	timeout time.Duration
 
 	// Callback for progress updates
 	onProgress func(module string, progress float64, status string)
@@ -33,7 +35,7 @@ type Client struct {
 
 // Finding represents a Metasploit finding (vuln, session, loot, etc.)
 type Finding struct {
-	Type        string            `json:"type"`         // "vuln", "session", "loot", "host", "service"
+	Type        string            `json:"type"` // "vuln", "session", "loot", "host", "service"
 	Module      string            `json:"module"`
 	Target      string            `json:"target"`
 	Description string            `json:"description"`
@@ -44,13 +46,13 @@ type Finding struct {
 
 // ModuleInfo contains information about a Metasploit module.
 type ModuleInfo struct {
-	Type        string   `json:"type"`
-	Name        string   `json:"name"`
-	FullName    string   `json:"fullname"`
-	Description string   `json:"description"`
-	Author      []string `json:"author"`
-	References  []string `json:"references"`
-	Rank        string   `json:"rank"`
+	Type        string                  `json:"type"`
+	Name        string                  `json:"name"`
+	FullName    string                  `json:"fullname"`
+	Description string                  `json:"description"`
+	Author      []string                `json:"author"`
+	References  []string                `json:"references"`
+	Rank        string                  `json:"rank"`
 	Options     map[string]ModuleOption `json:"options"`
 }
 
@@ -79,9 +81,9 @@ type Session struct {
 
 // JobInfo represents a running Metasploit job.
 type JobInfo struct {
-	ID       int    `json:"jid"`
-	Name     string `json:"name"`
-	StartTime int64 `json:"start_time"`
+	ID        int    `json:"jid"`
+	Name      string `json:"name"`
+	StartTime int64  `json:"start_time"`
 }
 
 // ClientConfig holds configuration for the MSF client.
@@ -98,20 +100,40 @@ type ClientConfig struct {
 // DefaultConfig returns default client configuration.
 func DefaultConfig() ClientConfig {
 	return ClientConfig{
-		Host:               "127.0.0.1",
-		Port:               55553,
-		SSL:                true,
-		Timeout:            30 * time.Second,
-		InsecureSkipVerify: true, // Default true for backwards compat with self-signed certs
+		Host:    "127.0.0.1",
+		Port:    55553,
+		SSL:     true,
+		Timeout: 30 * time.Second,
+		// SECURITY (M-05): verify TLS certificates by default. Opt out for a
+		// self-signed lab msfrpcd with MSF_INSECURE_TLS=1 (mirrors the Empire
+		// client's EMPIRE_INSECURE_TLS pattern).
+		InsecureSkipVerify: os.Getenv("MSF_INSECURE_TLS") == "1",
 	}
+}
+
+// hostIsLocalOrPrivate reports whether host is loopback or an RFC1918 address.
+func hostIsLocalOrPrivate(host string) bool {
+	if host == "" || host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate()
 }
 
 // NewClient creates a new Metasploit RPC client.
 func NewClient(config ClientConfig) *Client {
+	if config.InsecureSkipVerify && !hostIsLocalOrPrivate(config.Host) {
+		fmt.Fprintln(os.Stderr,
+			"WARNING: MSF TLS verification disabled (InsecureSkipVerify) for a "+
+				"non-local/non-RFC1918 host. msfrpcd traffic is exposed to MITM.")
+	}
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			// SECURITY FIX: Made InsecureSkipVerify configurable instead of hardcoded
-			InsecureSkipVerify: config.InsecureSkipVerify,
+			// SECURITY (M-05): verification is governed by config; default is on.
+			InsecureSkipVerify: config.InsecureSkipVerify, //nolint:gosec // opt-in only
 		},
 	}
 

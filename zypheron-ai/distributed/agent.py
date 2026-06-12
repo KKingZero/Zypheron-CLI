@@ -2,6 +2,7 @@
 Scan Agent - Worker node for distributed scanning
 """
 
+import re
 import logging
 import asyncio
 import uuid
@@ -12,7 +13,13 @@ from typing import Dict, Optional, Any, Callable
 from datetime import datetime
 from enum import Enum
 
+from mcp_interface.security import InputValidator, CommandInjectionError
+
 logger = logging.getLogger(__name__)
+
+# SECURITY (C-04): only these flag keys may be forwarded to a tool from the
+# (untrusted) coordinator task parameters. Anything else is dropped.
+_PARAM_KEY_PATTERN = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$')
 
 
 class AgentStatus(Enum):
@@ -282,10 +289,25 @@ class ScanAgent:
     ) -> Dict[str, Any]:
         """Execute generic tool scan"""
         logger.info(f"Executing {tool} on {target}")
-        
+
+        # SECURITY (C-04): the coordinator is not implicitly trusted. Validate
+        # the tool name and target, and allowlist parameter keys/values before
+        # building the argv. Never interpolate raw coordinator-supplied strings.
+        # validate_* return False for invalid input and RAISE
+        # CommandInjectionError when dangerous characters are present.
+        try:
+            if not InputValidator.validate_tool_name(tool):
+                return {'tool': tool, 'target': target,
+                        'error': f"Rejected tool name: {tool!r}"}
+            if not InputValidator.validate_target(target):
+                return {'tool': tool, 'target': target,
+                        'error': f"Rejected target: {target!r}"}
+        except CommandInjectionError as e:
+            return {'tool': tool, 'target': target, 'error': str(e)}
+
         # Build command
         command = [tool]
-        
+
         # Add tool-specific arguments
         if tool == 'nmap':
             command.extend(['-sV', '-sC', target])
@@ -293,14 +315,27 @@ class ScanAgent:
             command.extend(['-h', target])
         elif tool == 'nuclei':
             command.extend(['-u', target])
-        
-        # Add custom parameters
-        for key, value in parameters.items():
+
+        # Add custom parameters (validated). Reject keys that aren't simple flag
+        # names and values that contain shell metacharacters or look like flags.
+        for key, value in (parameters or {}).items():
+            if not isinstance(key, str) or not _PARAM_KEY_PATTERN.match(key):
+                logger.warning(f"Dropping unsafe parameter key: {key!r}")
+                continue
             if value is True:
                 command.append(f"--{key}")
-            elif value:
-                command.extend([f"--{key}", str(value)])
-        
+            elif value is False or value is None:
+                continue
+            else:
+                str_value = str(value)
+                if any(c in str_value for c in InputValidator.DANGEROUS_CHARS):
+                    logger.warning(f"Dropping parameter {key!r}: dangerous value")
+                    continue
+                if str_value.startswith('-'):
+                    logger.warning(f"Dropping parameter {key!r}: value looks like a flag")
+                    continue
+                command.extend([f"--{key}", str_value])
+
         # Execute command
         try:
             process = await asyncio.create_subprocess_exec(

@@ -1,8 +1,10 @@
 package aibridge
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -22,6 +24,42 @@ func requireUnixListener(t *testing.T, socketPath string) net.Listener {
 		t.Fatalf("Failed to create listener: %v", err)
 	}
 	return listener
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	original := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdout pipe: %v", err)
+	}
+
+	os.Stdout = writer
+	defer func() {
+		os.Stdout = original
+	}()
+
+	var buf bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(&buf, reader)
+		done <- err
+	}()
+
+	fn()
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close stdout writer: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("failed to capture stdout: %v", err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("failed to close stdout reader: %v", err)
+	}
+
+	return buf.String()
 }
 
 // ===== UNIT TESTS =====
@@ -133,6 +171,22 @@ func TestResponseDeserialization(t *testing.T) {
 				t.Errorf("Error mismatch: got %s, want %s", resp.Error, tt.wantError)
 			}
 		})
+	}
+}
+
+func TestStartQuietDoesNotWriteStdoutWhenEngineMissing(t *testing.T) {
+	t.Setenv("ZYPHERON_AI_PATH", filepath.Join(t.TempDir(), "missing-server.py"))
+
+	bridge := &AIBridge{transport: transportStdio, endpoint: transportStdio}
+	output := captureStdout(t, func() {
+		err := bridge.StartQuiet()
+		if err == nil {
+			t.Fatal("StartQuiet() unexpectedly succeeded with missing engine path")
+		}
+	})
+
+	if strings.TrimSpace(output) != "" {
+		t.Fatalf("StartQuiet() wrote stdout %q, want silence", output)
 	}
 }
 

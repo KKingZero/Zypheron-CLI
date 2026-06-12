@@ -63,3 +63,34 @@ class TestMCPSharedTools:
         assert result["success"] is False
         assert result["approval_required"] is True
         mock_tool.execute.assert_not_called()
+
+    def test_execute_shared_tool_runs_after_approval_granted(self):
+        executor = ZypheronToolExecutor()
+        mock_tool = MagicMock()
+        mock_tool.spec = ToolSpec(
+            name="nmap_scan",
+            description="scan",
+            risk_category=RiskCategory.MEDIUM,
+            requires_approval=True,
+            read_only=True,
+        )
+        mock_tool.execute = AsyncMock(
+            return_value=ToolResult(
+                tool_name="nmap_scan",
+                success=True,
+                content="scan complete",
+                data={"target": "example.com"},
+            )
+        )
+
+        with patch("mcp_interface.tools.tool_registry.get", return_value=mock_tool):
+            result = executor.execute_shared_tool(
+                "nmap_scan",
+                {"target": "example.com"},
+                approval_granted=True,
+            )
+
+        assert result is not None
+        assert result["success"] is True
+        assert result["shared"] is True
+        mock_tool.execute.assert_awaited_once()

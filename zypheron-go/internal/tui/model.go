@@ -33,6 +33,11 @@ const (
 	stateScan
 )
 
+const (
+	dashboardHeaderHeight = 1
+	minConsoleHeight      = 5
+)
+
 type Model struct {
 	state  sessionState
 	keys   KeyMap
@@ -407,16 +412,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Selector: Dynamic (but overlay or below?)
 		// Used available space for Console
 
-		availableHeight := m.height - 3 // Header
+		availableHeight := m.height - dashboardHeaderHeight - m.summary.Height() - m.bottomAreaHeight()
 
 		inputHeight := m.input.Height()
 		var inputCmd tea.Cmd
 		m.input, inputCmd = m.input.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 		cmds = append(cmds, inputCmd)
 
-		consoleHeight := availableHeight - inputHeight - 1 // -1 for bottom bar (summary removed)
-		if consoleHeight < 5 {
-			consoleHeight = 5
+		consoleHeight := availableHeight - inputHeight
+		if consoleHeight < minConsoleHeight {
+			consoleHeight = minConsoleHeight
 		}
 		var consoleCmd tea.Cmd
 		m.console, consoleCmd = m.console.Update(tea.WindowSizeMsg{Width: m.width, Height: consoleHeight})
@@ -1088,9 +1093,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Reflow layout when input height changes to avoid clipping on small terminals.
 		if m.width > 0 && m.height > 0 {
-			consoleHeight := m.height - 3 - m.input.Height() - 1
-			if consoleHeight < 5 {
-				consoleHeight = 5
+			consoleHeight := m.height - dashboardHeaderHeight - m.summary.Height() - m.input.Height() - m.bottomAreaHeight()
+			if consoleHeight < minConsoleHeight {
+				consoleHeight = minConsoleHeight
 			}
 			var resizeCmd tea.Cmd
 			m.console, resizeCmd = m.console.Update(tea.WindowSizeMsg{Width: m.width, Height: consoleHeight})
@@ -2799,7 +2804,7 @@ func (m *Model) confirmModelSelection(idx int) {
 func (m *Model) storeAPIKeyAndActivateModel(provider, apiKey string) tea.Cmd {
 	return func() tea.Msg {
 		if !m.bridge.IsRunning() {
-			if err := m.bridge.Start(); err != nil {
+			if err := m.bridge.StartQuiet(); err != nil {
 				return apiKeyStoreErrorMsg{Err: err}
 			}
 		}
@@ -2914,6 +2919,10 @@ func (m Model) renderBottomBar() string {
 	}
 
 	return styles.MutedStyle.Render(left) + strings.Repeat(" ", gap) + styles.MutedStyle.Render(right)
+}
+
+func (m Model) bottomAreaHeight() int {
+	return m.modelSelector.Height()
 }
 
 func truncateText(s string, max int) string {

@@ -37,6 +37,7 @@ BOLD='\033[1m'
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ZYPHERON_CLI="${ZYPHERON_CLI:-${PROJECT_ROOT}/zypheron-go/zypheron}"
 TEST_OUTPUT_DIR="/tmp/zypheron-compliance-test-$(date +%s)"
+CLI_PROBE_TIMEOUT="${CLI_PROBE_TIMEOUT:-20s}"
 
 # Test result tracking
 TESTS_PASSED=0
@@ -66,6 +67,14 @@ print_info() {
 
 print_warning() {
     echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+run_cli_probe() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$CLI_PROBE_TIMEOUT" "$ZYPHERON_CLI" "$@"
+    else
+        "$ZYPHERON_CLI" "$@"
+    fi
 }
 
 cleanup() {
@@ -124,11 +133,11 @@ setup_test_environment() {
 test_cli_version() {
     print_test "Test 1: Check CLI version and help"
 
-    if "$ZYPHERON_CLI" version &> /dev/null || \
-       "$ZYPHERON_CLI" --version &> /dev/null || \
-       "$ZYPHERON_CLI" -v &> /dev/null || \
-       "$ZYPHERON_CLI" help &> /dev/null || \
-       "$ZYPHERON_CLI" --help &> /dev/null; then
+    if run_cli_probe version &> /dev/null || \
+       run_cli_probe --version &> /dev/null || \
+       run_cli_probe -v &> /dev/null || \
+       run_cli_probe help &> /dev/null || \
+       run_cli_probe --help &> /dev/null; then
         print_pass "CLI executable and responsive"
         return 0
     else
@@ -146,7 +155,7 @@ test_compliance_commands_exist() {
 
     # Try to get help for compliance commands
     local help_output
-    help_output=$("$ZYPHERON_CLI" --help 2>&1 || "$ZYPHERON_CLI" help 2>&1 || echo "")
+    help_output=$(run_cli_probe --help 2>&1 || run_cli_probe help 2>&1 || echo "")
 
     if [[ "$help_output" == *"compliance"* ]] || \
        [[ "$help_output" == *"report"* ]] || \
@@ -178,9 +187,9 @@ test_soc2_framework() {
 
     # Try to run compliance report
     local output
-    if output=$("$ZYPHERON_CLI" compliance soc2 "$test_project" 2>&1) || \
-       output=$("$ZYPHERON_CLI" report --framework soc2 "$test_project" 2>&1) || \
-       output=$("$ZYPHERON_CLI" scan --compliance soc2 "$test_project" 2>&1); then
+    if output=$(run_cli_probe compliance soc2 "$test_project" 2>&1) || \
+       output=$(run_cli_probe report --framework soc2 "$test_project" 2>&1) || \
+       output=$(run_cli_probe scan --compliance soc2 "$test_project" 2>&1); then
 
         if [[ "$output" == *"SOC2"* ]] || [[ "$output" == *"soc2"* ]]; then
             print_pass "SOC2 framework accessible"
@@ -207,9 +216,9 @@ test_pci_framework() {
     local test_project="${TEST_OUTPUT_DIR}/test-project"
 
     local output
-    if output=$("$ZYPHERON_CLI" compliance pci "$test_project" 2>&1) || \
-       output=$("$ZYPHERON_CLI" report --framework pci-dss "$test_project" 2>&1) || \
-       output=$("$ZYPHERON_CLI" scan --compliance pci "$test_project" 2>&1); then
+    if output=$(run_cli_probe compliance pci "$test_project" 2>&1) || \
+       output=$(run_cli_probe report --framework pci-dss "$test_project" 2>&1) || \
+       output=$(run_cli_probe scan --compliance pci "$test_project" 2>&1); then
 
         if [[ "$output" == *"PCI"* ]] || [[ "$output" == *"pci"* ]]; then
             print_pass "PCI-DSS framework accessible"
@@ -236,8 +245,8 @@ test_report_formats() {
     local test_project="${TEST_OUTPUT_DIR}/test-project"
 
     # Test JSON output
-    if "$ZYPHERON_CLI" report --format json "$test_project" -o "${TEST_OUTPUT_DIR}/report.json" &> /dev/null || \
-       "$ZYPHERON_CLI" scan --output json "$test_project" > "${TEST_OUTPUT_DIR}/report.json" 2>&1; then
+    if run_cli_probe report --format json "$test_project" -o "${TEST_OUTPUT_DIR}/report.json" &> /dev/null || \
+       run_cli_probe scan --output json "$test_project" > "${TEST_OUTPUT_DIR}/report.json" 2>&1; then
 
         if [ -f "${TEST_OUTPUT_DIR}/report.json" ]; then
             print_pass "JSON report output supported"
@@ -284,7 +293,7 @@ EOF
     print_info "Created test project with known vulnerabilities"
 
     # Run basic scan to see if issues are detected
-    if "$ZYPHERON_CLI" scan "$test_project" &> "${TEST_OUTPUT_DIR}/scan.log"; then
+    if run_cli_probe scan "$test_project" &> "${TEST_OUTPUT_DIR}/scan.log"; then
         print_info "Scan completed, checking for detections..."
 
         if grep -qi "credential\|password\|api.*key\|secret" "${TEST_OUTPUT_DIR}/scan.log" || \
@@ -313,8 +322,8 @@ test_compliance_scoring() {
     local test_project="${TEST_OUTPUT_DIR}/test-project"
 
     # Try to get a compliance score
-    if "$ZYPHERON_CLI" compliance score "$test_project" &> "${TEST_OUTPUT_DIR}/score.log" || \
-       "$ZYPHERON_CLI" report --score "$test_project" &> "${TEST_OUTPUT_DIR}/score.log"; then
+    if run_cli_probe compliance score "$test_project" &> "${TEST_OUTPUT_DIR}/score.log" || \
+       run_cli_probe report --score "$test_project" &> "${TEST_OUTPUT_DIR}/score.log"; then
 
         if grep -qi "score\|rating\|grade" "${TEST_OUTPUT_DIR}/score.log"; then
             print_pass "Compliance scoring available"
@@ -339,9 +348,9 @@ test_framework_metadata() {
     print_test "Test 8: Test framework metadata and control listings"
 
     # Try to list available frameworks
-    if "$ZYPHERON_CLI" compliance list &> "${TEST_OUTPUT_DIR}/frameworks.log" || \
-       "$ZYPHERON_CLI" frameworks &> "${TEST_OUTPUT_DIR}/frameworks.log" || \
-       "$ZYPHERON_CLI" compliance --list &> "${TEST_OUTPUT_DIR}/frameworks.log"; then
+    if run_cli_probe compliance list &> "${TEST_OUTPUT_DIR}/frameworks.log" || \
+       run_cli_probe frameworks &> "${TEST_OUTPUT_DIR}/frameworks.log" || \
+       run_cli_probe compliance --list &> "${TEST_OUTPUT_DIR}/frameworks.log"; then
 
         if grep -qi "soc2\|pci\|hipaa\|iso" "${TEST_OUTPUT_DIR}/frameworks.log"; then
             print_pass "Framework metadata accessible"
@@ -381,9 +390,11 @@ EOF
     local test_project="${TEST_OUTPUT_DIR}/test-project"
 
     # Try to run with config
-    if "$ZYPHERON_CLI" scan "$test_project" --config "$config_file" &> "${TEST_OUTPUT_DIR}/config-test.log" || \
-       cd "$TEST_OUTPUT_DIR" && "$ZYPHERON_CLI" scan test-project &> config-test.log; then
+    if run_cli_probe scan "$test_project" --config "$config_file" &> "${TEST_OUTPUT_DIR}/config-test.log"; then
 
+        print_pass "Configuration file loading supported"
+        return 0
+    elif (cd "$TEST_OUTPUT_DIR" && run_cli_probe scan test-project &> config-test.log); then
         print_pass "Configuration file loading supported"
         return 0
     else

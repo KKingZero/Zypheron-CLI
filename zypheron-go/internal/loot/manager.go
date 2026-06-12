@@ -151,7 +151,20 @@ func (lm *LootManager) SaveLoot(category, filename string, data []byte) error {
 	if !strings.HasPrefix(realPath, realSession+string(filepath.Separator)) && realPath != realSession {
 		return fmt.Errorf("symlink escape detected: %q resolves outside session directory", filename)
 	}
-	return os.WriteFile(filepath.Join(realPath, filepath.Base(path)), data, 0600)
+	// SECURITY (M-09): open the final file with O_NOFOLLOW so a symlink swapped
+	// in at the final component (after the EvalSymlinks recheck) is not followed
+	// to a target outside the session directory. O_TRUNC preserves the previous
+	// overwrite semantics of os.WriteFile.
+	finalPath := filepath.Join(realPath, filepath.Base(path))
+	f, err := os.OpenFile(finalPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|noFollowOpenFlag(), 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open loot file: %w", err)
+	}
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("failed to write loot file: %w", err)
+	}
+	return nil
 }
 
 // SaveLootJSON marshals v to JSON and writes it.

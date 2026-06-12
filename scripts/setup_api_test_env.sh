@@ -7,6 +7,7 @@ API_DIR="${PROJECT_ROOT}/zypheron-api"
 VENV_DIR="${API_DIR}/.venv"
 LOCKFILE="${API_DIR}/requirements.lock"
 WHEELHOUSE="${WHEELHOUSE:-${API_DIR}/wheelhouse}"
+PIP_CACHE_DIR="${PIP_CACHE_DIR:-${API_DIR}/.pip-cache}"
 ALLOW_ONLINE=false
 
 while [[ $# -gt 0 ]]; do
@@ -39,8 +40,29 @@ if [[ ! -f "${LOCKFILE}" ]]; then
     exit 1
 fi
 
-python3 -m venv "${VENV_DIR}"
+select_python() {
+    if [[ -n "${PYTHON_BIN:-}" ]]; then
+        echo "${PYTHON_BIN}"
+        return
+    fi
+
+    for candidate in python3.12 python3.11 python3.10; do
+        if command -v "${candidate}" >/dev/null 2>&1; then
+            echo "${candidate}"
+            return
+        fi
+    done
+
+    echo "No supported Python found. Install Python 3.10, 3.11, or 3.12." >&2
+    exit 1
+}
+
+PYTHON_BIN="$(select_python)"
+echo "[INFO] Using Python: $(${PYTHON_BIN} --version)"
+
+"${PYTHON_BIN}" -m venv --clear "${VENV_DIR}"
 source "${VENV_DIR}/bin/activate"
+export PIP_CACHE_DIR
 python -m pip install --upgrade pip
 
 install_locked() {

@@ -4,7 +4,6 @@ Session Manager - Handle authenticated sessions across scan runs
 
 import logging
 import json
-import re
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Optional, Any
@@ -13,25 +12,25 @@ from pathlib import Path
 import requests
 
 from cryptography.fernet import Fernet, InvalidToken
+from utils.secure_files import (
+    InvalidSessionIdError,
+    SESSION_ID_PATTERN,
+    create_private_file,
+    ensure_private_dir,
+    session_path,
+    validate_session_id,
+    write_private_atomic,
+)
 
 logger = logging.getLogger(__name__)
 
 # Session IDs are used verbatim as filenames; allow only a safe character set.
-SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 SESSION_FILE_SUFFIX = ".session"
-
-
-class InvalidSessionIdError(ValueError):
-    """Raised when a caller supplies a session_id that fails validation."""
 
 
 def _validate_session_id(session_id: str) -> str:
     """Return the session_id if it conforms to SESSION_ID_PATTERN, else raise."""
-    if not isinstance(session_id, str) or not SESSION_ID_PATTERN.match(session_id):
-        raise InvalidSessionIdError(
-            f"Invalid session_id (must match {SESSION_ID_PATTERN.pattern}): {session_id!r}"
-        )
-    return session_id
+    return validate_session_id(session_id)
 
 
 @dataclass
@@ -117,11 +116,7 @@ class SessionManager:
         else:
             self.storage_dir = Path.home() / '.zypheron' / 'sessions'
 
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            self.storage_dir.chmod(0o700)
-        except OSError:
-            pass
+        ensure_private_dir(self.storage_dir)
         self._cipher = Fernet(self._load_or_create_key())
         self.sessions: Dict[str, Session] = {}
         self._load_sessions()
@@ -132,23 +127,15 @@ class SessionManager:
         if key_file.exists():
             return key_file.read_bytes()
         key = Fernet.generate_key()
-        key_file.write_bytes(key)
         try:
-            key_file.chmod(0o600)
-        except OSError:
-            pass
+            create_private_file(key_file, key)
+        except FileExistsError:
+            return key_file.read_bytes()
         return key
 
     def _session_path(self, session_id: str) -> Path:
         """Resolve the encrypted file path for a validated session_id."""
-        validated = _validate_session_id(session_id)
-        path = (self.storage_dir / f"{validated}{SESSION_FILE_SUFFIX}").resolve()
-        storage_real = self.storage_dir.resolve()
-        if storage_real not in path.parents and path.parent != storage_real:
-            raise InvalidSessionIdError(
-                f"Session path escapes storage directory: {session_id!r}"
-            )
-        return path
+        return session_path(self.storage_dir, session_id, SESSION_FILE_SUFFIX)
     
     def create_session(
         self,
@@ -394,13 +381,7 @@ class SessionManager:
         try:
             plaintext = json.dumps(session.to_dict()).encode("utf-8")
             ciphertext = self._cipher.encrypt(plaintext)
-            tmp_file = session_file.with_suffix(session_file.suffix + ".tmp")
-            tmp_file.write_bytes(ciphertext)
-            try:
-                tmp_file.chmod(0o600)
-            except OSError:
-                pass
-            tmp_file.replace(session_file)
+            write_private_atomic(session_file, ciphertext)
         except Exception as exc:
             logger.error("Failed to save session %s: %s", session.session_id, exc)
 
@@ -463,4 +444,3 @@ class SessionManager:
         except Exception as e:
             logger.error(f"Failed to import session: {e}")
             return None
-

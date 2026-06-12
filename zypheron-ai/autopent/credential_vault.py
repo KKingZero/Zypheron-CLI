@@ -6,11 +6,16 @@ Per user requirement: Prompt for approval before using each credential
 
 import logging
 from typing import Dict, List, Optional, Set
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, InitVar
 from datetime import datetime
 from enum import Enum
 
+from auth.secret_backend import store_secret, get_secret, delete_secret
+
 logger = logging.getLogger(__name__)
+
+# Keyring service namespace for discovered credentials (M-07).
+CREDENTIAL_VAULT_SERVICE = "Zypheron-CredentialVault"
 
 
 class CredentialType(Enum):
@@ -37,7 +42,11 @@ class Credential:
     """Represents a discovered or provided credential"""
     cred_id: str
     username: str
-    credential: str  # The actual password/hash/key (encrypted in real impl)
+    # SECURITY (M-07): the plaintext secret is accepted only at construction
+    # (InitVar) and immediately pushed to the OS keyring. It is NOT kept as a
+    # stored attribute and is never serialised to disk (see to_dict / C-01).
+    # Access it via the `credential` property, which resolves from the keyring.
+    credential: InitVar[str]
     credential_type: CredentialType
     source: CredentialSource
 
@@ -60,6 +69,27 @@ class Credential:
     notes: str = ""
     tags: List[str] = field(default_factory=list)
 
+    def __post_init__(self, credential: str) -> None:
+        # Store the plaintext in the keyring keyed by cred_id. The redaction
+        # sentinel ('***') produced by to_dict() must not overwrite a real value
+        # on reload (from_dict path).
+        if credential and credential != "***":
+            durable = store_secret(CREDENTIAL_VAULT_SERVICE, self.cred_id, credential)
+            if not durable:
+                logger.warning(
+                    "No OS keyring available; credential kept in memory only "
+                    "and will not survive a restart."
+                )
+
+    def get_secret(self) -> str:
+        """Resolve the plaintext secret from the keyring on demand (M-07).
+
+        Note: there is intentionally no `credential` attribute. Callers that
+        actually need the secret (e.g. to authenticate to a target) call this,
+        keeping the value out of long-lived object state and off disk.
+        """
+        return get_secret(CREDENTIAL_VAULT_SERVICE, self.cred_id) or ""
+
     def to_dict(self) -> Dict:
         return {
             'cred_id': self.cred_id,
@@ -78,9 +108,11 @@ class Credential:
         }
 
     def display_name(self) -> str:
-        """Get display-friendly name"""
-        cred_preview = self.credential[:8] + "..." if len(self.credential) > 8 else self.credential
-        return f"{self.username}:{cred_preview} ({self.credential_type.value})"
+        """Get display-friendly name without exposing secret material."""
+        return (
+            f"{self.username}:<redacted> "
+            f"({self.credential_type.value}, id={self.cred_id})"
+        )
 
     def is_valid(self) -> bool:
         """Check if credential is still valid (not expired, etc.)"""

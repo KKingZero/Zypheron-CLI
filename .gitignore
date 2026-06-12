@@ -52,6 +52,16 @@ __pycache__/
 *.pyd
 zypheron-ai/venv/
 zypheron-ai/.venv/
+zypheron-ai/.pip-cache/
+zypheron-ai/.hypothesis/
+zypheron-ai/.pytest-state/
+zypheron-ai/*.egg-info/
+zypheron-api/.venv/
+zypheron-api/.pip-cache/
+zypheron-go/.gotmp/
+zypheron-go/.gocache/
+zypheron-go/.ccache/
+zypheron-go/.install-test/
 
 # Configuration (keep examples)
 *.env
@@ -71,3 +81,9 @@ zypheron-go/zypheron.bin
 
 # Archived documentation (outdated/internal)
 docs/archive/
+
+# test artifacts
+.pytest-state/
+htmlcov/
+.coverage
+coverage.xml

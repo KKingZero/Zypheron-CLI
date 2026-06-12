@@ -5,6 +5,7 @@ token quota before processing the request. Returns 429 Too Many Requests with
 upgrade prompt if quota is exceeded.
 """
 
+import hashlib
 import structlog
 from typing import Callable
 
@@ -20,11 +21,24 @@ from app.services.token_tracking import TokenTrackingService
 
 logger = structlog.get_logger()
 
-# AI endpoints that require token quota checking
+
+def hash_token(token: str) -> str:
+    """SHA-256 hash of a bearer token, matching routers.auth.hash_token (C-02).
+
+    Defined locally to avoid importing the whole routers package from a
+    middleware module (import-order coupling). Sessions store this hash, so the
+    middleware must hash before looking a session up.
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
+
+# AI endpoints that require token quota checking.
+# SECURITY (M-10): these must match the ACTUAL router mount points. The AI proxy
+# router is mounted at "/ai" (ai_proxy.py: APIRouter(prefix="/ai")) with no
+# global "/api" prefix, so the previous "/api/ai/" entries never matched and the
+# middleware never fired. BYOK endpoints ("/byok") use the user's own API key and
+# do not consume platform token quota, so they are intentionally excluded.
 AI_ENDPOINTS = [
-    "/api/ai/",  # All AI proxy endpoints
-    "/api/scan/",  # Vulnerability scanning endpoints
-    "/api/analyze/",  # Code analysis endpoints
+    "/ai/",  # All AI proxy endpoints (platform-metered)
 ]
 
 
@@ -65,36 +79,41 @@ class TokenQuotaMiddleware:
             # Unauthenticated request, let it proceed (auth middleware will handle)
             return await call_next(request)
 
-        # Check if user has quota
-        async with async_session_maker() as db:
-            service = TokenTrackingService(db)
+        # Check if user has quota.
+        # Availability: fail OPEN on unexpected quota-service errors so a bug
+        # here cannot take down every AI request with a 500. A genuine
+        # over-quota result still returns 429 below.
+        try:
+            async with async_session_maker() as db:
+                service = TokenTrackingService(db)
+                has_quota = await service.check_quota(user.id)
+                quota_info = None if has_quota else await service.get_quota_info(user.id)
+        except Exception as e:
+            logger.error(f"Quota check failed open: {e}")
+            return await call_next(request)
 
-            has_quota = await service.check_quota(user.id)
-
-            if not has_quota:
-                # Quota exceeded, return 429 with upgrade message
-                quota_info = await service.get_quota_info(user.id)
-
-                return JSONResponse(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    content={
-                        "error": "quota_exceeded",
-                        "message": "Monthly token quota exceeded",
-                        "details": {
-                            "tier": quota_info["tier"],
-                            "tokens_used": quota_info["tokens_used"],
-                            "token_limit": quota_info["token_limit"],
-                            "period_end": quota_info["period_end"],
-                        },
-                        "upgrade_message": self._get_upgrade_message(quota_info["tier"]),
+        if not has_quota:
+            # Quota exceeded, return 429 with upgrade message
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={
+                    "error": "quota_exceeded",
+                    "message": "Monthly token quota exceeded",
+                    "details": {
+                        "tier": quota_info["tier"],
+                        "tokens_used": quota_info["tokens_used"],
+                        "token_limit": quota_info["token_limit"],
+                        "period_end": quota_info["period_end"],
                     },
-                    headers={
-                        "X-RateLimit-Limit": str(quota_info["token_limit"]),
-                        "X-RateLimit-Remaining": "0",
-                        "X-RateLimit-Reset": quota_info["period_end"] or "",
-                        "Retry-After": self._calculate_retry_after(quota_info["period_end"]),
-                    },
-                )
+                    "upgrade_message": self._get_upgrade_message(quota_info["tier"]),
+                },
+                headers={
+                    "X-RateLimit-Limit": str(quota_info["token_limit"]),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": quota_info["period_end"] or "",
+                    "Retry-After": self._calculate_retry_after(quota_info["period_end"]),
+                },
+            )
 
         # Quota available, proceed with request
         return await call_next(request)
@@ -127,12 +146,17 @@ class TokenQuotaMiddleware:
 
         token = auth_header.replace("Bearer ", "")
 
+        # SECURITY (C-02): sessions store the SHA-256 hash of the token, not the
+        # raw token. Hash before lookup or the comparison never matches and quota
+        # checks are silently skipped. Mirrors get_current_user in routers/auth.
+        token_hash = hash_token(token)
+
         # Validate token and get user
         try:
             async with async_session_maker() as db:
                 # Check if session exists and is active
                 stmt = select(Session).where(
-                    Session.token == token,
+                    Session.token == token_hash,
                     Session.is_active == True,
                 )
                 result = await db.execute(stmt)

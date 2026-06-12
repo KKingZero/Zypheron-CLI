@@ -1,1 +1,6 @@
 zypheron
+
+# local go test tmp
+.gotmp/
+.gocache/
+.ccache/

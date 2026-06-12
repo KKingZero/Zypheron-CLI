@@ -8,13 +8,26 @@ import yaml
 from typing import Dict, List, Optional, Any
 import requests
 
+from api_testing.scope import ScannerScope
+
 logger = logging.getLogger(__name__)
 
 
 class SwaggerParser:
     """Parse Swagger 2.0 specifications"""
     
-    def __init__(self, spec_url_or_file: str):
+    def __init__(
+        self,
+        spec_url_or_file: str,
+        scope_hosts: Optional[List[str]] = None,
+        allow_private_targets: bool = False,
+        base_url: Optional[str] = None,
+    ):
+        self.scope = ScannerScope(
+            base_url=base_url or (spec_url_or_file if spec_url_or_file.startswith("http") else None),
+            scope_hosts=scope_hosts or [],
+            allow_private_targets=allow_private_targets,
+        )
         self.spec = self._load_spec(spec_url_or_file)
         self.endpoints: List[Dict] = []
         
@@ -25,6 +38,9 @@ class SwaggerParser:
         """Load spec from URL or file"""
         try:
             if source.startswith('http'):
+                if not self.scope.validate_url(source):
+                    logger.warning("Refusing to load out-of-scope Swagger/OpenAPI spec URL: %s", source)
+                    return None
                 response = requests.get(source, timeout=10)
                 return response.json()
             else:
@@ -108,4 +124,3 @@ class OpenAPIParser(SwaggerParser):
                 self.endpoints.append(endpoint)
         
         logger.info(f"Parsed {len(self.endpoints)} endpoints from OpenAPI spec")
-

@@ -24,15 +24,15 @@ var idleMessages = []string{
 }
 
 type SummaryModel struct {
-	spinner       spinner.Model
-	status        string
-	details       string
-	phase         string
-	isLoading     bool
-	width         int
-	height        int
-	idleIndex     int
-	lastIdleSwap  time.Time
+	spinner      spinner.Model
+	status       string
+	details      string
+	phase        string
+	isLoading    bool
+	width        int
+	height       int
+	idleIndex    int
+	lastIdleSwap time.Time
 
 	// Session stats
 	SessionStart time.Time
@@ -42,7 +42,7 @@ type SummaryModel struct {
 }
 
 const (
-	HUDHeight = 2 // Minimal height - just status badge and line
+	HUDHeight = 3 // Top border plus status and detail rows.
 )
 
 func NewSummary(width int) SummaryModel {
@@ -149,11 +149,14 @@ func (m SummaryModel) View() string {
 	// Layout - simplified without stats (stats moved to bottom bar)
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.JoinHorizontal(lipgloss.Center, phaseBadge, " ", statusLine),
-		"",
 		styles.MutedStyle.Render(m.details),
 	)
 
 	return containerStyle.Render(content)
+}
+
+func (m SummaryModel) Height() int {
+	return HUDHeight
 }
 
 // SetStatus updates the status display and returns a command to start the spinner if loading

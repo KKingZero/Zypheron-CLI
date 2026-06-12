@@ -38,6 +38,20 @@ This repository is the open source CLI. It is intended for authorized security t
 
 Zypheron is free and open source. This repository should be treated as a local-first security CLI and self-hostable tooling project.
 
+### OSS RC Scope
+
+The production release candidate targets the local/self-hosted OSS path: Go CLI,
+Python AI runtime, optional FastAPI service, local tool orchestration, and
+packaged CLI artifacts. Hosted SaaS-only surfaces are not launch blockers for
+this RC.
+
+Deferred for the OSS RC:
+
+- Enterprise Teams API endpoints may return `501 Not Implemented`
+- streaming chat protocol support; chat currently uses the non-streaming path
+- full autonomous exploitation; autopent remains approval-gated and safety-first
+- hosted billing/dashboard production polish
+
 ## Install
 
 Three install paths — pick one.
@@ -214,6 +228,20 @@ zypheron install-deps --all
 # Check CLI version
 zypheron --version
 ```
+
+## Release Validation
+
+For a clean release-candidate gate from source:
+
+```bash
+./scripts/setup_api_test_env.sh --allow-online
+./scripts/setup_ai_test_env.sh --allow-online
+./scripts/run_all_tests.sh --ci
+./scripts/local_smoke_test.sh --setup-api-env --allow-online
+```
+
+`run_all_tests.sh --ci` runs the API tests, AI runtime tests, Go tests with a
+workspace `GOTMPDIR`, and integration checks.
 
 ## What It Does
 

@@ -17,7 +17,15 @@ from datetime import datetime
 import requests
 from urllib.parse import urljoin, urlparse, urlunparse, parse_qs, urlencode
 
+from api_testing.scope import ScannerScope
+
 logger = logging.getLogger(__name__)
+
+SENSITIVE_HEADER_NAMES = {"authorization", "cookie", "x-api-key", "apikey"}
+SENSITIVE_VALUE_RE = re.compile(
+    r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+|"
+    r"((?:session|token|secret|key|apikey|api_key|jwt)[A-Za-z0-9_.-]*=)[^;&\s]+"
+)
 
 
 @dataclass
@@ -91,9 +99,20 @@ class AuthenticatedScanner:
     - Insufficient session expiration
     """
     
-    def __init__(self, session_manager=None):
+    def __init__(
+        self,
+        session_manager=None,
+        scope_hosts: Optional[List[str]] = None,
+        allow_private_targets: bool = False,
+        base_url: Optional[str] = None,
+    ):
         self.session_manager = session_manager
         self.vulnerabilities: List[AuthenticatedVulnerability] = []
+        self.scope = ScannerScope(
+            base_url=base_url,
+            scope_hosts=scope_hosts or [],
+            allow_private_targets=allow_private_targets,
+        )
     
     async def test_sql_injection(
         self,
@@ -116,6 +135,8 @@ class AuthenticatedScanner:
         for target in targets:
             url = target.get("url")
             if not url:
+                continue
+            if not self._url_in_scope(url, "authenticated SQL injection target"):
                 continue
 
             method = target.get("method", "GET").upper()
@@ -151,7 +172,10 @@ class AuthenticatedScanner:
             if supabase:
                 cmd.append("--tech=PostgreSQL")
 
-            logger.debug("Executing sqlmap command: %s", " ".join(cmd))
+            logger.debug(
+                "Executing sqlmap command: %s",
+                self._sanitize_sqlmap_command(cmd, method=method, url=url, timeout=timeout),
+            )
 
             try:
                 process = await asyncio.create_subprocess_exec(
@@ -224,6 +248,8 @@ class AuthenticatedScanner:
 
         vulnerabilities: List[AuthenticatedVulnerability] = []
         base = supabase_url.rstrip("/")
+        if not self._url_in_scope(base, "Supabase base URL"):
+            return vulnerabilities
 
         headers = {
             "apikey": anon_key,
@@ -233,6 +259,8 @@ class AuthenticatedScanner:
 
         for table in tables:
             url = f"{base}/rest/v1/{table}?select=*&limit=3"
+            if not self._url_in_scope(url, "Supabase REST URL"):
+                continue
 
             def _probe() -> requests.Response:
                 return requests.get(url, headers=headers, timeout=10)
@@ -303,6 +331,8 @@ class AuthenticatedScanner:
             return idor_vulns
         
         for url in test_urls:
+            if not self._url_in_scope(url, "IDOR test URL"):
+                continue
             try:
                 # Extract numeric IDs from URL
                 numeric_params = self._extract_numeric_params(url)
@@ -323,6 +353,8 @@ class AuthenticatedScanner:
                             f"{param_name}={original_value}",
                             f"{param_name}={test_value}"
                         )
+                        if not self._url_in_scope(modified_url, "IDOR modified URL"):
+                            continue
                         
                         # Make request with authenticated session
                         response = req_session.get(modified_url, timeout=10)
@@ -395,6 +427,8 @@ class AuthenticatedScanner:
             return priv_esc_vulns
         
         for url in admin_urls:
+            if not self._url_in_scope(url, "privilege escalation URL"):
+                continue
             try:
                 # First verify admin can access
                 admin_response = high_session.get(url, timeout=10)
@@ -470,6 +504,8 @@ class AuthenticatedScanner:
             return horiz_vulns
         
         for url in user_specific_urls:
+            if not self._url_in_scope(url, "horizontal escalation URL"):
+                continue
             try:
                 # User 1 accesses their data
                 user1_response = user1_session.get(url, timeout=10)
@@ -520,6 +556,10 @@ class AuthenticatedScanner:
         """Test for session fixation vulnerabilities"""
         logger.info("Testing session fixation")
         session_vulns = []
+        if not self._url_in_scope(target_url, "session fixation target URL"):
+            return session_vulns
+        if not self._url_in_scope(login_url, "session fixation login URL"):
+            return session_vulns
         
         try:
             # Get initial session cookie
@@ -598,6 +638,8 @@ class AuthenticatedScanner:
             url = endpoint['url']
             method = endpoint.get('method', 'GET')
             required_role = endpoint.get('required_role', 'user')
+            if not self._url_in_scope(url, "broken authorization URL"):
+                continue
             
             try:
                 # Make request
@@ -656,6 +698,8 @@ class AuthenticatedScanner:
         
         if not self.session_manager:
             return None
+        if not self._url_in_scope(protected_url, "session timeout protected URL"):
+            return None
         
         try:
             # Make initial authenticated request
@@ -709,6 +753,67 @@ class AuthenticatedScanner:
     def _build_cookie_header(self, session: requests.Session) -> str:
         cookies = session.cookies.get_dict()
         return "; ".join(f"{k}={v}" for k, v in cookies.items())
+
+    def _url_in_scope(self, url: str, label: str) -> bool:
+        if self.scope.validate_url(url):
+            return True
+        logger.warning("Skipping out-of-scope %s: %s", label, url)
+        return False
+
+    def _sanitize_sqlmap_command(
+        self,
+        cmd: List[str],
+        method: str,
+        url: str,
+        timeout: int,
+    ) -> str:
+        parsed = urlparse(url)
+        summary = [
+            "tool=sqlmap",
+            f"method={method}",
+            f"target={parsed.netloc}{parsed.path}",
+            f"timeout={timeout}",
+        ]
+
+        option_names: List[str] = []
+        redacted_headers: List[str] = []
+        idx = 1
+        while idx < len(cmd):
+            token = cmd[idx]
+            if token.startswith("--"):
+                option_names.append(token)
+                if token == "--headers" and idx + 1 < len(cmd):
+                    redacted_headers = self._redact_serialized_headers(cmd[idx + 1])
+                    idx += 2
+                    continue
+                idx += 2 if idx + 1 < len(cmd) and not cmd[idx + 1].startswith("--") else 1
+                continue
+            idx += 1
+
+        if option_names:
+            summary.append(f"options={','.join(option_names)}")
+        if redacted_headers:
+            summary.append(f"headers={redacted_headers}")
+
+        return " ".join(summary)
+
+    def _redact_serialized_headers(self, serialized_headers: str) -> List[str]:
+        redacted = []
+        for line in serialized_headers.splitlines():
+            if ":" not in line:
+                continue
+            name, value = line.split(":", 1)
+            if name.strip().lower() in SENSITIVE_HEADER_NAMES:
+                redacted.append(f"{name.strip()}: <redacted>")
+            else:
+                redacted.append(f"{name.strip()}: {self._redact_sensitive_value(value.strip())}")
+        return redacted
+
+    def _redact_sensitive_value(self, value: str) -> str:
+        return SENSITIVE_VALUE_RE.sub(
+            lambda match: f"{match.group(1) or match.group(2)}<redacted>",
+            value,
+        )
 
     async def _baseline_response(
         self,
@@ -816,6 +921,9 @@ class AuthenticatedScanner:
         else:
             return {"verified": False, "reason": f"unsupported-location-{location}"}
 
+        if not self._url_in_scope(request_url, "SQL injection verification URL"):
+            return {"verified": False, "reason": "out-of-scope-verification-url"}
+
         def _send() -> Dict[str, Any]:
             if session:
                 response = session.request(method, request_url, data=request_data, headers=headers, timeout=10)
@@ -911,6 +1019,10 @@ class AuthenticatedScanner:
     ) -> bool:
         """Check if two URLs return different content"""
         try:
+            if not self._url_in_scope(url1, "content comparison URL"):
+                return False
+            if not self._url_in_scope(url2, "content comparison URL"):
+                return False
             resp1 = session.get(url1, timeout=10)
             resp2 = session.get(url2, timeout=10)
             
@@ -944,4 +1056,3 @@ class AuthenticatedScanner:
         for vuln in self.vulnerabilities:
             counts[vuln.severity] = counts.get(vuln.severity, 0) + 1
         return counts
-

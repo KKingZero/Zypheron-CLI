@@ -18,6 +18,8 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from api_testing.scope import ScannerScope
+
 logger = logging.getLogger(__name__)
 
 
@@ -148,7 +150,9 @@ class APIScanner:
         self,
         session_manager=None,
         max_workers: int = 10,
-        rate_limit_rps: int = 10
+        rate_limit_rps: int = 10,
+        scope_hosts: Optional[List[str]] = None,
+        allow_private_targets: bool = False,
     ):
         """
         Initialize API Scanner with concurrent scanning capabilities.
@@ -163,6 +167,8 @@ class APIScanner:
         self.vulnerabilities: List[APIVulnerability] = []
         self.endpoints_tested = 0
         self.api_inventory: Dict[str, Any] = {}
+        self.scope_hosts = scope_hosts or []
+        self.allow_private_targets = allow_private_targets
         
         # Concurrent scanning configuration
         self.max_workers = max_workers
@@ -179,6 +185,11 @@ class APIScanner:
         """Identify SPA characteristics and enumerate backend API endpoints."""
 
         logger.info("Enumerating API inventory for %s", base_url)
+        scope = ScannerScope(
+            base_url=base_url,
+            scope_hosts=self.scope_hosts,
+            allow_private_targets=self.allow_private_targets,
+        )
 
         inventory: Dict[str, Any] = {
             "base_url": base_url,
@@ -191,6 +202,11 @@ class APIScanner:
             "supabase_projects": [],
             "validation": [],
         }
+
+        if not scope.validate_url(base_url):
+            logger.warning("Skipping out-of-scope API inventory base URL: %s", base_url)
+            self.api_inventory = inventory
+            return inventory
 
         html = await self._fetch_text(base_url)
         if not html:
@@ -206,7 +222,11 @@ class APIScanner:
             self.api_inventory = inventory
             return inventory
 
-        script_urls = self._extract_script_urls(html, base_url)
+        script_urls = [
+            script_url
+            for script_url in self._extract_script_urls(html, base_url)
+            if scope.validate_url(script_url)
+        ]
         inventory["script_sources"] = script_urls[:max_scripts]
 
         backend_candidates: Set[str] = set()
@@ -230,7 +250,7 @@ class APIScanner:
         confirmed_spa_routes: Set[str] = set()
 
         for candidate in backend_candidates:
-            verdict = await self._classify_endpoint(base_url, candidate)
+            verdict = await self._classify_endpoint(base_url, candidate, scope=scope)
             validation_results.append(verdict)
 
             if verdict.get("kind") == "backend":
@@ -358,12 +378,28 @@ class APIScanner:
             "supabase_projects": supabase_projects,
         }
 
-    async def _classify_endpoint(self, base_url: str, candidate: str) -> Dict[str, Any]:
+    async def _classify_endpoint(
+        self,
+        base_url: str,
+        candidate: str,
+        scope: Optional[ScannerScope] = None,
+    ) -> Dict[str, Any]:
         """Differentiate SPA routes from real backend endpoints."""
 
         parsed_base = urlparse(base_url)
+        scanner_scope = scope or ScannerScope(
+            base_url=base_url,
+            scope_hosts=self.scope_hosts,
+            allow_private_targets=self.allow_private_targets,
+        )
 
         if candidate.startswith("http://") or candidate.startswith("https://"):
+            if not scanner_scope.validate_url(candidate):
+                return {
+                    "kind": "ignore",
+                    "url": candidate,
+                    "reason": "out-of-scope",
+                }
             return {
                 "kind": "backend",
                 "url": candidate,
@@ -379,6 +415,13 @@ class APIScanner:
             }
 
         target_url = urljoin(f"{parsed_base.scheme}://{parsed_base.netloc}", candidate)
+        if not scanner_scope.validate_url(target_url):
+            return {
+                "kind": "ignore",
+                "path": candidate,
+                "url": target_url,
+                "reason": "out-of-scope",
+            }
 
         def _probe() -> Dict[str, Any]:
             headers = {
@@ -798,4 +841,3 @@ class APIScanner:
             'vulnerabilities': [v.to_dict() for v in self.vulnerabilities],
             'api_inventory': self.api_inventory,
         }
-

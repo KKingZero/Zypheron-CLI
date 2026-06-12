@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
 )
 
 var (
@@ -18,22 +16,8 @@ var (
 func GetSharedBridge() *AIBridge {
 	bridgeOnce.Do(func() {
 		sharedBridge = NewAIBridge()
-		sharedBridge.EnsureReadyAsync(5 * time.Second)
-		sharedBridge.ensurePersistentEngine()
 	})
 	return sharedBridge
-}
-
-func (b *AIBridge) ensurePersistentEngine() {
-	go func() {
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			if !b.IsRunning() {
-				_ = b.Start()
-			}
-		}
-	}()
 }
 
 // EnsureReady blocks until the AI engine is reachable or the timeout expires.
@@ -66,14 +50,4 @@ func (b *AIBridge) EnsureReady(timeout time.Duration) error {
 	}
 
 	return fmt.Errorf("AI engine not ready after %s", timeout)
-}
-
-// EnsureReadyAsync starts a background goroutine that waits for the AI engine
-// to become ready. Logs status but never blocks the caller.
-func (b *AIBridge) EnsureReadyAsync(timeout time.Duration) {
-	go func() {
-		if err := b.EnsureReady(timeout); err != nil {
-			fmt.Println(ui.Muted.Sprint("AI engine not available (will connect on demand)"))
-		}
-	}()
 }
