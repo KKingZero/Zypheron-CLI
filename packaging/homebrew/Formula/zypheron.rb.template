@@ -1,0 +1,23 @@
+class Zypheron < Formula
+  desc "AI-native offensive security CLI for real operator workflows"
+  homepage "https://github.com/KKingZero/Zypheron-CLI"
+  url "https://github.com/KKingZero/Zypheron-CLI/archive/refs/tags/v@VERSION@.tar.gz"
+  sha256 "@SOURCE_SHA256@"
+  license "MIT"
+
+  depends_on "go" => :build
+
+  def install
+    cd "zypheron-go" do
+      ENV["CGO_ENABLED"] = "1"
+      system "go", "build",
+        "-ldflags", "-s -w -X main.version=#{version} -X github.com/KKingZero/Cobra-AI/zypheron-go/internal/updater.CurrentVersion=#{version}",
+        "-o", bin/"zypheron",
+        "./cmd/zypheron"
+    end
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/zypheron --version")
+  end
+end

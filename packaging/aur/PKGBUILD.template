@@ -1,0 +1,31 @@
+# Maintainer: Zypheron Maintainers <maintainers at zypheron dot net>
+
+pkgname=zypheron
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc="AI-native offensive security CLI for real operator workflows"
+arch=("x86_64" "aarch64")
+url="https://github.com/KKingZero/Zypheron-CLI"
+license=("MIT")
+depends=("glibc")
+makedepends=("go")
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/KKingZero/Zypheron-CLI/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=("@SOURCE_SHA256@")
+
+build() {
+  cd "Zypheron-CLI-${pkgver}/zypheron-go"
+  export CGO_ENABLED=1
+  go build \
+    -ldflags "-s -w -X main.version=${pkgver} -X github.com/KKingZero/Cobra-AI/zypheron-go/internal/updater.CurrentVersion=${pkgver}" \
+    -o zypheron \
+    ./cmd/zypheron
+}
+
+package() {
+  cd "Zypheron-CLI-${pkgver}"
+  install -Dm755 "zypheron-go/zypheron" "${pkgdir}/usr/bin/zypheron"
+  install -Dm644 "LICENSE" "${pkgdir}/usr/share/licenses/zypheron/LICENSE"
+  install -Dm644 "NOTICE" "${pkgdir}/usr/share/doc/zypheron/NOTICE"
+  install -Dm644 "docs/INSTALL.md" "${pkgdir}/usr/share/doc/zypheron/INSTALL.md"
+  install -Dm644 "docs/CLI_REFERENCE.md" "${pkgdir}/usr/share/doc/zypheron/CLI_REFERENCE.md"
+}

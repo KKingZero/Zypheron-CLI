@@ -81,6 +81,8 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.zip
+            dist/*.deb
+            dist/*.rpm
             dist/SHA256SUMS
 
   upload-s3:
@@ -110,7 +112,7 @@ jobs:
         run: |
           VERSION=${{ github.ref_name }}
           mkdir -p upload/${VERSION}
-          find dist -maxdepth 1 -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "SHA256SUMS" \) | while read f; do
+          find dist -maxdepth 1 -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.deb" -o -name "*.rpm" -o -name "SHA256SUMS" \) | while read f; do
             cp "$f" upload/${VERSION}/
           done
 
