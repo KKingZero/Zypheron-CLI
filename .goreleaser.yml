@@ -28,6 +28,21 @@ builds:
         -s -w
         -X main.version={{ .Version }}
         -X github.com/KKingZero/Cobra-AI/zypheron-go/internal/updater.CurrentVersion={{ .Version }}
+  - id: zypheron-linux-package
+    dir: zypheron-go
+    main: ./cmd/zypheron/main.go
+    binary: zypheron
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - >-
+        -s -w
+        -X main.version={{ .Version }}
+        -X github.com/KKingZero/Cobra-AI/zypheron-go/internal/updater.CurrentVersion={{ .Version }}
 
 archives:
   - id: default
@@ -41,9 +56,43 @@ archives:
           - zip
     name_template: >-
       {{ .ProjectName }}-{{ .Os }}-{{ .Arch }}
+    files:
+      - LICENSE
+      - NOTICE
+      - docs/INSTALL.md
+      - docs/CLI_REFERENCE.md
 
 checksum:
   name_template: SHA256SUMS
+
+nfpms:
+  - id: linux-packages
+    package_name: zypheron
+    ids:
+      - zypheron-linux-package
+    file_name_template: "{{ .ConventionalFileName }}"
+    vendor: Zypheron
+    homepage: https://github.com/KKingZero/Zypheron-CLI
+    maintainer: Zypheron Maintainers <maintainers@zypheron.net>
+    description: |-
+      AI-native offensive security CLI for terminal-first recon, scanning,
+      AI-assisted workflows, and operator tooling.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/zypheron/LICENSE
+      - src: NOTICE
+        dst: /usr/share/doc/zypheron/NOTICE
+      - src: docs/INSTALL.md
+        dst: /usr/share/doc/zypheron/INSTALL.md
+      - src: docs/CLI_REFERENCE.md
+        dst: /usr/share/doc/zypheron/CLI_REFERENCE.md
 
 changelog:
   sort: asc

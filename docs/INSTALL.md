@@ -8,8 +8,9 @@ There are four supported install paths:
 
 1. Source bootstrap — [setup-hybrid.sh](../scripts/install/setup-hybrid.sh) (Zypheron CLI itself)
 2. Release binary — [scripts/install.sh](../scripts/install.sh) (packaged CLI download)
-3. Pentest tool ecosystem — per-distro installers (`install-tools.sh`, `install-tools-arch.sh`, `install-tools-rpm.sh`)
-4. C2 frameworks — optional interactive [install-c2.sh](../scripts/install/install-c2.sh) (Sliver, Empire)
+3. Package managers — apt, Homebrew, AUR, and RPM/DNF artifacts from GoReleaser
+4. Pentest tool ecosystem — per-distro installers (`install-tools.sh`, `install-tools-arch.sh`, `install-tools-rpm.sh`)
+5. C2 frameworks — optional interactive [install-c2.sh](../scripts/install/install-c2.sh) (Sliver, Empire)
 
 ## Option 1: Bootstrap From Source
 
@@ -60,7 +61,44 @@ The release installer:
 - verifies checksums when local checksum tools are available
 - installs the `zypheron` binary into the target directory
 
-## Option 3: Pentest Tool Ecosystem
+## Option 3: Package Managers
+
+Release tags build Linux package artifacts through GoReleaser:
+
+- `.deb` packages for Debian, Ubuntu, Kali, Parrot, Mint, Pop!_OS, and other apt-based systems
+- `.rpm` packages for Fedora, RHEL, Rocky, Alma, CentOS Stream, Oracle Linux, Amazon Linux 2023, and other RPM/DNF systems
+
+Homebrew and AUR use source-build templates under [packaging/](../packaging/) so SQLite-backed features are built with CGO enabled on the user's system.
+
+Until the external package repositories are published, install the package artifacts directly from the release or CDN:
+
+```bash
+# Debian / Ubuntu / Kali / Parrot
+curl -LO https://download.zypheron.net/v2.0.0/zypheron_2.0.0_linux_amd64.deb
+sudo apt install ./zypheron_2.0.0_linux_amd64.deb
+
+# Fedora / RHEL-family
+curl -LO https://download.zypheron.net/v2.0.0/zypheron_2.0.0_linux_amd64.rpm
+sudo dnf install ./zypheron_2.0.0_linux_amd64.rpm
+```
+
+Once package repositories are live, the intended commands are:
+
+```bash
+sudo apt install zypheron
+brew install KKingZero/zypheron/zypheron
+yay -S zypheron
+sudo dnf install zypheron
+```
+
+Publishing requirements:
+
+- **apt** — upload generated `.deb` files to an apt repository provider such as Cloudsmith, Gemfury, Packagecloud, or a self-hosted signed apt repo.
+- **Homebrew** — create `KKingZero/homebrew-zypheron`, fill `packaging/homebrew/Formula/zypheron.rb.template` with the release version and source tarball SHA256, then publish it as `Formula/zypheron.rb`.
+- **AUR** — create the `zypheron` AUR package, fill `packaging/aur/PKGBUILD.template` with the release version and source tarball SHA256, then publish it with `.SRCINFO`.
+- **DNF/RPM** — generated `.rpm` files can be installed directly now; `dnf install zypheron` requires publishing them to a signed yum/dnf repository.
+
+## Option 4: Pentest Tool Ecosystem
 
 Standalone installers that provision the external tools Zypheron workflows call (hydra, john, nuclei, amass, metasploit, ropper, volatility3, one_gadget, ghidra, SecLists, rockyou).
 
@@ -100,7 +138,7 @@ Arch-only flags:
 
 Each installer writes a structured log to `$ZYPHERON_INSTALL_LOG`, tracks per-step status (ok / warn / fail / skip), and runs a verification pass confirming installed binaries resolve on `PATH`. Exit codes: `0` success, `1` any failed step, `2` fewer than three core tools verified.
 
-## Option 4: C2 Frameworks (Sliver, Empire)
+## Option 5: C2 Frameworks (Sliver, Empire)
 
 Never auto-installed. Run the interactive installer when you want them:
 

@@ -54,7 +54,12 @@ Deferred for the OSS RC:
 
 ## Install
 
-Three install paths — pick one.
+Package-manager artifacts are generated on tagged releases, but public apt,
+Homebrew, AUR, and DNF repository publishing requires the matching external
+repos/taps to be configured. Until those are live, use the source bootstrap or
+release binary installer.
+
+Install paths — pick one.
 
 ### 1. Bootstrap from source (recommended)
 
@@ -138,7 +143,36 @@ ZYPHERON_INSTALL_DIR="$HOME/.local/bin" curl -sSfL https://download.zypheron.net
 
 The release installer detects OS/arch, downloads the matching archive + `SHA256SUMS`, verifies the checksum, and installs the `zypheron` binary.
 
-### 3. Pentest tools only (per-distro installers)
+### 3. Package managers
+
+Tagged releases build `.deb` and `.rpm` artifacts. Homebrew and AUR use
+source-build templates under [packaging/](packaging/) so SQLite-backed features
+are built with CGO enabled on the user's system.
+
+Direct package artifact installs:
+
+```bash
+# Debian / Ubuntu / Kali / Parrot
+curl -LO https://download.zypheron.net/v2.0.0/zypheron_2.0.0_linux_amd64.deb
+sudo apt install ./zypheron_2.0.0_linux_amd64.deb
+
+# Fedora / RHEL-family
+curl -LO https://download.zypheron.net/v2.0.0/zypheron_2.0.0_linux_amd64.rpm
+sudo dnf install ./zypheron_2.0.0_linux_amd64.rpm
+```
+
+Once the package repositories are published, the intended commands are:
+
+```bash
+sudo apt install zypheron
+brew install KKingZero/zypheron/zypheron
+yay -S zypheron
+sudo dnf install zypheron
+```
+
+See [docs/INSTALL.md](docs/INSTALL.md) for the publication checklist.
+
+### 4. Pentest tools only (per-distro installers)
 
 Standalone installers for external tools (hydra, nuclei, amass, metasploit, ropper, volatility3, one_gadget, ghidra, SecLists, rockyou). Use these when you already have the Zypheron CLI installed and just need the tool ecosystem.
 
@@ -171,7 +205,7 @@ Arch-only flags:
 | `ZYPHERON_AUR_HELPER=paru\|yay` | Preferred AUR helper (default: paru, falls back to yay, bootstraps paru-bin if neither present) |
 | `ZYPHERON_ALLOW_AUR_SKIPREVIEW=1` | Skip interactive PKGBUILD review (off by default, not recommended) |
 
-### 4. Optional: C2 frameworks (Sliver, Empire)
+### 5. Optional: C2 frameworks (Sliver, Empire)
 
 Interactive installer, never auto-runs from the main installers.
 
