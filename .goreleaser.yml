@@ -81,6 +81,13 @@ nfpms:
     formats:
       - deb
       - rpm
+    overrides:
+      deb:
+        dependencies:
+          - libc6
+      rpm:
+        dependencies:
+          - glibc
     bindir: /usr/bin
     section: utils
     priority: optional
