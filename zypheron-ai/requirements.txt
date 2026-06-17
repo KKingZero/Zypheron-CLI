@@ -5,9 +5,12 @@ google-generativeai~=0.8.0
 requests~=2.32.0
 
 # ML & Data Science
-numpy~=1.26.0
-pandas~=2.2.0
-scikit-learn~=1.6.0
+# Floors raised to first releases shipping cp314 wheels; older minors are
+# sdist-only and fail to compile on Python 3.14 (Arch). pandas held <3 (2.3.x)
+# to avoid the pandas 3.0 API break.
+numpy~=2.2
+pandas~=2.3
+scikit-learn~=1.7
 # torch/transformers are optional and very large; not required for core AI engine startup
 
 # Security & Pentesting
@@ -23,18 +26,18 @@ cvelib~=1.6.0
 
 # Graph Analysis
 networkx~=3.4.0
-matplotlib~=3.9.0
+matplotlib~=3.10  # 3.9.x has no cp314 wheel
 
 # Natural Language Processing
 spacy~=3.8.0
 nltk~=3.9.0
 
 # IPC & Communication
-pyzmq~=26.2.0
+pyzmq~=27.0  # 26.2.x has no cp314 wheel
 
 # Utilities
 python-dotenv~=1.0.0
-pydantic~=2.10.0
+pydantic~=2.11  # 2.10.x pins pydantic-core 2.27 (no cp314 wheel)
 pydantic-settings~=2.7.0
 pyyaml~=6.0.1
 colorama~=0.4.6
@@ -46,7 +49,7 @@ keyring~=25.5.0
 cryptography~=44.0.0
 
 # Async support
-aiohttp~=3.11.0
+aiohttp~=3.12  # 3.11.x has no cp314 wheel
 
 # Local LLM support (Ollama)
 ollama~=0.4.0
