@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
 # Zypheron bootstrap
-# Pasteable usage after clone:
-#   git clone https://github.com/KKingZero/Zypheron-CLI.git && cd Zypheron-CLI && bash scripts/install/setup-hybrid.sh
+# Pasteable usage:
+#   git clone https://github.com/KKingZero/Zypheron-CLI.git
+#   cd Zypheron-CLI
+#   bash scripts/install/setup-hybrid.sh
 #
 # Options:
 #   ZYPHERON_INSTALL_DIR=/path        Install directory for the CLI binary

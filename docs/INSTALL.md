@@ -74,12 +74,12 @@ Until the external package repositories are published, install the package artif
 
 ```bash
 # Debian / Ubuntu / Kali / Parrot
-curl -LO https://download.zypheron.net/v2.0.0/zypheron_2.0.0_linux_amd64.deb
-sudo apt install ./zypheron_2.0.0_linux_amd64.deb
+curl -LO https://download.zypheron.net/v2.0.0/zypheron_2.0.0_amd64.deb
+sudo apt install ./zypheron_2.0.0_amd64.deb
 
 # Fedora / RHEL-family
-curl -LO https://download.zypheron.net/v2.0.0/zypheron_2.0.0_linux_amd64.rpm
-sudo dnf install ./zypheron_2.0.0_linux_amd64.rpm
+curl -LO https://download.zypheron.net/v2.0.0/zypheron-2.0.0-1.x86_64.rpm
+sudo dnf install ./zypheron-2.0.0-1.x86_64.rpm
 ```
 
 Once package repositories are live, the intended commands are:
