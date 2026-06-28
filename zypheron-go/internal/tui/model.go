@@ -14,6 +14,7 @@ import (
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/agents"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/config"
+	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/desktopbridge"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/intel"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tools"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/tui/components"
@@ -32,6 +33,58 @@ const (
 	stateDashboard
 	stateScan
 )
+
+type interactionMode int
+
+const (
+	modeNormal interactionMode = iota
+	modePlan
+	modeAuto
+)
+
+func (m interactionMode) Label() string {
+	switch m {
+	case modePlan:
+		return "Plan"
+	case modeAuto:
+		return "Auto"
+	default:
+		return "Normal"
+	}
+}
+
+func (m interactionMode) Prompt() string {
+	switch m {
+	case modePlan:
+		return "? "
+	case modeAuto:
+		return "! "
+	default:
+		return "> "
+	}
+}
+
+func (m interactionMode) Placeholder() string {
+	switch m {
+	case modePlan:
+		return "Describe a goal to plan..."
+	case modeAuto:
+		return "Describe a desktop-assisted task..."
+	default:
+		return "Ask Zypheron or type / for commands..."
+	}
+}
+
+func (m interactionMode) Hint() string {
+	switch m {
+	case modePlan:
+		return "Plan mode drafts steps only. Slash commands still run explicitly."
+	case modeAuto:
+		return "Auto mode uses the paired desktop app for assisted execution."
+	default:
+		return "Normal mode supports chat, slash commands, and guided security tasks."
+	}
+}
 
 const (
 	dashboardHeaderHeight = 1
@@ -74,7 +127,11 @@ type Model struct {
 	showHelp bool
 
 	// Raw output view toggle (Ctrl+O)
-	showRawOutput bool
+	showRawOutput  bool
+	showTabContext bool
+	mode           interactionMode
+	autoModeReady  bool
+	autoModeStatus string
 
 	// Sudo prompt for tools requiring root privileges
 	sudoPrompt     components.SudoPromptModel
@@ -179,6 +236,9 @@ func NewModel() Model {
 
 	// Get current working directory
 	cwd, _ := os.Getwd()
+	input := views.NewInput(100)
+	input.SetPrompt(modeNormal.Prompt())
+	input.SetPlaceholder(modeNormal.Placeholder())
 
 	return Model{
 		state:             stateSplash,
@@ -188,7 +248,7 @@ func NewModel() Model {
 		bridge:            b,
 		console:           views.NewConsole(100, 20),
 		summary:           summary,
-		input:             views.NewInput(100),
+		input:             input,
 		modelSelector:     ms,
 		slashMenu:         views.NewSlashMenu(100),
 		scanProgress:      components.NewMultiScanProgress(100, 20),
@@ -212,6 +272,8 @@ func NewModel() Model {
 		runtimeTaskState:  make(map[string]string),
 		confirmedModelIdx: ms.SelectedIndex(),
 		pendingModelIdx:   -1,
+		mode:              modeNormal,
+		autoModeStatus:    "Desktop app not checked",
 	}
 }
 
@@ -270,6 +332,46 @@ func beginQuitSequence() tea.Cmd {
 	})
 }
 
+func (m *Model) applyInteractionMode() {
+	m.input.SetPrompt(m.mode.Prompt())
+	m.input.SetPlaceholder(m.mode.Placeholder())
+}
+
+func (m *Model) cycleInteractionMode() {
+	switch m.mode {
+	case modeNormal:
+		m.mode = modePlan
+	case modePlan:
+		if ok, status := desktopAutoAvailable(); ok {
+			m.mode = modeAuto
+			m.autoModeReady = true
+			m.autoModeStatus = status
+		} else {
+			m.mode = modeNormal
+			m.autoModeReady = false
+			m.autoModeStatus = status
+			_ = m.summary.SetStatus("Desktop", "Auto mode needs desktop app", "AUTO", false)
+		}
+	default:
+		m.mode = modeNormal
+	}
+	m.applyInteractionMode()
+}
+
+func desktopAutoAvailable() (bool, string) {
+	ep, err := desktopbridge.LoadEndpoint()
+	if err != nil {
+		return false, "Start and pair Zypheron Desktop to enable Auto."
+	}
+	if err := ep.Reach(); err != nil {
+		return false, "Zypheron Desktop is not reachable."
+	}
+	if _, err := desktopbridge.LoadAccessToken(); err != nil {
+		return false, "Run zypheron login to pair with Zypheron Desktop."
+	}
+	return true, "Desktop connected"
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
@@ -291,22 +393,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleCommand("/settings")
 		}
 
+		if k.Type == tea.KeyShiftTab && m.state == stateDashboard && !m.showHelp && !m.slashMenu.IsOpen() && !m.modelSelector.IsOpen() {
+			m.cycleInteractionMode()
+			return m, nil
+		}
+
 		if m.state == stateDashboard && m.input.Value() == "" && !m.slashMenu.IsOpen() && !m.modelSelector.IsOpen() {
 			switch {
 			case key.Matches(k, m.keys.ScanView):
 				m.header = m.header.Update("scan")
+				m.showTabContext = true
 				return m, nil
 			case key.Matches(k, m.keys.ReconView):
 				m.header = m.header.Update("recon")
+				m.showTabContext = true
 				return m, nil
 			case key.Matches(k, m.keys.AIView):
 				m.header = m.header.Update("ai")
+				m.showTabContext = true
 				return m, nil
 			case key.Matches(k, m.keys.ToolsView):
 				m.header = m.header.Update("tools")
+				m.showTabContext = true
 				return m, nil
 			case key.Matches(k, m.keys.HistoryView):
 				m.header = m.header.Update("history")
+				m.showTabContext = true
 				return m, nil
 			}
 		}
@@ -414,7 +526,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		availableHeight := m.height - dashboardHeaderHeight - m.summary.Height() - m.bottomAreaHeight()
 
-		inputHeight := m.input.Height()
+		inputHeight := m.inputAreaHeight()
 		var inputCmd tea.Cmd
 		m.input, inputCmd = m.input.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 		cmds = append(cmds, inputCmd)
@@ -1024,11 +1136,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.slashMenu.Close()
 					if selected != "" {
 						// Commands that need arguments: put in input for user to complete
-						needsArgs := map[string]bool{
-							"/scan": true, "/recon": true, "/autopent": true,
-							"/ai": true, "/auth": true, "/auth test": true, "/agent": true, "/dork": true,
-						}
-						if needsArgs[selected] {
+						selectedItem, _ := views.SlashMenuItemByCommand(selected)
+						if selectedItem.NeedsArgs {
 							m.input.SetValue(selected + " ")
 							return m, nil
 						}
@@ -1074,7 +1183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					val := m.input.Value()
 					m.input.AddToHistory(val) // Add to command history for Up/Down recall
 					m.input.Reset()
-					return m, m.handleCommand(val)
+					return m, m.handleInputSubmission(val)
 				}
 			}
 		}
@@ -1093,7 +1202,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Reflow layout when input height changes to avoid clipping on small terminals.
 		if m.width > 0 && m.height > 0 {
-			consoleHeight := m.height - dashboardHeaderHeight - m.summary.Height() - m.input.Height() - m.bottomAreaHeight()
+			consoleHeight := m.height - dashboardHeaderHeight - m.summary.Height() - m.inputAreaHeight() - m.bottomAreaHeight()
 			if consoleHeight < minConsoleHeight {
 				consoleHeight = minConsoleHeight
 			}
@@ -1277,6 +1386,39 @@ func (m *Model) handleRuntimeTasks(msg RuntimeTasksMsg) {
 	}
 }
 
+func (m *Model) handleInputSubmission(input string) tea.Cmd {
+	cmd := strings.TrimSpace(input)
+	if cmd == "" {
+		return nil
+	}
+	if strings.HasPrefix(cmd, "/") || strings.HasPrefix(cmd, "$") {
+		return m.handleCommand(cmd)
+	}
+
+	switch m.mode {
+	case modePlan:
+		query := "Create a concise execution plan for this security task. Do not run tools or claim execution; include assumptions, steps, and confirmation points: " + cmd
+		m.console.AppendLog(styles.UserStyle.Render("> [Plan] " + cmd))
+		return m.handleAIChat(query, nil)
+	case modeAuto:
+		if ok, status := desktopAutoAvailable(); !ok {
+			m.autoModeReady = false
+			m.autoModeStatus = status
+			m.mode = modeNormal
+			m.applyInteractionMode()
+			m.console.AppendLog(styles.WarningStyle.Render("Auto mode unavailable: " + status))
+			m.console.AppendLog(styles.MutedStyle.Render("  Staying in Normal mode. Connect Zypheron Desktop, then cycle modes with Shift+Tab."))
+			return nil
+		}
+		m.autoModeReady = true
+		m.autoModeStatus = "Desktop connected"
+		m.console.AppendLog(styles.UserStyle.Render("> [Auto] " + cmd))
+		return m.startAgentTask("desktop-assisted autonomous task: " + cmd)
+	default:
+		return m.handleCommand(cmd)
+	}
+}
+
 func (m *Model) handleCommand(cmd string) tea.Cmd {
 	// Echo to console
 	m.console.AppendLog(styles.UserStyle.Render("> " + cmd))
@@ -1376,8 +1518,12 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 			m.header = m.header.Update("recon")
 			if len(parts) < 2 {
 				_ = m.summary.SetStatus("Recon", "Usage: /recon <domain>", "RECON", false)
+				m.console.AppendLog(styles.WarningStyle.Render("Usage: /recon <domain>"))
+				m.console.AppendLog(styles.MutedStyle.Render("  Sets recon context/status. Use /scan or /autopent to run tools."))
 			} else {
-				_ = m.summary.SetStatus("Recon Mode", fmt.Sprintf("Target: %s", parts[1]), "RECON", false)
+				_ = m.summary.SetStatus("Recon Context", fmt.Sprintf("Target: %s", parts[1]), "RECON", false)
+				m.console.AppendLog(styles.MutedStyle.Render(fmt.Sprintf("Recon context set for %s", parts[1])))
+				m.console.AppendLog(styles.MutedStyle.Render("  Next: /scan " + parts[1] + " --tool nmap, /dork " + parts[1] + ", or /autopent " + parts[1]))
 			}
 
 		case "/autopent":
@@ -1696,9 +1842,10 @@ func (m *Model) handleCommand(cmd string) tea.Cmd {
 	case IntentClarify:
 		m.console.AppendLog(styles.MutedStyle.Render("Could you provide more details about what you'd like to do?"))
 		m.console.AppendLog(styles.MutedStyle.Render("Examples:"))
-		m.console.AppendLog(styles.KeyStyle.Render("  - 'scan example.com' to start a security scan"))
+		m.console.AppendLog(styles.KeyStyle.Render("  - /scan example.com to start a security scan"))
+		m.console.AppendLog(styles.KeyStyle.Render("  - /ai what vulnerabilities did you find? to discuss results"))
+		m.console.AppendLog(styles.KeyStyle.Render("  - /ai explain port 22 for security information"))
 		m.console.AppendLog(styles.KeyStyle.Render("  - 'what vulnerabilities did you find?' to discuss results"))
-		m.console.AppendLog(styles.KeyStyle.Render("  - 'explain port 22' for security information"))
 		return nil
 
 	case IntentFollowUp:
@@ -2670,14 +2817,16 @@ func (m Model) View() string {
 		mainArea = m.scanProgress.RenderRawOutputView()
 	} else if m.scanActive || m.scanProgress.IsActive() {
 		mainArea = m.scanProgress.View()
+	} else if m.console.IsEmpty() && m.showTabContext {
+		mainArea = m.renderTabContextPanel()
 	}
 
 	// Build input area with optional slash menu
-	inputArea := m.input.View()
+	inputArea := m.renderModeInput()
 	if m.slashMenu.IsOpen() {
 		inputArea = lipgloss.JoinVertical(lipgloss.Left,
 			m.slashMenu.View(),
-			m.input.View(),
+			m.renderModeInput(),
 		)
 	}
 
@@ -2688,6 +2837,153 @@ func (m Model) View() string {
 		inputArea,
 		m.renderBottomBar(), // Combined stats + model selector
 	)
+}
+
+func (m Model) renderTabContextPanel() string {
+	activeTab := strings.ToLower(strings.TrimSpace(m.header.ActiveTab))
+	switch activeTab {
+	case "recon", "r":
+		return m.renderEmptyStatePanel("Recon", []string{
+			"Recon context is setup/status-only in the TUI.",
+			"Use /recon <domain> to mark the target you are preparing.",
+			"Next commands: /dork <domain>, /scan <domain> --tool nmap, /autopent <target>",
+		}, nil)
+	case "ai", "a":
+		authStatus := "No authenticated runtime session"
+		if strings.TrimSpace(m.activeAuthSession) != "" {
+			authStatus = "Auth session: " + m.activeAuthSession
+		}
+		return m.renderEmptyStatePanel("AI", []string{
+			"Active model: " + m.modelSelector.SelectedModel(),
+			authStatus,
+			"Examples: /ai summarize my findings, /auth status, /auth test <url> idor",
+		}, nil)
+	case "tools", "t":
+		return m.renderEmptyStatePanel("Tools", []string{
+			"Check tool availability and environment health from here.",
+			"Entry points: /tools, /doctor, /apis, /providers",
+		}, nil)
+	case "history", "h":
+		return m.renderEmptyStatePanel("History", []string{
+			"No scan history is loaded in this session yet.",
+			"Run /scan <target> or /autopent <target>, then use /history.",
+		}, nil)
+	default:
+		state := "No active scan"
+		if m.summary.ScanCount > 0 {
+			state = fmt.Sprintf("Recent scans this session: %d", m.summary.ScanCount)
+		}
+		return m.renderEmptyStatePanel("Scan", []string{
+			state,
+			"Quick actions: /scan <target>, /scan <target> --tool nikto, /autopent <target>",
+			"Use Ctrl+O during a scan to toggle raw output.",
+		}, nil)
+	}
+}
+
+func (m Model) renderEmptyStatePanel(title string, lines []string, table []string) string {
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	if len(table) > 0 {
+		content = lipgloss.JoinVertical(lipgloss.Left, content, "", strings.Join(table, "\n"))
+	}
+
+	width := 76
+	if m.width > 0 {
+		maxContentWidth := m.width - 6
+		if maxContentWidth < 1 {
+			maxContentWidth = 1
+		}
+		if maxContentWidth < width {
+			width = maxContentWidth
+		}
+	}
+	if width < 44 && (m.width <= 0 || m.width >= 50) {
+		width = 44
+	}
+
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		styles.KeyStyle.Render(title),
+		"",
+		styles.MutedStyle.Render(content),
+		"",
+		styles.SubtleStyle.Render("Press / for commands, ? for help, or type naturally for AI."),
+	)
+
+	panel := lipgloss.NewStyle().
+		Width(width).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorBorder).
+		Padding(1, 2).
+		Render(body)
+
+	return lipgloss.NewStyle().
+		Width(m.width).
+		Height(m.console.Height()).
+		Align(lipgloss.Center, lipgloss.Center).
+		Render(panel)
+}
+
+func (m Model) renderModeInput() string {
+	terminalWidth := m.width
+	if terminalWidth <= 0 {
+		terminalWidth = 100
+	}
+	boxContentWidth := terminalWidth - 4
+	if boxContentWidth < 1 {
+		boxContentWidth = 1
+	}
+
+	tabs := []interactionMode{modeNormal, modePlan, modeAuto}
+	var renderedTabs []string
+	for _, tab := range tabs {
+		label := tab.Label()
+		if tab == m.mode {
+			renderedTabs = append(renderedTabs, lipgloss.NewStyle().
+				Foreground(styles.ColorBg).
+				Background(styles.ColorAccent).
+				Bold(true).
+				Padding(0, 1).
+				Render(label))
+			continue
+		}
+		style := styles.MutedStyle
+		if tab == modeAuto && !m.autoModeReady {
+			style = styles.SubtleStyle
+		}
+		renderedTabs = append(renderedTabs, style.Padding(0, 1).Render(label))
+	}
+
+	contentWidth := boxContentWidth - 2
+	if contentWidth < 1 {
+		contentWidth = 1
+	}
+
+	header := lipgloss.JoinHorizontal(lipgloss.Left, renderedTabs...)
+	if lipgloss.Width(header) < contentWidth {
+		header += strings.Repeat(" ", contentWidth-lipgloss.Width(header))
+	}
+
+	input := m.input.TextInput
+	input.SetWidth(contentWidth)
+
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		styles.SubtleStyle.Render(strings.Repeat("─", contentWidth)),
+		input.View(),
+	)
+
+	return lipgloss.NewStyle().
+		Width(boxContentWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(styles.ColorBorder).
+		Padding(0, 1).
+		Render(body)
+}
+
+func (m Model) inputAreaHeight() int {
+	return m.input.ContentHeight() + 4
 }
 
 func (m Model) renderClosingScreen() string {
@@ -2885,8 +3181,13 @@ func (m Model) renderBottomBar() string {
 		sessionStr = fmt.Sprintf("%dm", minutes)
 	}
 
+	modeHint := fmt.Sprintf("Mode: %s (Shift+Tab)", m.mode.Label())
+	if m.mode == modeAuto && m.autoModeReady {
+		modeHint = "Mode: Auto - Desktop connected"
+	}
+
 	// Session stats on the left
-	left := fmt.Sprintf("Session: %s  Scans: %d  Findings: %d", sessionStr, m.summary.ScanCount, m.summary.FindingCount)
+	left := fmt.Sprintf("Session: %s  Scans: %d  Findings: %d  %s", sessionStr, m.summary.ScanCount, m.summary.FindingCount, modeHint)
 	right := fmt.Sprintf("Model: [%s ▼] (Tab to change)", m.modelSelector.SelectedModel())
 
 	// Width-aware rendering to avoid wrapping on narrow terminals.
@@ -2938,6 +3239,33 @@ func truncateText(s string, max int) string {
 	return s[:max-3] + "..."
 }
 
+func renderCommandReferenceSection(title string, categories ...string) string {
+	categorySet := make(map[string]bool, len(categories))
+	for _, category := range categories {
+		categorySet[category] = true
+	}
+
+	lines := []string{
+		styles.KeyStyle.Render("\n  " + title),
+		styles.MutedStyle.Render("  -------------------------------------------------"),
+	}
+	for _, item := range views.SlashMenuItems {
+		if !categorySet[item.Category] {
+			continue
+		}
+		usage := item.Usage
+		if usage == "" {
+			usage = item.Command
+		}
+		padding := 34 - lipgloss.Width(usage)
+		if padding < 2 {
+			padding = 2
+		}
+		lines = append(lines, "  "+styles.KeyStyle.Render(usage)+strings.Repeat(" ", padding)+styles.MutedStyle.Render(item.Description))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
 // renderHelp renders the help overlay
 func (m Model) renderHelp() string {
 	// Header
@@ -2947,43 +3275,35 @@ func (m Model) renderHelp() string {
 
 	// AI Commands section
 	aiCmds := lipgloss.JoinVertical(lipgloss.Left,
-		styles.AIStyle.Render("\n  🤖 AI Commands"),
-		styles.MutedStyle.Render("  ─────────────────────────────────────────────────"),
+		styles.AIStyle.Render("\n  AI Input"),
+		styles.MutedStyle.Render("  -------------------------------------------------"),
 		fmt.Sprintf("  %s  %s", styles.KeyStyle.Render("<natural language>"), styles.MutedStyle.Render("Ask AI anything - it understands security tasks")),
-		fmt.Sprintf("  %s          %s", styles.KeyStyle.Render("ai <question>"), styles.MutedStyle.Render("Direct AI query")),
-		fmt.Sprintf("  %s   %s", styles.KeyStyle.Render("autopent <target>"), styles.MutedStyle.Render("Autonomous penetration test")),
-		fmt.Sprintf("  %s        %s", styles.KeyStyle.Render("dork <query>"), styles.MutedStyle.Render("AI-enhanced search dorking")),
+		renderCommandReferenceSection("AI Commands", "AI"),
 	)
 
 	// Scan Commands section
-	scanCmds := lipgloss.JoinVertical(lipgloss.Left,
-		styles.SuccessStyle.Render("\n  🔍 Scanning"),
-		styles.MutedStyle.Render("  ─────────────────────────────────────────────────"),
-		fmt.Sprintf("  %s     %s", styles.KeyStyle.Render("/scan <target>"), styles.MutedStyle.Render("Start security scan (nmap default)")),
-		fmt.Sprintf("  %s    %s", styles.KeyStyle.Render("/recon <domain>"), styles.MutedStyle.Render("Reconnaissance gathering")),
-		fmt.Sprintf("  %s  %s", styles.KeyStyle.Render("/scan <t> --tool"), styles.MutedStyle.Render("Specify tool: nmap, nikto, nuclei")),
-	)
+	scanCmds := renderCommandReferenceSection("Scanning", "Scanning")
 
 	// Navigation section
 	navCmds := lipgloss.JoinVertical(lipgloss.Left,
-		styles.WarningStyle.Render("\n  ⌨️  Navigation"),
-		styles.MutedStyle.Render("  ─────────────────────────────────────────────────"),
+		styles.WarningStyle.Render("\n  Navigation"),
+		styles.MutedStyle.Render("  -------------------------------------------------"),
 		fmt.Sprintf("  %s                  %s", styles.KeyStyle.Render("[R]"), styles.MutedStyle.Render("Recon tab")),
 		fmt.Sprintf("  %s                  %s", styles.KeyStyle.Render("[S]"), styles.MutedStyle.Render("Scan tab")),
 		fmt.Sprintf("  %s                  %s", styles.KeyStyle.Render("[A]"), styles.MutedStyle.Render("AI tab")),
 		fmt.Sprintf("  %s                  %s", styles.KeyStyle.Render("[T]"), styles.MutedStyle.Render("Tools tab")),
 		fmt.Sprintf("  %s                  %s", styles.KeyStyle.Render("[H]"), styles.MutedStyle.Render("History tab")),
 		fmt.Sprintf("  %s                %s", styles.KeyStyle.Render("[Tab]"), styles.MutedStyle.Render("Change AI model")),
+		fmt.Sprintf("  %s          %s", styles.KeyStyle.Render("[Shift+Tab]"), styles.MutedStyle.Render("Cycle Normal / Plan / Auto modes")),
 		fmt.Sprintf("  %s                %s", styles.KeyStyle.Render("[Esc]"), styles.MutedStyle.Render("Close this help / Cancel")),
 		fmt.Sprintf("  %s             %s", styles.KeyStyle.Render("[Ctrl+C]"), styles.MutedStyle.Render("Quit Zypheron")),
 	)
 
 	// System commands
 	sysCmds := lipgloss.JoinVertical(lipgloss.Left,
-		styles.InfoStyle.Render("\n  ⚙️  System"),
-		styles.MutedStyle.Render("  ─────────────────────────────────────────────────"),
-		fmt.Sprintf("  %s             %s", styles.KeyStyle.Render("/agents"), styles.MutedStyle.Render("View active AI agents")),
-		fmt.Sprintf("  %s     %s", styles.KeyStyle.Render("/quit or /exit"), styles.MutedStyle.Render("Exit Zypheron")),
+		renderCommandReferenceSection("Tools and Context", "Tools", "Context"),
+		renderCommandReferenceSection("Settings and Account", "Settings", "Account"),
+		renderCommandReferenceSection("System", "System"),
 		fmt.Sprintf("  %s                  %s", styles.KeyStyle.Render("?"), styles.MutedStyle.Render("Show this help")),
 	)
 

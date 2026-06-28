@@ -26,7 +26,11 @@ func NewInput(width int) InputModel {
 	ta.Placeholder = "Type a command or query..."
 	ta.Focus()
 	ta.CharLimit = 1000
-	ta.SetWidth(width - 4)
+	inputWidth := width - 4
+	if inputWidth < 1 {
+		inputWidth = 1
+	}
+	ta.SetWidth(inputWidth)
 	ta.SetHeight(1) // Start with single line
 	ta.ShowLineNumbers = false
 	ta.KeyMap.InsertNewline.SetEnabled(false) // Enter submits, not newline
@@ -54,6 +58,15 @@ func (m InputModel) Init() tea.Cmd {
 }
 
 func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = size.Width
+		inputWidth := m.width - 6
+		if inputWidth < 1 {
+			inputWidth = 1
+		}
+		m.TextInput.SetWidth(inputWidth)
+	}
+
 	// Handle history navigation and special keys
 	if k, ok := msg.(tea.KeyMsg); ok {
 		switch k.Type {
@@ -159,6 +172,14 @@ func (m *InputModel) SetValue(v string) {
 	m.TextInput.SetValue(v)
 }
 
+func (m *InputModel) SetPlaceholder(v string) {
+	m.TextInput.Placeholder = v
+}
+
+func (m *InputModel) SetPrompt(v string) {
+	m.TextInput.Prompt = v
+}
+
 // Reset clears the input
 func (m *InputModel) Reset() {
 	m.TextInput.Reset()
@@ -175,6 +196,10 @@ func (m *InputModel) SetCursor(pos int) {
 // Height returns the current height
 func (m InputModel) Height() int {
 	return m.height + 2 // +2 for border and padding
+}
+
+func (m InputModel) ContentHeight() int {
+	return m.height
 }
 
 func (m InputModel) View() string {

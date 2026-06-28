@@ -136,9 +136,9 @@ func renderQuickStartCard(width int) string {
 	}
 
 	items := []quickStartItem{
-		{command: "ai <question>", description: "Ask the AI assistant anything"},
-		{command: "autopent <target>", description: "Autonomous pentest"},
-		{command: "dork <query>", description: "AI-enhanced search dorking"},
+		{command: "/ai <question>", description: "Ask the AI assistant anything"},
+		{command: "/autopent <target>", description: "Autonomous pentest"},
+		{command: "/dork <query>", description: "AI-enhanced search dorking"},
 		{command: "/scan <target>", description: "Start a security scan"},
 		{command: "?", description: "Show all commands and help"},
 	}
@@ -212,4 +212,12 @@ func (m *ConsoleModel) AppendLog(text string) {
 	m.lines = append(m.lines, text)
 	m.viewport.SetContent(strings.Join(m.lines, "\n"))
 	m.viewport.GotoBottom()
+}
+
+func (m ConsoleModel) IsEmpty() bool {
+	return len(m.lines) == 0
+}
+
+func (m ConsoleModel) Height() int {
+	return m.height
 }

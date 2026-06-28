@@ -13,8 +13,10 @@ import (
 type SlashMenuItem struct {
 	Command     string
 	Description string
+	Usage       string
 	Icon        string
 	Category    string
+	NeedsArgs   bool
 }
 
 // SlashMenu displays available slash commands
@@ -30,44 +32,59 @@ type SlashMenu struct {
 // SlashMenuItems defines all available slash commands
 var SlashMenuItems = []SlashMenuItem{
 	// Scanning
-	{Command: "/scan", Description: "Start a security scan", Icon: "", Category: "Scanning"},
-	{Command: "/recon", Description: "Reconnaissance gathering", Icon: "", Category: "Scanning"},
-	{Command: "/autopent", Description: "Autonomous pentest", Icon: "", Category: "Scanning"},
+	{Command: "/scan", Description: "Start a security scan", Usage: "/scan <target> [--tool <tool>]", Icon: "", Category: "Scanning", NeedsArgs: true},
+	{Command: "/recon", Description: "Set recon target/status context", Usage: "/recon <domain>", Icon: "", Category: "Scanning", NeedsArgs: true},
+	{Command: "/autopent", Description: "Autonomous pentest", Usage: "/autopent <target>", Icon: "", Category: "Scanning", NeedsArgs: true},
 
 	// AI
-	{Command: "/ai", Description: "Direct AI query", Icon: "", Category: "AI"},
-	{Command: "/auth", Description: "Manage authenticated testing session", Icon: "", Category: "AI"},
-	{Command: "/auth test", Description: "Run authenticated runtime checks", Icon: "", Category: "AI"},
-	{Command: "/agent", Description: "Create custom AI agent", Icon: "", Category: "AI"},
-	{Command: "/agents", Description: "List/manage saved agents", Icon: "", Category: "AI"},
-	{Command: "/dork", Description: "AI-enhanced dorking", Icon: "", Category: "AI"},
+	{Command: "/ai", Description: "Direct AI query", Usage: "/ai <question>", Icon: "", Category: "AI", NeedsArgs: true},
+	{Command: "/auth", Description: "Manage authenticated testing session", Usage: "/auth use <session-id> | /auth status | /auth clear | /auth test <url>", Icon: "", Category: "AI", NeedsArgs: true},
+	{Command: "/auth use", Description: "Set authenticated runtime session", Usage: "/auth use <session-id>", Icon: "", Category: "AI", NeedsArgs: true},
+	{Command: "/auth status", Description: "Show active auth session", Usage: "/auth status", Icon: "", Category: "AI"},
+	{Command: "/auth clear", Description: "Clear active auth session", Usage: "/auth clear", Icon: "", Category: "AI"},
+	{Command: "/auth test", Description: "Run authenticated runtime checks", Usage: "/auth test <url> [idor|sqli|authz] [key=value ...]", Icon: "", Category: "AI", NeedsArgs: true},
+	{Command: "/agent", Description: "Create custom AI agent", Usage: "/agent <description>", Icon: "", Category: "AI", NeedsArgs: true},
+	{Command: "/agents", Description: "List/manage saved agents", Usage: "/agents", Icon: "", Category: "AI"},
+	{Command: "/agents use", Description: "Run a saved agent", Usage: "/agents use <agent-id> <target>", Icon: "", Category: "AI", NeedsArgs: true},
+	{Command: "/agents edit", Description: "Edit a saved agent", Usage: "/agents edit <agent-id>", Icon: "", Category: "AI", NeedsArgs: true},
+	{Command: "/agents delete", Description: "Delete a saved agent", Usage: "/agents delete <agent-id>", Icon: "", Category: "AI", NeedsArgs: true},
+	{Command: "/dork", Description: "AI-enhanced dorking", Usage: "/dork <query>", Icon: "", Category: "AI", NeedsArgs: true},
 
 	// Settings & Config
-	{Command: "/apis", Description: "Configure API keys", Icon: "", Category: "Settings"},
-	{Command: "/settings", Description: "General settings", Icon: "", Category: "Settings"},
-	{Command: "/providers", Description: "AI provider settings", Icon: "", Category: "Settings"},
+	{Command: "/apis", Description: "Configure API keys", Usage: "/apis", Icon: "", Category: "Settings"},
+	{Command: "/settings", Description: "General settings", Usage: "/settings", Icon: "", Category: "Settings"},
+	{Command: "/providers", Description: "AI provider settings", Usage: "/providers", Icon: "", Category: "Settings"},
 
 	// Account
-	{Command: "/account", Description: "Account management", Icon: "", Category: "Account"},
-	{Command: "/plan", Description: "View subscription plan", Icon: "", Category: "Account"},
-	{Command: "/upgrade", Description: "Upgrade account", Icon: "", Category: "Account"},
-	{Command: "/usage", Description: "View token usage", Icon: "", Category: "Account"},
+	{Command: "/account", Description: "Account management", Usage: "/account", Icon: "", Category: "Account"},
+	{Command: "/plan", Description: "View subscription plan", Usage: "/plan", Icon: "", Category: "Account"},
+	{Command: "/upgrade", Description: "Upgrade account", Usage: "/upgrade", Icon: "", Category: "Account"},
+	{Command: "/usage", Description: "View token usage", Usage: "/usage", Icon: "", Category: "Account"},
 
 	// Tools
-	{Command: "/tools", Description: "Available security tools", Icon: "", Category: "Tools"},
-	{Command: "/history", Description: "Scan history", Icon: "", Category: "Tools"},
-	{Command: "/export", Description: "Export results", Icon: "", Category: "Tools"},
+	{Command: "/tools", Description: "Available security tools", Usage: "/tools", Icon: "", Category: "Tools"},
+	{Command: "/history", Description: "Scan history", Usage: "/history", Icon: "", Category: "Tools"},
+	{Command: "/export", Description: "Export results", Usage: "/export <format> [filename]", Icon: "", Category: "Tools", NeedsArgs: true},
 
 	// Context & Session
-	{Command: "/context", Description: "View pentest context", Icon: "", Category: "Context"},
-	{Command: "/context full", Description: "Full context details", Icon: "", Category: "Context"},
-	{Command: "/reset", Description: "Reset for new engagement", Icon: "", Category: "Context"},
+	{Command: "/context", Description: "View pentest context", Usage: "/context", Icon: "", Category: "Context"},
+	{Command: "/context full", Description: "Full context details", Usage: "/context full", Icon: "", Category: "Context"},
+	{Command: "/reset", Description: "Reset for new engagement", Usage: "/reset", Icon: "", Category: "Context"},
 
 	// System
-	{Command: "/doctor", Description: "System health check", Icon: "", Category: "System"},
-	{Command: "/help", Description: "Show help", Icon: "?", Category: "System"},
-	{Command: "/clear", Description: "Clear console", Icon: "", Category: "System"},
-	{Command: "/quit", Description: "Exit Zypheron", Icon: "", Category: "System"},
+	{Command: "/doctor", Description: "System health check", Usage: "/doctor", Icon: "", Category: "System"},
+	{Command: "/help", Description: "Show help", Usage: "/help", Icon: "?", Category: "System"},
+	{Command: "/clear", Description: "Clear console", Usage: "/clear", Icon: "", Category: "System"},
+	{Command: "/quit", Description: "Exit Zypheron", Usage: "/quit", Icon: "", Category: "System"},
+}
+
+func SlashMenuItemByCommand(command string) (SlashMenuItem, bool) {
+	for _, item := range SlashMenuItems {
+		if item.Command == command {
+			return item, true
+		}
+	}
+	return SlashMenuItem{}, false
 }
 
 func NewSlashMenu(width int) SlashMenu {
