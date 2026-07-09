@@ -1,0 +1,11 @@
+# Nmap 7.92 scan initiated Wed Jul  8 15:43:25 2026 as: nmap -sT -Pn -p 3101,18081,12222,12121 --host-timeout 20s -oN reports/security-performance-review/direct_nmap_local.txt 127.0.0.1
+Nmap scan report for localhost (127.0.0.1)
+Host is up (0.00014s latency).
+
+PORT      STATE SERVICE
+3101/tcp  open  hp-pxpib
+12121/tcp open  nupaper-ss
+12222/tcp open  unknown
+18081/tcp open  unknown
+
+# Nmap done at Wed Jul  8 15:43:25 2026 -- 1 IP address (1 host up) scanned in 0.03 seconds

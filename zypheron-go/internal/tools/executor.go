@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/ui"
@@ -65,7 +66,7 @@ func Execute(ctx context.Context, opts ExecutionOptions) (*ToolResult, error) {
 
 	// Stream output if requested
 	if opts.Stream {
-		return executeWithStream(cmd, opts, start)
+		return executeWithStream(ctx, cmd, opts, start)
 	}
 
 	// Capture output
@@ -92,7 +93,7 @@ func Execute(ctx context.Context, opts ExecutionOptions) (*ToolResult, error) {
 }
 
 // executeWithStream executes a command and streams output in real-time
-func executeWithStream(cmd *exec.Cmd, opts ExecutionOptions, start time.Time) (*ToolResult, error) {
+func executeWithStream(ctx context.Context, cmd *exec.Cmd, opts ExecutionOptions, start time.Time) (*ToolResult, error) {
 	s := spinner.New(spinner.CharSets[11], 100*time.Millisecond)
 	s.Suffix = fmt.Sprintf(" Running %s...", opts.Tool)
 	s.Start()
@@ -117,15 +118,18 @@ func executeWithStream(cmd *exec.Cmd, opts ExecutionOptions, start time.Time) (*
 	var output strings.Builder
 	outputChan := make(chan string, 100)
 	errChan := make(chan string, 100)
-	done := make(chan bool)
+	var readers sync.WaitGroup
+	var displayDone sync.WaitGroup
+	var outputMu sync.Mutex
 
 	// Stream stdout with panic recovery and channel close
+	readers.Add(1)
 	go func() {
+		defer readers.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Fprintf(os.Stderr, "stdout reader panic: %v\n", r)
 			}
-			close(outputChan) // Close channel when done
 		}()
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
@@ -134,12 +138,13 @@ func executeWithStream(cmd *exec.Cmd, opts ExecutionOptions, start time.Time) (*
 	}()
 
 	// Stream stderr with panic recovery and channel close
+	readers.Add(1)
 	go func() {
+		defer readers.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Fprintf(os.Stderr, "stderr reader panic: %v\n", r)
 			}
-			close(errChan) // Close channel when done
 		}()
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
@@ -147,8 +152,16 @@ func executeWithStream(cmd *exec.Cmd, opts ExecutionOptions, start time.Time) (*
 		}
 	}()
 
-	// Display output with panic recovery and proper channel handling
 	go func() {
+		readers.Wait()
+		close(outputChan)
+		close(errChan)
+	}()
+
+	// Display output with panic recovery and proper channel handling
+	displayDone.Add(1)
+	go func() {
+		defer displayDone.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Fprintf(os.Stderr, "display goroutine panic: %v\n", r)
@@ -163,7 +176,9 @@ func executeWithStream(cmd *exec.Cmd, opts ExecutionOptions, start time.Time) (*
 					continue
 				}
 				s.Stop()
+				outputMu.Lock()
 				output.WriteString(line + "\n")
+				outputMu.Unlock()
 				printColoredLine(line)
 				s.Start()
 			case line, ok := <-errChan:
@@ -172,18 +187,18 @@ func executeWithStream(cmd *exec.Cmd, opts ExecutionOptions, start time.Time) (*
 					continue
 				}
 				s.Stop()
+				outputMu.Lock()
 				output.WriteString(line + "\n")
+				outputMu.Unlock()
 				fmt.Println(ui.Error(line))
 				s.Start()
-			case <-done:
-				return
 			}
 		}
 	}()
 
 	// Wait for command to finish
 	err = cmd.Wait()
-	close(done)
+	displayDone.Wait()
 	s.Stop()
 
 	duration := time.Since(start)
@@ -191,13 +206,20 @@ func executeWithStream(cmd *exec.Cmd, opts ExecutionOptions, start time.Time) (*
 	result := &ToolResult{
 		Success:  err == nil,
 		Tool:     opts.Tool,
-		Output:   output.String(),
 		Duration: duration,
 	}
+	outputMu.Lock()
+	result.Output = output.String()
+	outputMu.Unlock()
 
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		result.ExitCode = exitErr.ExitCode()
 		result.Error = err.Error()
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		result.TimedOut = true
+		result.Success = false
+		result.Error = "command timed out"
 	}
 
 	return result, nil

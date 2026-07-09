@@ -1,8 +1,17 @@
 package commands
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/KKingZero/Cobra-AI/zypheron-go/pkg/types"
+	"github.com/fatih/color"
 )
 
 // ===== COMMAND CREATION TESTS =====
@@ -37,6 +46,58 @@ func TestScanCmd(t *testing.T) {
 	if cmd.RunE == nil {
 		t.Error("RunE function should be set")
 	}
+}
+
+func captureCommandStdout(t *testing.T, fn func() error) (string, error) {
+	t.Helper()
+
+	original := os.Stdout
+	originalColorOutput := color.Output
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	os.Stdout = writer
+	color.Output = writer
+	defer func() {
+		os.Stdout = original
+		color.Output = originalColorOutput
+	}()
+
+	var buf bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(&buf, reader)
+		done <- err
+	}()
+
+	runErr := fn()
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close stdout writer: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("copy stdout: %v", err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("close stdout reader: %v", err)
+	}
+	return buf.String(), runErr
+}
+
+func workspaceTempDir(t *testing.T, pattern string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp(".", pattern)
+	if err != nil {
+		t.Fatalf("create workspace temp dir: %v", err)
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		t.Fatalf("abs temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(abs)
+	})
+	return abs
 }
 
 func TestScanCmd_Flags(t *testing.T) {
@@ -95,6 +156,76 @@ func TestScanCmd_Flags(t *testing.T) {
 	}
 }
 
+func TestScanResultJSON_IsMachineReadable(t *testing.T) {
+	result := &types.ScanResult{
+		ID:        "scan-1",
+		Timestamp: time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC),
+		Target:    "example.com",
+		Tool:      "nmap",
+		Ports:     "80,443",
+		Output:    "open port output",
+		Duration:  1.25,
+		Success:   true,
+		Metadata:  map[string]string{"fast": "false"},
+	}
+
+	data, err := scanResultJSON(result)
+	if err != nil {
+		t.Fatalf("scanResultJSON() err = %v", err)
+	}
+	if strings.Contains(string(data), "\x1b[") || strings.Contains(string(data), "╔") {
+		t.Fatalf("JSON output contains terminal decoration: %q", data)
+	}
+
+	var decoded types.ScanResult
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("scanResultJSON() produced invalid JSON: %v\n%s", err, data)
+	}
+	if decoded.ID != result.ID || decoded.Target != result.Target || decoded.Tool != result.Tool {
+		t.Fatalf("decoded result = %#v, want core fields from %#v", decoded, result)
+	}
+}
+
+func TestScanJSONSelectedToolSkipsFullInventoryDetection(t *testing.T) {
+	home := workspaceTempDir(t, "home-")
+	dir := workspaceTempDir(t, "bin-")
+	marker := filepath.Join(dir, "nikto-version-called")
+
+	nmapPath := filepath.Join(dir, "nmap")
+	if err := os.WriteFile(nmapPath, []byte("#!/bin/sh\necho 'Nmap scan report for 127.0.0.1'\necho '80/tcp open http'\n"), 0o755); err != nil {
+		t.Fatalf("write fake nmap: %v", err)
+	}
+	niktoPath := filepath.Join(dir, "nikto")
+	if err := os.WriteFile(niktoPath, []byte("#!/bin/sh\necho called > \""+marker+"\"\necho nikto\n"), 0o755); err != nil {
+		t.Fatalf("write fake nikto: %v", err)
+	}
+
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", dir)
+
+	cmd := ScanCmd()
+	cmd.SetArgs([]string{"127.0.0.1", "--tool", "nmap", "--format", "json", "--no-input", "--timeout", "2"})
+
+	output, err := captureCommandStdout(t, cmd.Execute)
+	if err != nil {
+		t.Fatalf("scan command failed: %v\noutput=%s", err, output)
+	}
+
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatalf("full inventory detection called unrelated nikto version probe")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat marker: %v", err)
+	}
+
+	var result types.ScanResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("invalid JSON output: %v\n%s", err, output)
+	}
+	if result.Tool != "nmap" || !result.Success {
+		t.Fatalf("unexpected scan result: %#v", result)
+	}
+}
+
 func TestScanCmd_FlagCompletion(t *testing.T) {
 	cmd := ScanCmd()
 
@@ -136,11 +267,11 @@ func TestGetToolCompletions_EmptyPrefix(t *testing.T) {
 
 func TestGetToolCompletions_WithPrefix(t *testing.T) {
 	tests := []struct {
-		name          string
-		prefix        string
-		wantContains  []string
-		wantExcludes  []string
-		minCount      int
+		name         string
+		prefix       string
+		wantContains []string
+		wantExcludes []string
+		minCount     int
 	}{
 		{
 			name:         "prefix n",
@@ -243,11 +374,11 @@ func TestGetToolCompletions_Format(t *testing.T) {
 
 func TestBuildNmapArgs_Basic(t *testing.T) {
 	tests := []struct {
-		name         string
-		target       string
-		ports        string
-		fast         bool
-		wantContains []string
+		name           string
+		target         string
+		ports          string
+		fast           bool
+		wantContains   []string
 		wantNotContain []string
 	}{
 		{
@@ -265,11 +396,11 @@ func TestBuildNmapArgs_Basic(t *testing.T) {
 			wantContains: []string{"-sV", "-sC", "-p", "80,443", "-T4", "192.168.1.1"},
 		},
 		{
-			name:         "no ports specified",
-			target:       "test.local",
-			ports:        "",
-			fast:         false,
-			wantContains: []string{"-sV", "-sC", "test.local"},
+			name:           "no ports specified",
+			target:         "test.local",
+			ports:          "",
+			fast:           false,
+			wantContains:   []string{"-sV", "-sC", "test.local"},
 			wantNotContain: []string{"-p"},
 		},
 		{

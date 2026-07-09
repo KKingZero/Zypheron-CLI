@@ -506,9 +506,9 @@ func getToolVersion(command string) string {
 func GetInstallCommand(tool ToolInfo) string {
 	switch strings.ToLower(tool.Name) {
 	case "sliver":
-		return "sudo bash install-c2.sh  # optional: uses curl -fsSL https://sliver.sh/install | bash"
+		return "sudo bash scripts/install/install-c2.sh  # optional C2 installer"
 	case "empire":
-		return "sudo bash install-c2.sh  # optional: apt powershell-empire, then git fallback if approved"
+		return "sudo bash scripts/install/install-c2.sh  # optional: apt powershell-empire, then git fallback if approved"
 	case "havoc":
 		return fmt.Sprintf("# Havoc is manual-only. Install from: %s", tool.ManualURL)
 	}

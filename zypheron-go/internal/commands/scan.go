@@ -2,10 +2,12 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"sync/atomic"
@@ -66,6 +68,11 @@ Examples:
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var target string
+			jsonOutput := strings.EqualFold(format, "json")
+			if jsonOutput {
+				noStream = true
+				noInput = true
+			}
 			interactive := isInteractive(cmd) && !noInput
 
 			// Full profile defaults to full port coverage unless user provided --ports.
@@ -75,28 +82,34 @@ Examples:
 
 			// Resolve conflicting profiles deterministically.
 			if full && fast {
-				fmt.Println(ui.WarningMsg("Both --full and --fast were set; using --full profile"))
+				if !jsonOutput {
+					fmt.Println(ui.WarningMsg("Both --full and --fast were set; using --full profile"))
+				}
 				fast = false
 			}
 
 			// UX: Validate flags early (before interactive prompts)
 			// This way users get immediate feedback on bad flags
 			if err := validation.ValidatePorts(ports); err != nil {
-				fmt.Println(ui.ValidationError("ports", err.Error(),
-					"1-1000",
-					"80,443,8080",
-					"1-65535",
-					"22,80,443",
-				))
+				if !jsonOutput {
+					fmt.Println(ui.ValidationError("ports", err.Error(),
+						"1-1000",
+						"80,443,8080",
+						"1-65535",
+						"22,80,443",
+					))
+				}
 				return fmt.Errorf("invalid ports '%s': %w. Examples: 1-1000, 80,443,8080, 1-65535", ports, err)
 			}
 
 			if tool != "" {
 				if err := validation.ValidateToolName(tool); err != nil {
-					fmt.Println(ui.ErrorWithSuggestion(
-						fmt.Sprintf("Invalid tool '%s'", tool),
-						"Available tools: nmap, nikto, nuclei, masscan. Check with: zypheron tools list",
-					))
+					if !jsonOutput {
+						fmt.Println(ui.ErrorWithSuggestion(
+							fmt.Sprintf("Invalid tool '%s'", tool),
+							"Available tools: nmap, nikto, nuclei, masscan. Check with: zypheron tools list",
+						))
+					}
 					return fmt.Errorf("invalid tool '%s': %w. Available tools: nmap, nikto, nuclei, masscan", tool, err)
 				}
 			}
@@ -112,10 +125,12 @@ Examples:
 				target = args[0]
 			} else {
 				if !interactive {
-					fmt.Println(ui.ErrorWithSuggestion(
-						"Target argument required",
-						"Provide a target: zypheron scan <target>",
-					))
+					if !jsonOutput {
+						fmt.Println(ui.ErrorWithSuggestion(
+							"Target argument required",
+							"Provide a target: zypheron scan <target>",
+						))
+					}
 					return fmt.Errorf("target argument required when running non-interactively. Examples: zypheron scan example.com or zypheron scan 192.168.1.1")
 				}
 				prompt := &survey.Input{
@@ -131,71 +146,25 @@ Examples:
 
 			// Validate target
 			if err := validation.ValidateTarget(target); err != nil {
-				fmt.Println(ui.ValidationError("target", err.Error(),
-					"example.com",
-					"192.168.1.1",
-					"https://example.com",
-					"10.0.0.0/24",
-				))
+				if !jsonOutput {
+					fmt.Println(ui.ValidationError("target", err.Error(),
+						"example.com",
+						"192.168.1.1",
+						"https://example.com",
+						"10.0.0.0/24",
+					))
+				}
 				return fmt.Errorf("invalid target '%s': %w. Examples: example.com, 192.168.1.1, https://example.com", target, err)
 			}
 
 			// Print header
-			fmt.Printf("\n%s\n", ui.Primary.Sprint("╔═══════════════════════════════════════╗"))
-			fmt.Printf("%s\n", ui.Primary.Sprint("║  ZYPHERON SECURITY SCANNER           ║"))
-			fmt.Printf("%s\n\n", ui.Primary.Sprint("╚═══════════════════════════════════════╝"))
+			if !jsonOutput {
+				fmt.Printf("\n%s\n", ui.Primary.Sprint("╔═══════════════════════════════════════╗"))
+				fmt.Printf("%s\n", ui.Primary.Sprint("║  ZYPHERON SECURITY SCANNER           ║"))
+				fmt.Printf("%s\n\n", ui.Primary.Sprint("╚═══════════════════════════════════════╝"))
 
-			if _, err := printSecurityEnvironment(); err != nil {
-				return err
-			}
-
-			// Detect tools
-			fmt.Println(ui.InfoMsg("Detecting security tools..."))
-			toolManager := kali.NewToolManager()
-			if err := toolManager.DetectTools(); err != nil {
-				return err
-			}
-
-			stats := toolManager.GetStats()
-			fmt.Printf("  Found %s/%d tools installed\n", ui.Success.Sprint(stats.Installed), stats.Total)
-
-			if stats.Missing > 0 {
-				missingTools := toolManager.GetMissingTools()
-				fmt.Printf("  Missing %d tools: ", stats.Missing)
-				displayCount := 0
-				for i, tool := range missingTools {
-					if displayCount >= 5 {
-						fmt.Printf(", %s", ui.Muted.Sprint(fmt.Sprintf("+%d more", len(missingTools)-5)))
-						break
-					}
-					if i > 0 {
-						fmt.Printf(", ")
-					}
-					if tool.Priority == "critical" {
-						fmt.Printf("%s", ui.Danger.Sprint(tool.Name))
-					} else if tool.Priority == "high" {
-						fmt.Printf("%s", ui.Warning.Sprint(tool.Name))
-					} else {
-						fmt.Printf("%s", ui.Muted.Sprint(tool.Name))
-					}
-					displayCount++
-				}
-				fmt.Println()
-				fmt.Printf("  %s\n", ui.Muted.Sprint("Run 'zypheron tools check' for full list and install commands"))
-			}
-
-			if stats.Critical > 0 {
-				fmt.Println(ui.WarningMsg(fmt.Sprintf("%d critical tools are missing! Some features may not work.", stats.Critical)))
-				// Show quick fix for critical missing tools
-				var criticalTools []string
-				for _, tool := range toolManager.GetMissingTools() {
-					if tool.Priority == "critical" {
-						criticalTools = append(criticalTools, tool.Name)
-					}
-				}
-				if len(criticalTools) <= 3 {
-					fmt.Printf("  %s %s\n", ui.InfoMsg("Quick fix:"),
-						ui.Accent.Sprint(fmt.Sprintf("sudo apt-get install -y %s", strings.Join(criticalTools, " "))))
+				if _, err := printSecurityEnvironment(); err != nil {
+					return err
 				}
 			}
 
@@ -211,17 +180,85 @@ Examples:
 				}
 			}
 
-			// Check if tool is available
-			if !toolManager.IsInstalled(selectedTool) {
-				fmt.Println(ui.ErrorWithCommand(
-					fmt.Sprintf("Tool '%s' is not installed", selectedTool),
-					fmt.Sprintf("zypheron tools install %s", selectedTool),
-				))
+			fastSelectedToolCheck := jsonOutput && noInput && tool != ""
+			var toolManager *kali.ToolManager
+			if fastSelectedToolCheck {
+				if _, err := exec.LookPath(selectedTool); err != nil {
+					return fmt.Errorf("required tool '%s' not installed; install manually before running JSON output mode", selectedTool)
+				}
+			} else {
+				// Detect tools
+				if !jsonOutput {
+					fmt.Println(ui.InfoMsg("Detecting security tools..."))
+				}
+				toolManager = kali.NewToolManager()
+				if err := toolManager.DetectTools(); err != nil {
+					return err
+				}
 
-				// Suggest installation
-				installCmd := toolManager.GetInstallCommand(selectedTool)
-				fmt.Printf("\n%s\n", ui.InfoMsg(fmt.Sprintf("Install with: %s", installCmd)))
-				fmt.Println(ui.InfoMsg(fmt.Sprintf("Or use: zypheron tools install %s", selectedTool)))
+				stats := toolManager.GetStats()
+				if !jsonOutput {
+					fmt.Printf("  Found %s/%d tools installed\n", ui.Success.Sprint(stats.Installed), stats.Total)
+				}
+
+				if stats.Missing > 0 && !jsonOutput {
+					missingTools := toolManager.GetMissingTools()
+					fmt.Printf("  Missing %d tools: ", stats.Missing)
+					displayCount := 0
+					for i, tool := range missingTools {
+						if displayCount >= 5 {
+							fmt.Printf(", %s", ui.Muted.Sprint(fmt.Sprintf("+%d more", len(missingTools)-5)))
+							break
+						}
+						if i > 0 {
+							fmt.Printf(", ")
+						}
+						if tool.Priority == "critical" {
+							fmt.Printf("%s", ui.Danger.Sprint(tool.Name))
+						} else if tool.Priority == "high" {
+							fmt.Printf("%s", ui.Warning.Sprint(tool.Name))
+						} else {
+							fmt.Printf("%s", ui.Muted.Sprint(tool.Name))
+						}
+						displayCount++
+					}
+					fmt.Println()
+					fmt.Printf("  %s\n", ui.Muted.Sprint("Run 'zypheron tools check' for full list and install commands"))
+				}
+
+				if stats.Critical > 0 && !jsonOutput {
+					fmt.Println(ui.WarningMsg(fmt.Sprintf("%d critical tools are missing! Some features may not work.", stats.Critical)))
+					// Show quick fix for critical missing tools
+					var criticalTools []string
+					for _, tool := range toolManager.GetMissingTools() {
+						if tool.Priority == "critical" {
+							criticalTools = append(criticalTools, tool.Name)
+						}
+					}
+					if len(criticalTools) <= 3 {
+						fmt.Printf("  %s %s\n", ui.InfoMsg("Quick fix:"),
+							ui.Accent.Sprint(fmt.Sprintf("sudo apt-get install -y %s", strings.Join(criticalTools, " "))))
+					}
+				}
+			}
+
+			// Check if tool is available
+			if toolManager != nil && !toolManager.IsInstalled(selectedTool) {
+				if jsonOutput {
+					return fmt.Errorf("required tool '%s' not installed; install manually before running JSON output mode", selectedTool)
+				}
+
+				if !jsonOutput {
+					fmt.Println(ui.ErrorWithCommand(
+						fmt.Sprintf("Tool '%s' is not installed", selectedTool),
+						fmt.Sprintf("zypheron tools install %s", selectedTool),
+					))
+
+					// Suggest installation
+					installCmd := toolManager.GetInstallCommand(selectedTool)
+					fmt.Printf("\n%s\n", ui.InfoMsg(fmt.Sprintf("Install with: %s", installCmd)))
+					fmt.Println(ui.InfoMsg(fmt.Sprintf("Or use: zypheron tools install %s", selectedTool)))
+				}
 
 				confirm := assumeYes
 				if !assumeYes {
@@ -250,17 +287,19 @@ Examples:
 			}
 
 			// Show scan configuration
-			fmt.Printf("\n%s\n", ui.InfoMsg("Scan Configuration:"))
-			fmt.Println(ui.Separator(60))
-			fmt.Printf("  Target:   %s\n", ui.Accent.Sprint(target))
-			fmt.Printf("  Tool:     %s\n", ui.Accent.Sprint(selectedTool))
-			fmt.Printf("  Ports:    %s\n", ui.Accent.Sprint(ports))
-			fmt.Printf("  Timeout:  %s\n", ui.Accent.Sprint(fmt.Sprintf("%ds", timeout)))
-			if aiGuided || aiAnalysis {
-				fmt.Printf("  AI Mode:  %s\n", ui.Success.Sprint("Enabled"))
+			if !jsonOutput {
+				fmt.Printf("\n%s\n", ui.InfoMsg("Scan Configuration:"))
+				fmt.Println(ui.Separator(60))
+				fmt.Printf("  Target:   %s\n", ui.Accent.Sprint(target))
+				fmt.Printf("  Tool:     %s\n", ui.Accent.Sprint(selectedTool))
+				fmt.Printf("  Ports:    %s\n", ui.Accent.Sprint(ports))
+				fmt.Printf("  Timeout:  %s\n", ui.Accent.Sprint(fmt.Sprintf("%ds", timeout)))
+				if aiGuided || aiAnalysis {
+					fmt.Printf("  AI Mode:  %s\n", ui.Success.Sprint("Enabled"))
+				}
+				fmt.Println(ui.Separator(60))
+				fmt.Println()
 			}
-			fmt.Println(ui.Separator(60))
-			fmt.Println()
 
 			// Confirm scan
 			confirm := true
@@ -324,7 +363,9 @@ Examples:
 					"ai_analysis": fmt.Sprintf("%t", aiAnalysis),
 				})
 				if err := checkpointStore.SaveCheckpoint(checkpoint); err != nil {
-					fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  Note: checkpoint saving disabled (%s)", err)))
+					if !jsonOutput {
+						fmt.Println(ui.Muted.Sprint(fmt.Sprintf("  Note: checkpoint saving disabled (%s)", err)))
+					}
 					checkpoint = nil
 				}
 			}
@@ -335,8 +376,11 @@ Examples:
 			var interrupted atomic.Bool // Use atomic to avoid race condition
 
 			// Execute scan
-			top, bottom := ui.Box(selectedTool)
-			fmt.Printf("\n%s\n", top)
+			top, bottom := "", ""
+			if !jsonOutput {
+				top, bottom = ui.Box(selectedTool)
+				fmt.Printf("\n%s\n", top)
+			}
 
 			ctx, cancel := context.WithCancel(context.Background())
 			if timeout > 0 {
@@ -348,8 +392,10 @@ Examples:
 				select {
 				case <-sigChan:
 					interrupted.Store(true)
-					fmt.Println()
-					fmt.Println(ui.WarningMsg("Scan interrupted - saving checkpoint..."))
+					if !jsonOutput {
+						fmt.Println()
+						fmt.Println(ui.WarningMsg("Scan interrupted - saving checkpoint..."))
+					}
 					cancel()
 				case <-ctx.Done():
 					// Context cancelled normally
@@ -369,12 +415,16 @@ Examples:
 					checkpoint.Progress = estimateScanProgress(result.Output, selectedTool)
 				}
 				if saveErr := checkpointStore.SaveCheckpoint(checkpoint); saveErr != nil {
-					fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save checkpoint: %s", saveErr)))
+					if !jsonOutput {
+						fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save checkpoint: %s", saveErr)))
+					}
 				} else {
-					fmt.Printf("\n%s\n", bottom)
-					fmt.Println(ui.SuccessMsg("Checkpoint saved successfully"))
-					fmt.Printf("  %s %s\n", ui.Muted.Sprint("Resume with:"), ui.Accent.Sprint("zypheron scan resume"))
-					fmt.Printf("  %s %s\n", ui.Muted.Sprint("Checkpoint ID:"), ui.Muted.Sprint(checkpoint.ID))
+					if !jsonOutput {
+						fmt.Printf("\n%s\n", bottom)
+						fmt.Println(ui.SuccessMsg("Checkpoint saved successfully"))
+						fmt.Printf("  %s %s\n", ui.Muted.Sprint("Resume with:"), ui.Accent.Sprint("zypheron scan resume"))
+						fmt.Printf("  %s %s\n", ui.Muted.Sprint("Checkpoint ID:"), ui.Muted.Sprint(checkpoint.ID))
+					}
 				}
 				return nil
 			}
@@ -384,10 +434,14 @@ Examples:
 				if checkpoint != nil && checkpointStore != nil {
 					checkpoint.MarkFailed(err.Error())
 					if saveErr := checkpointStore.SaveCheckpoint(checkpoint); saveErr != nil {
-						fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save checkpoint: %s", saveErr)))
+						if !jsonOutput {
+							fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save checkpoint: %s", saveErr)))
+						}
 					}
 				}
-				fmt.Printf("\n%s\n", bottom)
+				if !jsonOutput {
+					fmt.Printf("\n%s\n", bottom)
+				}
 				return fmt.Errorf("execution failed: %w", err)
 			}
 
@@ -396,11 +450,13 @@ Examples:
 				checkpoint.MarkCompleted()
 				checkpoint.PartialOutput = result.Output
 				if saveErr := checkpointStore.SaveCheckpoint(checkpoint); saveErr != nil {
-					fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save checkpoint: %s", saveErr)))
+					if !jsonOutput {
+						fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save checkpoint: %s", saveErr)))
+					}
 				}
 			}
 
-			if result.Success {
+			if result.Success && !jsonOutput {
 				fmt.Printf("\n%s\n", ui.SuccessMsg(fmt.Sprintf("%s scan completed in %.2fs", selectedTool, result.Duration.Seconds())))
 
 				// Parse and display structured results for nmap
@@ -410,16 +466,20 @@ Examples:
 						displayParsedResults(parsed)
 					}
 				}
-			} else {
+			} else if !jsonOutput {
 				fmt.Printf("\n%s\n", ui.Error(fmt.Sprintf("Scan failed: %s", result.Error)))
 			}
 
-			fmt.Printf("%s\n\n", bottom)
+			if !jsonOutput {
+				fmt.Printf("%s\n\n", bottom)
+			}
 
 			// Initialize scan storage
 			scanStore, err := storage.NewScanStorage()
 			if err != nil {
-				fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to initialize scan storage: %s", err)))
+				if !jsonOutput {
+					fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to initialize scan storage: %s", err)))
+				}
 			}
 
 			// Prepare scan result for storage
@@ -435,14 +495,16 @@ Examples:
 				Success:      result.Success,
 				ErrorMessage: result.Error,
 				Metadata: map[string]string{
-					"fast": fmt.Sprintf("%t", fast),
-					"web":  fmt.Sprintf("%t", web),
-					"full": fmt.Sprintf("%t", full),
+					"fast":      fmt.Sprintf("%t", fast),
+					"web":       fmt.Sprintf("%t", web),
+					"full":      fmt.Sprintf("%t", full),
+					"timed_out": fmt.Sprintf("%t", result.TimedOut),
+					"exit_code": fmt.Sprintf("%d", result.ExitCode),
 				},
 			}
 
 			// AI Analysis
-			if aiAnalysis && result.Success {
+			if aiAnalysis && result.Success && !jsonOutput {
 				fmt.Println()
 				fmt.Println(ui.Accent.Sprint("🤖 AI-POWERED VULNERABILITY ANALYSIS"))
 				fmt.Println(ui.Separator(60))
@@ -570,14 +632,19 @@ Examples:
 			// Save scan to storage
 			if scanStore != nil {
 				if err := scanStore.SaveScan(scanResult); err != nil {
-					fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save scan: %s", err)))
+					if !jsonOutput {
+						fmt.Println(ui.WarningMsg(fmt.Sprintf("Failed to save scan: %s", err)))
+					}
 				} else {
-					fmt.Println(ui.Muted.Sprint(fmt.Sprintf("Scan saved: %s", scanID)))
+					if !jsonOutput {
+						fmt.Println(ui.Muted.Sprint(fmt.Sprintf("Scan saved: %s", scanID)))
+					}
 				}
 			}
 
-			// Save report if output specified and not already saved in AI analysis branch
-			if output != "" && !aiAnalysis {
+			// Save report if output specified and not already saved in AI analysis branch.
+			// JSON output suppresses the AI analysis branch to keep stdout machine-readable.
+			if output != "" && (!aiAnalysis || jsonOutput) {
 				// Detect format from extension if not specified
 				detectedFormat := format
 				if format == "text" || format == "" {
@@ -589,10 +656,18 @@ Examples:
 				}
 
 				if err := saveReport(scanResult, output, detectedFormat); err != nil {
-					fmt.Println(ui.Error(fmt.Sprintf("Failed to save report: %s", err)))
+					if !jsonOutput {
+						fmt.Println(ui.Error(fmt.Sprintf("Failed to save report: %s", err)))
+					}
 				} else {
-					fmt.Println(ui.SuccessMsg(fmt.Sprintf("Report saved to: %s", output)))
+					if !jsonOutput {
+						fmt.Println(ui.SuccessMsg(fmt.Sprintf("Report saved to: %s", output)))
+					}
 				}
+			}
+
+			if jsonOutput {
+				return writeScanResultJSON(scanResult)
 			}
 
 			return nil
@@ -629,6 +704,19 @@ Examples:
 
 func saveReport(scanResult *types.ScanResult, filename string, format string) error {
 	return reportpkg.GenerateReport(scanResult, format, filename)
+}
+
+func writeScanResultJSON(scanResult *types.ScanResult) error {
+	data, err := scanResultJSON(scanResult)
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(append(data, '\n'))
+	return err
+}
+
+func scanResultJSON(scanResult *types.ScanResult) ([]byte, error) {
+	return json.MarshalIndent(scanResult, "", "  ")
 }
 
 // buildNmapArgs builds nmap arguments

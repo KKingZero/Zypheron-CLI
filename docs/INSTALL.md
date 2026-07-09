@@ -171,6 +171,15 @@ export EMPIRE_PASS=<password>
 export EMPIRE_INSECURE_TLS=1
 ```
 
+Operator-guided C2 workflow:
+
+```bash
+zypheron exploit --c2 sliver --guided
+zypheron exploit --c2 empire --guided --listener http
+```
+
+Guided mode by itself prints setup and safety checks only. If you also provide an explicit action such as `--listener`, Zypheron prints the guided checklist first, then attempts only that requested action. It does not generate payloads, deliver payloads, run exploitation, or perform post-exploitation.
+
 ## Cross-Platform Builds
 
 If building from source for a different platform:

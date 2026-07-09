@@ -106,6 +106,22 @@ class TestCountTokens:
         tokens = TokenTrackingService.count_tokens("", "gpt-4")
         assert tokens == 0
 
+    def test_empty_string_fallback_returns_zero(self):
+        with patch("app.services.token_tracking.tiktoken.get_encoding", side_effect=RuntimeError("offline")):
+            tokens = TokenTrackingService.count_tokens("", "gpt-4")
+        assert tokens == 0
+
+    def test_tokenizer_failure_uses_conservative_fallback(self):
+        text = "abcdefghi"
+        with patch("app.services.token_tracking.tiktoken.get_encoding", side_effect=RuntimeError("offline")):
+            tokens = TokenTrackingService.count_tokens(text, "gpt-4")
+        assert tokens == 3
+
+    def test_conservative_fallback_rounds_up(self):
+        assert TokenTrackingService.conservative_token_estimate("abcd") == 2
+        assert TokenTrackingService.conservative_token_estimate("abc") == 1
+        assert TokenTrackingService.conservative_token_estimate("") == 0
+
     def test_long_text(self):
         long_text = "word " * 1000
         tokens = TokenTrackingService.count_tokens(long_text, "gpt-4")

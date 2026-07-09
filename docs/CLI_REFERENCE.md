@@ -132,6 +132,7 @@ sudo bash scripts/install/install-c2.sh
 
 ```bash
 zypheron exploit [target] [flags]
+zypheron exploit --c2 sliver --guided
 zypheron exploit --c2 sliver --listener mtls
 zypheron exploit --c2 empire
 zypheron exploit --c2 empire --listener http
@@ -143,6 +144,7 @@ zypheron exploit --c2 empire --listener http
 - `--safe-mode` -- verification-focused mode
 - `--c2 <framework>` -- sliver, empire, havoc, metasploit
 - `--listener <type>` -- listener type such as mtls, https, or http
+- `--guided` -- print operator-controlled C2 setup steps; with `--listener`, print the checklist first and then attempt only that explicit listener action
 
 Empire uses its REST API instead of CLI arguments. Configure it with:
 
@@ -151,6 +153,22 @@ export EMPIRE_HOST=https://127.0.0.1:1337
 export EMPIRE_USER=<username>
 export EMPIRE_PASS=<password>
 ```
+
+### Shell Completion
+
+```bash
+zypheron completion bash
+zypheron completion zsh
+zypheron completion fish
+```
+
+### Scan JSON Output
+
+```bash
+zypheron scan example.com --format json --no-input
+```
+
+JSON scan mode is non-interactive and disables streaming output so stdout remains machine-readable.
 
 ### Configuration
 
@@ -167,13 +185,14 @@ zypheron config get-providers           # List configured providers
 
 ```bash
 zypheron workflow list          # List workflows
-zypheron autopent example.com  # Autonomous pentest
+ZYPHERON_ENABLE_AUTOPENT=1 zypheron autopent example.com  # Autonomous pentest
 zypheron session list           # List sessions
 zypheron history list           # Command history
 ```
 
-`autopent` is safety-first and approval-gated in the OSS release candidate. Full
-autonomous exploitation is deferred.
+`autopent` is safety-first, approval-gated, and disabled by default because it
+can execute high-risk actions. Set `ZYPHERON_ENABLE_AUTOPENT=1` only for
+authorized testing. Full autonomous exploitation is deferred.
 
 ### MCP (Model Context Protocol)
 

@@ -5,6 +5,7 @@ Integrates with database to track usage and enforce tier-based limits.
 """
 
 import hashlib
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
@@ -60,6 +61,13 @@ class TokenTrackingService:
         self.db = db
 
     @staticmethod
+    def conservative_token_estimate(text: str) -> int:
+        """Return an offline-safe conservative token estimate."""
+        if not text:
+            return 0
+        return math.ceil(len(text) / 3)
+
+    @staticmethod
     def count_tokens(text: str, model: str) -> int:
         """Count tokens in text using tiktoken for the specified model.
 
@@ -70,8 +78,8 @@ class TokenTrackingService:
         Returns:
             Number of tokens in the text
 
-        Raises:
-            ValueError: If the model is not supported
+        Falls back to a conservative offline-safe estimate if tokenizer assets
+        are unavailable.
         """
         # Get the appropriate encoding for the model
         encoding_name = MODEL_ENCODINGS.get(model)
@@ -90,8 +98,8 @@ class TokenTrackingService:
         try:
             encoding = tiktoken.get_encoding(encoding_name)
             return len(encoding.encode(text))
-        except Exception as e:
-            raise ValueError(f"Failed to count tokens for model {model}: {e}") from e
+        except Exception:
+            return TokenTrackingService.conservative_token_estimate(text)
 
     @staticmethod
     def hash_prompt(prompt: str) -> str:

@@ -29,6 +29,9 @@ func AutoPentCmd() *cobra.Command {
 		Short: "Run autonomous attack path execution",
 		Long: `Execute semi-autonomous penetration testing with AI-powered attack path chaining.
 
+AutoPent is a high-risk feature and is disabled by default. To enable it for
+authorized testing, set ZYPHERON_ENABLE_AUTOPENT=1 before running the command.
+
 This command launches the Phase 1 autonomous attack path engine that:
 - Discovers attack paths to your objective
 - Uses AI for intelligent decision making
@@ -65,6 +68,10 @@ Examples:
   # List saved sessions
   zypheron autopent --list-sessions`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if os.Getenv("ZYPHERON_ENABLE_AUTOPENT") != "1" {
+				return fmt.Errorf("autopent is a high-risk feature and is disabled by default; set ZYPHERON_ENABLE_AUTOPENT=1 only for authorized testing")
+			}
+
 			// License check - Autopent requires paid tier
 			if err := licensing.RequireAutopent(); err != nil {
 				if licErr, ok := err.(*licensing.FeatureLockedError); ok {

@@ -2,10 +2,28 @@ package tools
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func workspaceTempDir(t *testing.T, pattern string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp(".", pattern)
+	if err != nil {
+		t.Fatalf("create workspace temp dir: %v", err)
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		t.Fatalf("abs temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(abs)
+	})
+	return abs
+}
 
 // TestParseNmapOutput tests the Nmap output parser
 func TestParseNmapOutput(t *testing.T) {
@@ -152,6 +170,37 @@ All 1000 scanned ports on filtered.com are filtered`,
 				tt.validate(t, result)
 			}
 		})
+	}
+}
+
+func TestExecuteStreamTimeoutPreservesPartialOutput(t *testing.T) {
+	dir := workspaceTempDir(t, "bin-")
+	nmapPath := filepath.Join(dir, "nmap")
+	if err := os.WriteFile(nmapPath, []byte("#!/bin/sh\necho partial finding\n/bin/sleep 5\n"), 0o755); err != nil {
+		t.Fatalf("write fake nmap: %v", err)
+	}
+	t.Setenv("PATH", dir)
+
+	result, err := Execute(context.Background(), ExecutionOptions{
+		Tool:    "nmap",
+		Target:  "127.0.0.1",
+		Stream:  true,
+		Timeout: 200 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if !result.TimedOut {
+		t.Fatalf("TimedOut = false, want true")
+	}
+	if result.Success {
+		t.Fatalf("Success = true, want false for timeout")
+	}
+	if !strings.Contains(result.Output, "partial finding") {
+		t.Fatalf("partial output not preserved: %q", result.Output)
+	}
+	if !strings.Contains(result.Error, "timed out") {
+		t.Fatalf("timeout error metadata missing: %q", result.Error)
 	}
 }
 
@@ -917,9 +966,9 @@ func TestContainsArg(t *testing.T) {
 // TestUniqueStrings tests the uniqueStrings helper
 func TestUniqueStrings(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  []string
-		want   []string
+		name    string
+		input   []string
+		want    []string
 		lenWant int
 	}{
 		{
@@ -1049,7 +1098,7 @@ func TestExecuteWithTimeout(t *testing.T) {
 	// Use 'sleep' command which should exist on Unix systems
 	opts := ExecutionOptions{
 		Tool:    "sleep",
-		Args:    []string{"10"}, // Sleep for 10 seconds
+		Args:    []string{"10"},         // Sleep for 10 seconds
 		Timeout: 100 * time.Millisecond, // But timeout after 100ms
 		Stream:  false,
 	}

@@ -120,7 +120,7 @@ zypheron chat "How would you approach this host?"
 
 ```bash
 zypheron workflow list
-zypheron autopent example.com
+ZYPHERON_ENABLE_AUTOPENT=1 zypheron autopent example.com
 zypheron session list
 ```
 

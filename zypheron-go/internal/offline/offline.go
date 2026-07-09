@@ -245,21 +245,15 @@ func (om *OfflineManager) CacheAIResponse(query, response string) error {
 
 // GetCachedResponse retrieves a cached AI response
 func (om *OfflineManager) GetCachedResponse(query string) (string, bool) {
-	om.mu.RLock()
-	defer om.mu.RUnlock()
+	om.mu.Lock()
+	defer om.mu.Unlock()
 
 	normalizedQuery := normalizeQuery(query)
 
 	if cached, exists := om.aiResponseCache[normalizedQuery]; exists {
-		// Update use count asynchronously
-		go func() {
-			om.mu.Lock()
-			defer om.mu.Unlock()
-			cached.UseCount++
-			cached.Timestamp = time.Now()
-			_ = om.saveAIResponseCache()
-		}()
-
+		cached.UseCount++
+		cached.Timestamp = time.Now()
+		_ = om.saveAIResponseCache()
 		return cached.Response, true
 	}
 

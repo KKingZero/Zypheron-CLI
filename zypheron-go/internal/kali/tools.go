@@ -1,11 +1,13 @@
 package kali
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/platform"
 )
@@ -335,23 +337,19 @@ func (tm *ToolManager) SuggestTool(task string) *Tool {
 
 // getToolVersion gets the version of a tool
 func getToolVersion(command string) string {
-	// Try --version
-	cmd := exec.Command(command, "--version")
-	output, err := cmd.Output()
-	if err == nil {
-		lines := strings.Split(string(output), "\n")
-		if len(lines) > 0 {
-			return strings.TrimSpace(lines[0])
-		}
-	}
-
-	// Try -v
-	cmd = exec.Command(command, "-v")
-	output, err = cmd.Output()
-	if err == nil {
-		lines := strings.Split(string(output), "\n")
-		if len(lines) > 0 {
-			return strings.TrimSpace(lines[0])
+	for _, flag := range []string{"--version", "-v"} {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		cmd := exec.CommandContext(ctx, command, flag)
+		output, err := cmd.Output()
+		cancel()
+		if err == nil {
+			lines := strings.Split(string(output), "\n")
+			if len(lines) > 0 {
+				version := strings.TrimSpace(lines[0])
+				if version != "" {
+					return version
+				}
+			}
 		}
 	}
 

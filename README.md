@@ -319,7 +319,7 @@ zypheron chat "How would you approach this target?"
 
 # Workflows and sessions
 zypheron workflow list
-zypheron autopent example.com
+ZYPHERON_ENABLE_AUTOPENT=1 zypheron autopent example.com
 
 # Tooling and environment
 zypheron tools check
@@ -376,6 +376,13 @@ Sliver and Empire are not installed by the main installer. Opt in with:
 
 ```bash
 sudo bash scripts/install/install-c2.sh
+```
+
+Use guided mode to review operator-controlled C2 setup steps. With no other action it prints guidance only; with an explicit action such as `--listener`, it prints the checklist first and then attempts only that requested action.
+
+```bash
+zypheron exploit --c2 sliver --guided
+zypheron exploit --c2 empire --guided --listener http
 ```
 
 See the [Install](#install) section for details on verification and env flags.

@@ -16,6 +16,16 @@ var (
 	aiProvider string
 )
 
+type aiStatusBridge interface {
+	IsRunning() bool
+	StartQuiet() error
+	Health() (map[string]interface{}, error)
+}
+
+var newAIStatusBridge = func() aiStatusBridge {
+	return aibridge.NewAIBridge()
+}
+
 // AICmd manages the AI engine
 func AICmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -122,27 +132,29 @@ func runAIStop(cmd *cobra.Command, args []string) error {
 }
 
 func runAIStatus(cmd *cobra.Command, args []string) error {
-	bridge := aibridge.NewAIBridge()
+	bridge := newAIStatusBridge()
 
 	fmt.Println(ui.InfoMsg("AI Engine Status:"))
 	fmt.Println()
 
 	if !bridge.IsRunning() {
-		if err := bridge.Start(); err != nil {
+		if err := bridge.StartQuiet(); err != nil {
 			ui.Danger.Println("  Status: ✗ NOT RUNNING")
 			fmt.Println()
 			return fmt.Errorf("failed to auto-start core AI engine: %w", err)
 		}
 	}
 
-	ui.Success.Println("  Status: ✓ RUNNING")
-	fmt.Println()
-
 	// Get health info
 	health, err := bridge.Health()
 	if err != nil {
-		return fmt.Errorf("failed to get health status: %w", err)
+		ui.Danger.Println("  Status: ✗ UNHEALTHY")
+		fmt.Println()
+		return fmt.Errorf("AI engine health check failed: %w", err)
 	}
+
+	ui.Success.Println("  Status: ✓ RUNNING")
+	fmt.Println()
 
 	// Display health info
 	fmt.Println(ui.InfoMsg("Details:"))

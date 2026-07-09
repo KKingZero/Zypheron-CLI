@@ -1,4 +1,5 @@
-zypheron
+/zypheron
+/bin/
 
 # local go test tmp
 .gotmp/

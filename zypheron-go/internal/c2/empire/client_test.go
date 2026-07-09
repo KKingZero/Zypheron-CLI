@@ -1,7 +1,11 @@
 package empire
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -9,11 +13,11 @@ import (
 
 func TestNormalizeBaseURL_Valid(t *testing.T) {
 	cases := map[string]string{
-		"127.0.0.1:1337":                 "https://127.0.0.1:1337",
-		"https://127.0.0.1:1337":         "https://127.0.0.1:1337",
-		"https://127.0.0.1:1337/":        "https://127.0.0.1:1337",
-		"http://empire.lab":              "http://empire.lab",
-		"https://[::1]:1337":             "https://[::1]:1337",
+		"127.0.0.1:1337":          "https://127.0.0.1:1337",
+		"https://127.0.0.1:1337":  "https://127.0.0.1:1337",
+		"https://127.0.0.1:1337/": "https://127.0.0.1:1337",
+		"http://empire.lab":       "http://empire.lab",
+		"https://[::1]:1337":      "https://[::1]:1337",
 	}
 	for in, want := range cases {
 		got, err := normalizeBaseURL(in)
@@ -109,17 +113,139 @@ func TestIsValidListenerType(t *testing.T) {
 
 func TestHostIsLocalOrPrivate(t *testing.T) {
 	cases := map[string]bool{
-		"https://127.0.0.1:1337":   true,
-		"https://localhost":        true,
-		"https://10.0.0.1":         true,
-		"https://192.168.1.50":     true,
-		"https://172.16.0.1":       true,
-		"https://8.8.8.8":          false,
-		"https://attacker.tld":     false,
+		"https://127.0.0.1:1337": true,
+		"https://localhost":      true,
+		"https://10.0.0.1":       true,
+		"https://192.168.1.50":   true,
+		"https://172.16.0.1":     true,
+		"https://8.8.8.8":        false,
+		"https://attacker.tld":   false,
 	}
 	for in, want := range cases {
 		if got := hostIsLocalOrPrivate(in); got != want {
 			t.Errorf("hostIsLocalOrPrivate(%q) = %v, want %v", in, got, want)
 		}
+	}
+}
+
+func TestClientListAgents_AuthenticatesAndPrettyPrints(t *testing.T) {
+	var loginCount int
+	c := &Client{
+		baseURL:  "http://empire.test",
+		username: "u",
+		password: "p",
+		httpClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			var body string
+			status := http.StatusOK
+
+			switch r.URL.Path {
+			case "/api/admin/login":
+				loginCount++
+				body = `{"token":"tok"}`
+			case "/api/agents":
+				if got := r.Header.Get("Authorization"); got != "Bearer tok" {
+					t.Fatalf("Authorization = %q, want Bearer tok", got)
+				}
+				body = `{"agents":["A1"]}`
+			default:
+				status = http.StatusNotFound
+				body = `{"error":"not found"}`
+			}
+			return testResponse(status, body), nil
+		})},
+	}
+
+	out, err := c.ListAgents(context.Background())
+	if err != nil {
+		t.Fatalf("ListAgents() err = %v", err)
+	}
+	if loginCount != 1 {
+		t.Fatalf("loginCount = %d, want 1", loginCount)
+	}
+	if !strings.Contains(out, `"agents"`) || !strings.Contains(out, `"A1"`) {
+		t.Fatalf("ListAgents() output = %q", out)
+	}
+}
+
+func TestClientStartListener_PayloadShape(t *testing.T) {
+	var payload map[string]interface{}
+	c := &Client{
+		baseURL:  "http://empire.test",
+		username: "u",
+		password: "p",
+		httpClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			switch r.URL.Path {
+			case "/api/admin/login":
+				return testResponse(http.StatusOK, `{"access_token":"tok"}`), nil
+			case "/api/listeners/http":
+				if got := r.Header.Get("Authorization"); got != "Bearer tok" {
+					t.Fatalf("Authorization = %q, want Bearer tok", got)
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					t.Fatalf("decode payload: %v", err)
+				}
+				return testResponse(http.StatusOK, `{"status":"ok"}`), nil
+			default:
+				return testResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+			}
+		})},
+	}
+
+	if _, err := c.StartListener(context.Background(), "http"); err != nil {
+		t.Fatalf("StartListener() err = %v", err)
+	}
+	if payload["name"] != "zypheron-http" {
+		t.Fatalf("payload name = %#v", payload["name"])
+	}
+	options, ok := payload["options"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("payload options = %#v", payload["options"])
+	}
+	if options["Host"] != "0.0.0.0" || options["Port"] != "80" {
+		t.Fatalf("payload options = %#v", options)
+	}
+}
+
+func TestClientEnsureToken_RejectsMissingToken(t *testing.T) {
+	c := &Client{
+		baseURL:  "http://empire.test",
+		username: "u",
+		password: "p",
+		httpClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return testResponse(http.StatusOK, `{"message":"ok"}`), nil
+		})},
+	}
+	err := c.ensureToken(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "did not include a token") {
+		t.Fatalf("ensureToken() err = %v, want missing token", err)
+	}
+}
+
+func TestClientSend_ResponseSizeCap(t *testing.T) {
+	c := &Client{httpClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusOK, strings.Repeat("x", maxResponseBytes+1)), nil
+	})}}
+	req, err := http.NewRequest(http.MethodGet, "http://empire.test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.send(req)
+	if err == nil || !strings.Contains(err.Error(), "response exceeded") {
+		t.Fatalf("send() err = %v, want response exceeded", err)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+func testResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Status:     http.StatusText(status),
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 }

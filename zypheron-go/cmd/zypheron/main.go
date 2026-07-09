@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/aibridge"
 	"github.com/KKingZero/Cobra-AI/zypheron-go/internal/commands"
@@ -40,6 +41,10 @@ func shouldAutoStartAI(cmd *cobra.Command) bool {
 		return true
 	}
 
+	if commandWantsJSONOutput(cmd) {
+		return false
+	}
+
 	// Skip auto-start for explicit AI engine lifecycle commands
 	if cmd.Name() == "start" || cmd.Name() == "stop" || cmd.Name() == "status" {
 		if parent := cmd.Parent(); parent != nil && parent.Name() == "ai" {
@@ -59,7 +64,7 @@ func shouldAutoStartAI(cmd *cobra.Command) bool {
 		"tools": true, "config": true, "setup": true,
 		"completion": true, "version": true, "help": true,
 		"history": true, "session": true,
-		"install-deps": true,
+		"install-deps": true, "autopent": true,
 	}
 	if noAICommands[cmd.Name()] {
 		return false
@@ -77,6 +82,10 @@ func shouldShowStartupBanner(rootCmd, cmd *cobra.Command) bool {
 		return false
 	}
 
+	if commandWantsJSONOutput(cmd) {
+		return false
+	}
+
 	// The TUI owns the splash when launching the dashboard.
 	if cmd == rootCmd && !noTUI {
 		return false
@@ -88,11 +97,22 @@ func shouldShowStartupBanner(rootCmd, cmd *cobra.Command) bool {
 	return true
 }
 
+func commandWantsJSONOutput(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	flag := cmd.Flag("format")
+	if flag == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(flag.Value.String()), "json")
+}
+
 func stdoutIsTTY() bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
-func main() {
+func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "zypheron",
 		Short: "Zypheron - AI-Powered Penetration Testing Platform",
@@ -162,6 +182,7 @@ func main() {
 	rootCmd.AddCommand(commands.BountyCmd())
 	rootCmd.AddCommand(commands.CloudCmd())
 	rootCmd.AddCommand(commands.ADCmd())
+	rootCmd.AddCommand(commands.AutoPentCmd())
 	rootCmd.AddCommand(commands.InstallDepsCmd())
 
 	// Desktop-bridge commands (login/logout/status). These talk to the
@@ -169,12 +190,42 @@ func main() {
 	// internal/desktopbridge/ + Phase 0/1 of the bridge architecture.
 	bridge.Register(rootCmd, version)
 
+	rootCmd.AddCommand(completionCmd(rootCmd))
+
 	// Version
 	rootCmd.Version = version
+
+	return rootCmd
+}
+
+func main() {
+	rootCmd := newRootCommand()
 
 	// Execute
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, ui.Error(err.Error()))
 		os.Exit(1)
 	}
+}
+
+func completionCmd(root *cobra.Command) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "completion [bash|zsh|fish]",
+		Short: "Generate shell completion scripts",
+		Long:  "Generate shell completion scripts for bash, zsh, or fish.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			switch args[0] {
+			case "bash":
+				return root.GenBashCompletion(os.Stdout)
+			case "zsh":
+				return root.GenZshCompletion(os.Stdout)
+			case "fish":
+				return root.GenFishCompletion(os.Stdout, true)
+			default:
+				return fmt.Errorf("unsupported shell %q (supported: bash, zsh, fish)", args[0])
+			}
+		},
+	}
+	return cmd
 }
