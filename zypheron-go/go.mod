@@ -12,6 +12,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/chromedp/chromedp v0.14.2
 	github.com/fatih/color v1.16.0
+	github.com/gofrs/flock v0.13.0
 	github.com/google/uuid v1.6.0
 	github.com/jung-kurt/gofpdf/v2 v2.17.3
 	github.com/mattn/go-sqlite3 v1.14.32
@@ -50,7 +51,6 @@ require (
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect

@@ -21,9 +21,6 @@ coverage.html
 # Go workspace file
 go.work
 
-# Test cache
-go.sum
-
 # IDE
 .vscode/
 .idea/
