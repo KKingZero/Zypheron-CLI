@@ -134,7 +134,7 @@ class CVEMatcher:
         """Get detailed CVE information"""
         try:
             # Use NVD API
-            url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}"
+            url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveIds={cve_id}"
             
             headers = {}
             if self.nvd_api_key:
