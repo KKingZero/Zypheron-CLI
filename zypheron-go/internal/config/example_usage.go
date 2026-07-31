@@ -53,7 +53,7 @@ func Example3_ModifyingConfiguration() {
 	}
 
 	// Configure Ollama settings
-	cfg.SetOllamaConfig("http://localhost:11434", "codellama")
+	cfg.SetOllamaConfig("http://localhost:11434", "llama3.2")
 
 	// Modify AI parameters
 	cfg.mu.Lock()
@@ -101,7 +101,7 @@ func Example5_ThreadSafeAccess() {
 	// Writer goroutine
 	go func() {
 		for i := 0; i < 10; i++ {
-			cfg.SetOllamaConfig("http://localhost:11434", "codellama")
+			cfg.SetOllamaConfig("http://localhost:11434", "llama3.2")
 		}
 		done <- true
 	}()
@@ -317,10 +317,10 @@ func Example14_ProductionVsDevelopment() {
 	} else {
 		// Development settings
 		cfg.mu.Lock()
-		cfg.AI.Temperature = 0.7 // More creative
+		cfg.AI.Temperature = 0.7    // More creative
 		cfg.LogSanitization = false // Full logs for debugging
-		cfg.AuditLogging = false // Less overhead
-		cfg.RateLimitRPS = 20 // Higher for testing
+		cfg.AuditLogging = false    // Less overhead
+		cfg.RateLimitRPS = 20       // Higher for testing
 		cfg.mu.Unlock()
 
 		fmt.Println("Development configuration applied")

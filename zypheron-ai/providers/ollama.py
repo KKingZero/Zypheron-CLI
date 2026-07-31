@@ -10,24 +10,90 @@ from core.config import config
 from loguru import logger
 
 
+DEFAULT_OLLAMA_MODEL = "llama3.2"
+
+
+def normalize_ollama_host(host: Optional[str]) -> str:
+    """Normalize an Ollama host for discovery requests."""
+    value = (host or "").strip() or "http://localhost:11434"
+    if "://" not in value:
+        value = f"http://{value}"
+    return value.rstrip("/")
+
+
+def _model_base(model: str) -> str:
+    return model.strip().split(":", 1)[0]
+
+
+def _is_embedding_model(model: str) -> bool:
+    lowered = model.lower()
+    return "embed" in lowered or "embedding" in lowered
+
+
+def select_ollama_model(preferred: Optional[str], available: List[str]) -> str:
+    """
+    Pick an Ollama model deterministically:
+    exact preferred, tag-tolerant preferred, first non-embedding, first available,
+    preferred/default when no list is available.
+    """
+    preferred_model = (preferred or "").strip() or DEFAULT_OLLAMA_MODEL
+    models = [model.strip() for model in available if model and model.strip()]
+    if not models:
+        return preferred_model
+
+    for model in models:
+        if model == preferred_model:
+            return model
+
+    preferred_base = _model_base(preferred_model)
+    for model in models:
+        if _model_base(model) == preferred_base:
+            return model
+
+    for model in models:
+        if not _is_embedding_model(model):
+            return model
+
+    return models[0]
+
+
 class OllamaProvider(BaseAIProvider):
     """Ollama Provider for local LLM inference"""
     
     def __init__(self, host: Optional[str] = None, model: Optional[str] = None, **kwargs):
         super().__init__(api_key=None, **kwargs)
-        self.host = host or config.OLLAMA_HOST
+        self.host = normalize_ollama_host(host or config.OLLAMA_HOST)
         self.model = model or config.OLLAMA_MODEL
         logger.info(f"Ollama provider initialized with host: {self.host}, model: {self.model}")
 
     async def _list_models(self, session: aiohttp.ClientSession) -> List[str]:
         """Return available local Ollama model tags."""
+        native_models = await self._list_native_models(session)
+        if native_models:
+            return native_models
+        return await self._list_openai_compatible_models(session)
+
+    async def _list_native_models(self, session: aiohttp.ClientSession) -> List[str]:
+        """Return models from Ollama's native tag endpoint."""
         try:
             async with session.get(f"{self.host}/api/tags", timeout=aiohttp.ClientTimeout(total=3)) as response:
                 if response.status != 200:
                     return []
                 data = await response.json()
                 models = data.get("models", [])
-                return [m.get("name", "") for m in models if m.get("name")]
+                return [m.get("name", "").strip() for m in models if m.get("name", "").strip()]
+        except Exception:
+            return []
+
+    async def _list_openai_compatible_models(self, session: aiohttp.ClientSession) -> List[str]:
+        """Return models from Ollama's OpenAI-compatible model endpoint."""
+        try:
+            async with session.get(f"{self.host}/v1/models", timeout=aiohttp.ClientTimeout(total=3)) as response:
+                if response.status != 200:
+                    return []
+                data = await response.json()
+                models = data.get("data", [])
+                return [m.get("id", "").strip() for m in models if m.get("id", "").strip()]
         except Exception:
             return []
 
@@ -39,27 +105,14 @@ class OllamaProvider(BaseAIProvider):
         """
         Find a compatible fallback when requested model is missing.
         Preference:
-        1) same family prefix (e.g. llama3.2:*),
-        2) configured default model if installed,
-        3) llama3:latest if installed,
-        4) first available model.
+        1) exact preferred match,
+        2) tag-tolerant preferred match,
+        3) first non-embedding model,
+        4) first available model,
+        5) requested/default model when offline.
         """
         available = await self._list_models(session)
-        if not available:
-            return None
-        if requested_model in available:
-            return requested_model
-
-        family = requested_model.split(":", 1)[0]
-        for m in available:
-            if m.startswith(family + ":"):
-                return m
-
-        if self.model in available:
-            return self.model
-        if "llama3:latest" in available:
-            return "llama3:latest"
-        return available[0]
+        return select_ollama_model(requested_model or self.model, available)
     
     async def chat(
         self,

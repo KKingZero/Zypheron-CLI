@@ -60,7 +60,7 @@ class AIConfig(BaseSettings):
 
     # Ollama Configuration
     OLLAMA_HOST: str = Field(default="http://localhost:11434", env="OLLAMA_HOST")
-    OLLAMA_MODEL: str = Field(default="qwen3-coder", env="OLLAMA_MODEL")
+    OLLAMA_MODEL: str = Field(default="llama3.2", env="OLLAMA_MODEL")
 
     # Default Model Selection
     DEFAULT_PROVIDER: str = Field(default="anthropic", env="DEFAULT_AI_PROVIDER")

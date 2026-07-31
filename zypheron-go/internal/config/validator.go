@@ -276,7 +276,7 @@ func PrintDiagnostics() {
 			ollamaURL = "http://localhost:11434"
 		}
 		fmt.Printf("  Ollama URL: %s\n", ollamaURL)
-		fmt.Printf("  Ollama Model: %s\n", getEnvOrDefault("OLLAMA_MODEL", "codellama"))
+		fmt.Printf("  Ollama Model: %s\n", getEnvOrDefault("OLLAMA_MODEL", "llama3.2"))
 
 	case "anthropic":
 		apiKey := os.Getenv("ANTHROPIC_API_KEY")
@@ -337,11 +337,11 @@ func GetProviderHelp(provider AIProvider) string {
    curl -fsSL https://ollama.com/install.sh | sh
 
 2. Pull a model:
-   ollama pull codellama
+   ollama pull llama3.2
 
 3. (Optional) Configure custom URL:
    export OLLAMA_URL=http://localhost:11434
-   export OLLAMA_MODEL=codellama
+   export OLLAMA_MODEL=llama3.2
 
 4. Run Zypheron:
    zypheron scan

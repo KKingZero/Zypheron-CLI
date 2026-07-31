@@ -15,7 +15,7 @@ Local-first configuration for the OSS CLI with BYOK (Bring Your Own Key) AI prov
 ### Option 1: Local AI (No API Key)
 
 ```bash
-ollama pull codellama
+ollama pull llama3.2
 zypheron scan example.com
 ```
 
@@ -31,7 +31,7 @@ zypheron scan example.com
 
 | Provider | Env Variable | Default Model |
 |----------|-------------|---------------|
-| `ollama` (default) | `OLLAMA_URL`, `OLLAMA_MODEL` | `codellama` |
+| `ollama` (default) | `OLLAMA_URL`, `OLLAMA_MODEL` | `llama3.2` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet` |
 | `openai` | `OPENAI_API_KEY` | `gpt-4` |
 | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-chat` |
@@ -67,7 +67,7 @@ export DEEPSEEK_API_KEY=sk-xxx
 
 ```bash
 export OLLAMA_URL=http://localhost:11434
-export OLLAMA_MODEL=codellama
+export OLLAMA_MODEL=llama3.2
 ```
 
 ### AI Parameters
@@ -87,7 +87,7 @@ Location: `~/.zypheron/config.json`
   "ai": {
     "provider": "ollama",
     "ollama_url": "http://localhost:11434",
-    "ollama_model": "codellama",
+    "ollama_model": "llama3.2",
     "temperature": 0.7,
     "max_tokens": 4096
   }
@@ -269,8 +269,8 @@ export ZYPHERON_AI_MODEL=deepseek-chat
 ### Ollama (Local)
 
 ```bash
-ollama pull codellama
-export OLLAMA_MODEL=codellama
+ollama pull llama3.2
+export OLLAMA_MODEL=llama3.2
 # ZYPHERON_AI_PROVIDER defaults to ollama
 ```
 
@@ -316,7 +316,7 @@ ZYPHERON_AI_PROVIDER=ollama
 
 # Ollama
 OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=codellama
+OLLAMA_MODEL=llama3.2
 
 # AI parameters
 ZYPHERON_AI_TEMPERATURE=0.7

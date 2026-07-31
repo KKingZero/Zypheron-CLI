@@ -199,7 +199,7 @@ class AIDecisionEngine:
             AIProvider.GEMINI.value: "gemini-1.5-pro",
             AIProvider.GROK.value: "grok-beta",
             AIProvider.KIMI.value: "moonshot-v1-8k",
-            AIProvider.OLLAMA.value: config.OLLAMA_MODEL or "llama3:latest",
+            AIProvider.OLLAMA.value: config.OLLAMA_MODEL or "llama3.2",
         }
         return model_map.get(provider, "gpt-4-turbo-preview")
 

@@ -43,7 +43,7 @@ type AIConfig struct {
 	// OllamaURL is the URL for local Ollama instance (default: http://localhost:11434)
 	OllamaURL string `json:"ollama_url,omitempty"`
 
-	// OllamaModel is the model to use with Ollama (default: "codellama")
+	// OllamaModel is the model to use with Ollama (default: "llama3.2")
 	OllamaModel string `json:"ollama_model,omitempty"`
 
 	// APIKey is loaded from environment variables at runtime (not persisted)
@@ -114,7 +114,7 @@ func DefaultConfig() *Config {
 		AI: AIConfig{
 			Provider:    AIProviderOllama,
 			OllamaURL:   "http://localhost:11434",
-			OllamaModel: "codellama",
+			OllamaModel: "llama3.2",
 			Temperature: 0.7,
 			MaxTokens:   4096,
 		},

@@ -151,20 +151,20 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         },
     ),
     "ollama": ProviderConfig(
-        default_model="qwen3-coder",
-        fallback_model="llama3.2:3b",
+        default_model="llama3.2",
+        fallback_model="llama3.2",
         available_models={
+            "llama3.2": ModelEntry(
+                model_id="llama3.2",
+                context_window=131072,
+                max_output=4096,
+                notes="Default local model",
+            ),
             "qwen3-coder": ModelEntry(
                 model_id="qwen3-coder",
                 context_window=131072,
                 max_output=16384,
-                notes="Best local coding model",
-            ),
-            "llama3.2:3b": ModelEntry(
-                model_id="llama3.2:3b",
-                context_window=131072,
-                max_output=4096,
-                notes="Small + fast local model",
+                notes="Local coding model",
             ),
             "mistral:latest": ModelEntry(
                 model_id="mistral:latest",
@@ -192,7 +192,8 @@ MODEL_ALIASES: Dict[str, str] = {
     "grok-3": "gpt-5.4",  # Grok removed, redirect to OpenAI
     "deepseek-coder": "deepseek-r1",
     "moonshot-v1-8k": "kimi-k2",
-    "llama3:latest": "llama3.2:3b",
+    "llama3:latest": "llama3.2",
+    "llama3.2:3b": "llama3.2",
 }
 
 # Provider name aliases

@@ -19,8 +19,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected default Ollama URL to be http://localhost:11434, got %s", cfg.AI.OllamaURL)
 	}
 
-	if cfg.AI.OllamaModel != "codellama" {
-		t.Errorf("Expected default Ollama model to be codellama, got %s", cfg.AI.OllamaModel)
+	if cfg.AI.OllamaModel != "llama3.2" {
+		t.Errorf("Expected default Ollama model to be llama3.2, got %s", cfg.AI.OllamaModel)
 	}
 
 	if cfg.AI.Temperature != 0.7 {

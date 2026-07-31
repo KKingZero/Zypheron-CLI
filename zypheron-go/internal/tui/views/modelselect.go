@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	ClaudeModelLabel  = "Claude"
-	GeminiModelLabel  = "Gemini"
-	ChatGPTModelLabel = "ChatGPT"
-	KimiModelLabel    = "Kimi"
-	LocalAIModelLabel = "local ai"
+	ClaudeModelLabel   = "Claude"
+	GeminiModelLabel   = "Gemini"
+	ChatGPTModelLabel  = "ChatGPT"
+	KimiModelLabel     = "Kimi"
+	LocalAIModelLabel  = "local ai"
+	DefaultOllamaModel = "llama3.2"
 )
 
 type ModelSelector struct {
@@ -283,60 +284,157 @@ func ModelToEngineModel(model string) string {
 		return strings.TrimPrefix(model, "ollama-")
 	}
 	if strings.EqualFold(model, LocalAIModelLabel) {
-		return ResolveLargestOllamaModel()
+		return ResolvePreferredOllamaModel()
 	}
 	return ""
 }
 
-func ResolveLargestOllamaModel() string {
-	baseURL := strings.TrimSpace(os.Getenv("OLLAMA_URL"))
-	if baseURL == "" {
-		baseURL = "http://localhost:11434"
+func ResolvePreferredOllamaModel() string {
+	preferred := fallbackOllamaModel()
+	client := http.Client{Timeout: 1500 * time.Millisecond}
+	models, err := listOllamaModels(normalizeOllamaURL(os.Getenv("OLLAMA_URL")), &client)
+	if err != nil {
+		return preferred
+	}
+	return SelectOllamaModel(preferred, models)
+}
+
+func listOllamaModels(baseURL string, client *http.Client) ([]string, error) {
+	models, err := listNativeOllamaModels(baseURL, client)
+	if err == nil && len(models) > 0 {
+		return models, nil
 	}
 
-	client := http.Client{Timeout: 1500 * time.Millisecond}
+	v1Models, v1Err := listOpenAICompatibleOllamaModels(baseURL, client)
+	if v1Err == nil {
+		return v1Models, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return models, nil
+}
+
+func listNativeOllamaModels(baseURL string, client *http.Client) ([]string, error) {
 	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/api/tags")
 	if err != nil {
-		return fallbackOllamaModel()
+		return nil, err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		return fallbackOllamaModel()
+		return nil, fmt.Errorf("ollama /api/tags status %d", resp.StatusCode)
 	}
-
 	var payload struct {
 		Models []struct {
 			Name string `json:"name"`
-			Size int64  `json:"size"`
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return fallbackOllamaModel()
+		return nil, err
+	}
+	return compactModelNames(func() []string {
+		names := make([]string, 0, len(payload.Models))
+		for _, model := range payload.Models {
+			names = append(names, model.Name)
+		}
+		return names
+	}()), nil
+}
+
+func listOpenAICompatibleOllamaModels(baseURL string, client *http.Client) ([]string, error) {
+	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/v1/models")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ollama /v1/models status %d", resp.StatusCode)
+	}
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	return compactModelNames(func() []string {
+		names := make([]string, 0, len(payload.Data))
+		for _, model := range payload.Data {
+			names = append(names, model.ID)
+		}
+		return names
+	}()), nil
+}
+
+func normalizeOllamaURL(raw string) string {
+	url := strings.TrimSpace(raw)
+	if url == "" {
+		return "http://localhost:11434"
+	}
+	if !strings.Contains(url, "://") {
+		url = "http://" + url
+	}
+	return strings.TrimRight(url, "/")
+}
+
+func SelectOllamaModel(preferred string, available []string) string {
+	preferred = strings.TrimSpace(preferred)
+	if preferred == "" {
+		preferred = DefaultOllamaModel
 	}
 
-	var selectedName string
-	var selectedSize int64
-	for _, model := range payload.Models {
-		name := strings.TrimSpace(model.Name)
+	models := compactModelNames(available)
+	if len(models) == 0 {
+		return preferred
+	}
+
+	for _, model := range models {
+		if model == preferred {
+			return model
+		}
+	}
+
+	preferredBase := ollamaModelBase(preferred)
+	for _, model := range models {
+		if ollamaModelBase(model) == preferredBase {
+			return model
+		}
+	}
+
+	for _, model := range models {
+		if !isEmbeddingOllamaModel(model) {
+			return model
+		}
+	}
+
+	return models[0]
+}
+
+func compactModelNames(models []string) []string {
+	names := make([]string, 0, len(models))
+	for _, model := range models {
+		name := strings.TrimSpace(model)
 		if name == "" {
 			continue
 		}
-		if model.Size > selectedSize || selectedName == "" {
-			selectedName = name
-			selectedSize = model.Size
-		}
+		names = append(names, name)
 	}
-	if selectedName == "" {
-		return fallbackOllamaModel()
-	}
+	return names
+}
 
-	return selectedName
+func ollamaModelBase(model string) string {
+	return strings.SplitN(strings.TrimSpace(model), ":", 2)[0]
+}
+
+func isEmbeddingOllamaModel(model string) bool {
+	lower := strings.ToLower(model)
+	return strings.Contains(lower, "embed") || strings.Contains(lower, "embedding")
 }
 
 func fallbackOllamaModel() string {
 	if model := strings.TrimSpace(os.Getenv("OLLAMA_MODEL")); model != "" {
 		return model
 	}
-	return "codellama"
+	return DefaultOllamaModel
 }
