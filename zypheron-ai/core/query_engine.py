@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import re
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -10,9 +10,11 @@ from uuid import uuid4
 from loguru import logger
 
 from contracts.runtime import AuditEvent, PolicyMode, QueryResponse, RiskCategory, TaskRecord, TaskStatus, ToolCall, ToolProgressEvent
+from core.mcp_client_config import load_selected_mcp_servers, unsupported_mcp_client_message
 from core.policy import authorize_tool_call
 from core.scope import normalize_scope_host, scope_match
 from providers.base import AIMessage
+from providers.capabilities import EFFORT_CAPABLE_PROVIDERS, validate_effort
 from providers.manager import ai_manager, normalize_provider_name
 from tasks.store import TaskStore
 from tools.base import ExecutionContext
@@ -34,6 +36,9 @@ class QueryRequest:
     session_id: Optional[str] = None
     task_id: Optional[str] = None
     policy_mode: PolicyMode = PolicyMode.INTERACTIVE_SAFE
+    effort: Optional[str] = None
+    mcp_config: Optional[str] = None
+    mcp: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -80,6 +85,10 @@ class QueryEngine:
         )
 
         try:
+            if request.mcp:
+                servers = load_selected_mcp_servers(request.mcp_config or "~/.config/zypheron/mcp.json", request.mcp)
+                raise NotImplementedError(unsupported_mcp_client_message(servers))
+
             if plan.follow_up:
                 task.status = TaskStatus.PAUSED
                 task.metadata["follow_up"] = plan.follow_up
@@ -103,12 +112,17 @@ class QueryEngine:
 
             provider = normalize_provider_name(request.provider)
             model = request.model
+            if request.effort and provider not in EFFORT_CAPABLE_PROVIDERS:
+                raise ValueError(f"effort is not supported with provider {provider}")
+            provider_kwargs: Dict[str, Any] = {"model": model}
+            if request.effort:
+                provider_kwargs["effort"] = validate_effort(provider, request.effort)
             ai_response = await ai_manager.chat(
                 messages=request.messages,
                 provider=provider,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
-                model=model,
+                **provider_kwargs,
             )
             task.provider = ai_response.provider
             task.model = ai_response.model

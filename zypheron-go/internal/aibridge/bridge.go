@@ -183,6 +183,25 @@ type Message struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
+type ImageInput struct {
+	Source     string `json:"source"`
+	MimeType   string `json:"mime_type"`
+	DataBase64 string `json:"data_base64,omitempty"`
+	URL        string `json:"url,omitempty"`
+}
+
+type MCPSelection struct {
+	Label        string   `json:"label"`
+	AllowedTools []string `json:"allowed_tools,omitempty"`
+}
+
+type ChatOptions struct {
+	Effort    string         `json:"effort,omitempty"`
+	Images    []ImageInput   `json:"images,omitempty"`
+	MCPConfig string         `json:"mcp_config,omitempty"`
+	MCP       []MCPSelection `json:"mcp,omitempty"`
+}
+
 // ChatResponse contains the full runtime envelope for chat turns.
 type ChatResponse struct {
 	Content         string
@@ -778,6 +797,11 @@ func (b *AIBridge) Chat(messages []Message, provider string, model string, tempe
 
 // ChatDetailed sends a chat request and returns the full runtime envelope.
 func (b *AIBridge) ChatDetailed(messages []Message, provider string, model string, temperature float64, maxTokens int, sessionID string) (*ChatResponse, error) {
+	return b.ChatDetailedWithOptions(messages, provider, model, temperature, maxTokens, sessionID, ChatOptions{})
+}
+
+// ChatDetailedWithOptions sends a chat request and returns the full runtime envelope.
+func (b *AIBridge) ChatDetailedWithOptions(messages []Message, provider string, model string, temperature float64, maxTokens int, sessionID string, options ChatOptions) (*ChatResponse, error) {
 	params := map[string]interface{}{
 		"messages":    messages,
 		"provider":    provider,
@@ -789,6 +813,18 @@ func (b *AIBridge) ChatDetailed(messages []Message, provider string, model strin
 	}
 	if strings.TrimSpace(sessionID) != "" {
 		params["session_id"] = sessionID
+	}
+	if strings.TrimSpace(options.Effort) != "" {
+		params["effort"] = options.Effort
+	}
+	if len(options.Images) > 0 {
+		params["images"] = options.Images
+	}
+	if strings.TrimSpace(options.MCPConfig) != "" {
+		params["mcp_config"] = options.MCPConfig
+	}
+	if len(options.MCP) > 0 {
+		params["mcp"] = options.MCP
 	}
 
 	resp, err := b.SendRequest("chat", params)

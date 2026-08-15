@@ -5,6 +5,7 @@ Claude AI Provider (Anthropic)
 from typing import List, AsyncIterator, Optional
 from anthropic import AsyncAnthropic
 from .base import BaseAIProvider, AIMessage, AIResponse
+from .capabilities import validate_effort
 from core.config import config
 from loguru import logger
 
@@ -33,7 +34,12 @@ class ClaudeProvider(BaseAIProvider):
         if not self.client:
             raise ValueError("Claude API key not configured")
         model_override = kwargs.pop("model", None)
+        effort = validate_effort("claude", kwargs.pop("effort", None))
         model_name = model_override or config.CLAUDE_MODEL
+        if effort:
+            output_config = dict(kwargs.pop("output_config", {}) or {})
+            output_config["effort"] = effort
+            kwargs["output_config"] = output_config
         
         # Convert our message format to Anthropic format
         formatted_messages = []
@@ -45,7 +51,7 @@ class ClaudeProvider(BaseAIProvider):
             else:
                 formatted_messages.append({
                     "role": msg.role,
-                    "content": msg.content
+                    "content": self._format_content(msg)
                 })
         
         # Make the API call
@@ -82,7 +88,12 @@ class ClaudeProvider(BaseAIProvider):
         if not self.client:
             raise ValueError("Claude API key not configured")
         model_override = kwargs.pop("model", None)
+        effort = validate_effort("claude", kwargs.pop("effort", None))
         model_name = model_override or config.CLAUDE_MODEL
+        if effort:
+            output_config = dict(kwargs.pop("output_config", {}) or {})
+            output_config["effort"] = effort
+            kwargs["output_config"] = output_config
         
         # Convert our message format to Anthropic format
         formatted_messages = []
@@ -94,7 +105,7 @@ class ClaudeProvider(BaseAIProvider):
             else:
                 formatted_messages.append({
                     "role": msg.role,
-                    "content": msg.content
+                    "content": self._format_content(msg)
                 })
         
         # Stream the response
@@ -116,3 +127,29 @@ class ClaudeProvider(BaseAIProvider):
     def get_model_name(self) -> str:
         """Get the Claude model name"""
         return config.CLAUDE_MODEL
+
+    def _format_content(self, msg: AIMessage):
+        images = (msg.metadata or {}).get("images") or []
+        if not images:
+            return msg.content
+        content = [{"type": "text", "text": msg.content}]
+        for image in images:
+            if image.get("url"):
+                content.append({
+                    "type": "image",
+                    "source": {"type": "url", "url": image["url"]},
+                })
+                continue
+            mime_type = image.get("mime_type")
+            data = image.get("data_base64")
+            if not mime_type or not data:
+                raise ValueError("Claude image input requires url or mime_type with data_base64")
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": data,
+                },
+            })
+        return content

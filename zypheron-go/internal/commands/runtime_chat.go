@@ -18,10 +18,15 @@ func runRuntimeChatTurn(
 	maxTokens int,
 	sessionID string,
 	allowInteractiveApproval bool,
+	options ...aibridge.ChatOptions,
 ) (*aibridge.ChatResponse, error) {
 	currentSessionID := sessionID
+	chatOptions := aibridge.ChatOptions{}
+	if len(options) > 0 {
+		chatOptions = options[0]
+	}
 	for {
-		resp, err := bridge.ChatDetailed(messages, provider, model, temperature, maxTokens, currentSessionID)
+		resp, err := bridge.ChatDetailedWithOptions(messages, provider, model, temperature, maxTokens, currentSessionID, chatOptions)
 		if err != nil {
 			return nil, err
 		}

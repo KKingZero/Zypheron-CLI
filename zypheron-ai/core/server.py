@@ -400,6 +400,18 @@ class IPCServer:
             )
             for msg in messages_data
         ]
+        images = params.get('images') or []
+        if images:
+            if not messages:
+                raise ValueError("Image input requires a user message")
+            for msg in reversed(messages):
+                if msg.role == "user":
+                    metadata = dict(msg.metadata or {})
+                    metadata["images"] = images
+                    msg.metadata = metadata
+                    break
+            else:
+                raise ValueError("Image input requires a user message")
 
         policy_mode_value = str(params.get('policy_mode', PolicyMode.INTERACTIVE_SAFE.value)).strip().lower()
         try:
@@ -416,6 +428,9 @@ class IPCServer:
                 session_id=params.get('session_id'),
                 task_id=params.get('task_id'),
                 policy_mode=policy_mode,
+                effort=params.get('effort'),
+                mcp_config=params.get('mcp_config'),
+                mcp=params.get('mcp') or [],
             )
         )
         return response.to_result()
