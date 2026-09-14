@@ -41,7 +41,7 @@ class UsageSummaryResponse(BaseModel):
 class QuotaInfoResponse(BaseModel):
     """Comprehensive quota information for a user."""
 
-    tier: Literal["free", "starter", "pro", "enterprise", "unknown"]
+    tier: Literal["free", "cli_cloud", "starter", "pro", "enterprise", "unknown"]
     tokens_used: int = Field(..., description="Tokens used in current period")
     token_limit: int = Field(..., description="Token limit for current tier")
     tokens_remaining: int = Field(..., description="Remaining tokens in period")

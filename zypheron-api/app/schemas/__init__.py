@@ -18,6 +18,10 @@ from app.schemas.ai_proxy import (
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
+    CLITokenCreateRequest,
+    CLITokenCreateResponse,
+    CLITokenVerifyRequest,
+    CLITokenVerifyResponse,
     RegisterRequest,
     TokenResponse,
     UserResponse,
@@ -65,6 +69,10 @@ __all__ = [
     "LoginRequest",
     "RegisterRequest",
     "LoginResponse",
+    "CLITokenCreateRequest",
+    "CLITokenCreateResponse",
+    "CLITokenVerifyRequest",
+    "CLITokenVerifyResponse",
     "TokenResponse",
     "UserResponse",
     # Device schemas

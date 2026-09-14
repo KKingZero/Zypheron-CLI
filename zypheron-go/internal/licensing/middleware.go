@@ -48,7 +48,8 @@ func (m *LicenseMiddleware) RequireTokens(tokens int64) *LicenseMiddleware {
 
 // PreRunE returns a Cobra PreRunE function that validates license requirements
 // This is the main integration point - use it like:
-//   cmd.PreRunE = licensing.NewLicenseMiddleware().RequireFeature(licensing.FeatureAutopent).PreRunE()
+//
+//	cmd.PreRunE = licensing.NewLicenseMiddleware().RequireFeature(licensing.FeatureAutopent).PreRunE()
 func (m *LicenseMiddleware) PreRunE() func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		// Dev mode bypass — only available in devmode builds
@@ -62,7 +63,7 @@ func (m *LicenseMiddleware) PreRunE() func(cmd *cobra.Command, args []string) er
 		if m.requirePaid && !manager.IsPaidTier() {
 			return &FeatureLockedError{
 				Feature:      m.feature,
-				RequiredTier: TierStarter,
+				RequiredTier: TierCLICloud,
 				CurrentTier:  manager.GetTier(),
 				Message:      m.FormatUpgradePrompt(),
 			}
@@ -109,7 +110,7 @@ func (m *LicenseMiddleware) FormatUpgradePrompt() string {
 	// Get required tier
 	requiredTier := getMinTierForFeature(m.feature)
 	if requiredTier == TierFree {
-		requiredTier = TierStarter // Default to Starter for paid features
+		requiredTier = TierCLICloud // Default to CLI Cloud for paid features
 	}
 
 	return fmt.Sprintf(`
@@ -125,7 +126,7 @@ func (m *LicenseMiddleware) FormatUpgradePrompt() string {
 │  UPGRADE OPTIONS                                             │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  Starter ($29/mo)                                            │
+│  CLI Cloud ($20/mo)                                          │
 │    • 1M tokens/month                                         │
 │    • Cloud AI (Claude, OpenAI, DeepSeek)                    │
 │    • Exploitation & Autopent                                 │

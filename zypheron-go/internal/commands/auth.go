@@ -42,10 +42,44 @@ Commands:
 	cmd.AddCommand(LoginCmd())
 	cmd.AddCommand(LogoutCmd())
 	cmd.AddCommand(WhoamiCmd())
+	cmd.AddCommand(AuthTokenCmd())
 	cmd.AddCommand(AccountCmd())
 	cmd.AddCommand(BillingCmd())
 
 	return cmd
+}
+
+func AuthTokenCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "token <token>",
+		Short: "Store a Zypheron CLI Cloud token",
+		Long: `Validate and store a website-generated Zypheron CLI token.
+
+Create or revoke CLI tokens from your Zypheron account dashboard.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			token := strings.TrimSpace(args[0])
+			if token == "" {
+				return fmt.Errorf("token cannot be empty")
+			}
+
+			client := licensing.NewAPIClient()
+			resp, err := client.StoreVerifiedCLIToken(token)
+			if err != nil {
+				return fmt.Errorf("failed to store CLI token: %w", err)
+			}
+
+			fmt.Println(ui.SuccessMsg("Zypheron CLI token stored"))
+			fmt.Printf("  Email: %s\n", resp.User.Email)
+			if resp.Plan != "" {
+				fmt.Printf("  Plan:  %s\n", utils.Capitalize(strings.ReplaceAll(resp.Plan, "_", " ")))
+			}
+			if resp.TokensLimit > 0 {
+				fmt.Printf("  Tokens: %s remaining\n", formatTokens(resp.TokensRemaining))
+			}
+			return nil
+		},
+	}
 }
 
 // LoginCmd returns the login command

@@ -49,6 +49,8 @@ func runLicenseStatus() error {
 	// Plan tier
 	tierColor := ui.Muted
 	switch license.Tier {
+	case licensing.TierCLICloud:
+		tierColor = ui.Accent
 	case licensing.TierStarter:
 		tierColor = ui.Accent
 	case licensing.TierPro:

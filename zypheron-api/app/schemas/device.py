@@ -96,7 +96,7 @@ class DeviceListResponse(BaseModel):
 class DeviceLimitInfo(BaseModel):
     """Device limit information per tier."""
 
-    tier: Literal["free", "starter", "pro", "enterprise"]
+    tier: Literal["free", "cli_cloud", "starter", "pro", "enterprise"]
     limit: int = Field(..., description="Maximum number of devices allowed")
     current: int = Field(..., description="Current number of active devices")
     remaining: int = Field(..., description="Remaining device slots")
@@ -107,6 +107,7 @@ class DeviceLimitInfo(BaseModel):
 DEVICE_LIMITS = {
     "free": 1,
     "starter": 2,
+    "cli_cloud": 2,
     "pro": 3,
     "enterprise": 999999,  # Effectively unlimited
 }

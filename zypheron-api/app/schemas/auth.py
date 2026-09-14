@@ -79,7 +79,7 @@ class UserResponse(BaseModel):
 
     id: int
     email: str
-    tier: Literal["free", "starter", "pro", "enterprise"] = Field(
+    tier: Literal["free", "cli_cloud", "starter", "pro", "enterprise"] = Field(
         default="free",
         description="Subscription tier",
     )
@@ -99,6 +99,39 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int | None = None
+
+
+class CLITokenCreateRequest(BaseModel):
+    """Request to create an opaque CLI token for the current user."""
+
+    name: str = Field(default="Zypheron CLI", max_length=100)
+
+
+class CLITokenCreateResponse(BaseModel):
+    """Response containing a one-time visible raw CLI token."""
+
+    token: str
+    token_type: str = "bearer"
+    name: str
+    user: UserResponse
+
+
+class CLITokenVerifyRequest(BaseModel):
+    """Request to verify a manually supplied CLI token."""
+
+    token: str = Field(..., min_length=20, max_length=256)
+
+
+class CLITokenVerifyResponse(BaseModel):
+    """CLI token verification response."""
+
+    valid: bool
+    user: UserResponse | None = None
+    plan: str | None = None
+    status: str | None = None
+    tokens_used: int | None = None
+    tokens_limit: int | None = None
+    tokens_remaining: int | None = None
 
 
 class GitHubOAuthCallback(BaseModel):

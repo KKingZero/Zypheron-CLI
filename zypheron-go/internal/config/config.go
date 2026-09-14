@@ -18,6 +18,8 @@ type AIProvider string
 const (
 	// AIProviderOllama represents local Ollama installation
 	AIProviderOllama AIProvider = "ollama"
+	// AIProviderZypheronCloud represents Zypheron-hosted cloud inference
+	AIProviderZypheronCloud AIProvider = "zypheron-cloud"
 	// AIProviderAnthropic represents Anthropic Claude API
 	AIProviderAnthropic AIProvider = "anthropic"
 	// AIProviderOpenAI represents OpenAI API
@@ -194,6 +196,8 @@ func (c *Config) loadFromEnv() {
 		switch val {
 		case "ollama":
 			c.AI.Provider = AIProviderOllama
+		case "zypheron-cloud":
+			c.AI.Provider = AIProviderZypheronCloud
 		case "anthropic":
 			c.AI.Provider = AIProviderAnthropic
 		case "openai":
@@ -352,7 +356,7 @@ func (c *Config) Validate() error {
 		if c.AI.OllamaModel == "" {
 			return errors.ConfigError("Ollama model must be specified when using Ollama provider")
 		}
-	case AIProviderAnthropic, AIProviderOpenAI, AIProviderGemini, AIProviderKimi, AIProviderDeepSeek, AIProviderGrok:
+	case AIProviderZypheronCloud, AIProviderAnthropic, AIProviderOpenAI, AIProviderGemini, AIProviderKimi, AIProviderDeepSeek, AIProviderGrok:
 		// Cloud providers may be authenticated through the Python engine's secure keyring.
 	case "":
 		return errors.ConfigError("AI provider must be specified")
@@ -517,7 +521,7 @@ func (c *Config) SetAIProvider(provider AIProvider) error {
 	defer c.mu.Unlock()
 
 	switch provider {
-	case AIProviderOllama, AIProviderAnthropic, AIProviderOpenAI, AIProviderGemini, AIProviderKimi, AIProviderDeepSeek, AIProviderGrok:
+	case AIProviderOllama, AIProviderZypheronCloud, AIProviderAnthropic, AIProviderOpenAI, AIProviderGemini, AIProviderKimi, AIProviderDeepSeek, AIProviderGrok:
 		c.AI.Provider = provider
 		return nil
 	default:

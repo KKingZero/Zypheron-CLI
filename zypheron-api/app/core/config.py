@@ -127,12 +127,14 @@ class Settings(BaseSettings):
     # Rate Limiting
     enable_rate_limiting: bool = True  # Master switch for rate limiting
     rate_limit_free: int = 10  # requests per minute
+    rate_limit_cli_cloud: int = 60
     rate_limit_starter: int = 60
     rate_limit_pro: int = 120
     rate_limit_enterprise: int = 300
 
     # Token Limits (monthly)
     token_limit_free: int = 0  # BYOK only
+    token_limit_cli_cloud: int = 1_000_000
     token_limit_starter: int = 1_000_000
     token_limit_pro: int = 3_000_000
     token_limit_enterprise: int = 15_000_000  # per 5 users
@@ -147,6 +149,7 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str | None = None
     stripe_publishable_key: str | None = None
     # Monthly price IDs
+    stripe_price_id_cli_cloud_monthly: str | None = None
     stripe_price_id_starter_monthly: str | None = None
     stripe_price_id_pro_monthly: str | None = None
     stripe_price_id_enterprise_monthly: str | None = None
@@ -157,6 +160,7 @@ class Settings(BaseSettings):
     stripe_payment_grace_period_days: int = 3
 
     # Legacy pricing values retained for compatibility with older configs
+    price_cli_cloud_monthly: int = 2000  # $20
     price_starter_monthly: int = 2900  # $29
     price_starter_annual: int = 26100  # $261 (25% off $348)
     price_pro_monthly: int = 14900  # $149

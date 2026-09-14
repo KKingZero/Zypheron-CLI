@@ -206,6 +206,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     # Rate limits per tier (requests per minute)
     RATE_LIMITS = {
         "free": 10,
+        "cli_cloud": 60,
         "starter": 60,
         "pro": 120,
         "enterprise": 300,

@@ -71,36 +71,42 @@ _load_balancer: AILoadBalancer | None = None
 PROVIDER_RATE_LIMITS = {
     "ollama": {
         "free": -1,  # Unlimited (local, no cost)
+        "cli_cloud": -1,
         "starter": -1,
         "pro": -1,
         "enterprise": -1,
     },
     "openai_gpt4": {  # GPT-4o and similar expensive models
         "free": 0,  # Free tier can't use cloud providers
+        "cli_cloud": 30,
         "starter": 30,
         "pro": 60,
         "enterprise": 120,
     },
     "openai_gpt35": {  # GPT-3.5 and cheaper models
         "free": 0,
+        "cli_cloud": 60,
         "starter": 60,
         "pro": 120,
         "enterprise": 240,
     },
     "anthropic": {  # All Claude models
         "free": 0,
+        "cli_cloud": 30,
         "starter": 30,
         "pro": 60,
         "enterprise": 120,
     },
     "deepseek": {
         "free": 0,
+        "cli_cloud": 60,
         "starter": 60,
         "pro": 120,
         "enterprise": 240,
     },
     "grok": {
         "free": 0,
+        "cli_cloud": 30,
         "starter": 30,
         "pro": 60,
         "enterprise": 120,
@@ -521,6 +527,7 @@ async def _create_default_quota(user: User, db: AsyncSession) -> UserQuota:
 
     Tier limits:
     - free: 0 tokens (Ollama only)
+    - cli_cloud: 1M tokens/month
     - starter: 1M tokens/month
     - pro: 3M tokens/month
     - enterprise: 15M tokens/month
@@ -534,6 +541,7 @@ async def _create_default_quota(user: User, db: AsyncSession) -> UserQuota:
     """
     tier_limits = {
         "free": 0,
+        "cli_cloud": 1_000_000,
         "starter": 1_000_000,
         "pro": 3_000_000,
         "enterprise": 15_000_000,

@@ -43,6 +43,7 @@ MODEL_ENCODINGS = {
 # Tier to token limit mapping
 TIER_TOKEN_LIMITS = {
     "free": settings.token_limit_free,
+    "cli_cloud": settings.token_limit_cli_cloud,
     "starter": settings.token_limit_starter,
     "pro": settings.token_limit_pro,
     "enterprise": settings.token_limit_enterprise,
@@ -335,7 +336,7 @@ class TokenTrackingService:
     async def initialize_user_quota(
         self,
         user_id: int,
-        tier: Literal["free", "starter", "pro", "enterprise"] = "free",
+        tier: Literal["free", "cli_cloud", "starter", "pro", "enterprise"] = "free",
         byok_enabled: bool = False,
         enterprise_pool_id: str | None = None,
     ) -> UserQuota:

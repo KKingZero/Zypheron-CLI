@@ -148,7 +148,7 @@ func FormatUpgradePrompt(feature string) string {
 ┌─────────────────────────────────────────────────────────────────┐
 │  Upgrade to unlock %s
 │                                                                 │
-│  Starter ($29/mo):      Cloud AI + Exploitation                │
+│  CLI Cloud ($20/mo):    Hosted cloud AI                        │
 │  Pro ($149/mo):         3M tokens + All features               │
 │  Enterprise ($500/seat): Teams + Compliance (min 5 seats)      │
 │                                                                 │
@@ -208,7 +208,7 @@ func PrintFeatureMatrix() string {
 	sb.WriteString("╔═══════════════════════════════════════════════════════════════╗\n")
 	sb.WriteString("║                    FEATURE COMPARISON                          ║\n")
 	sb.WriteString("╠═══════════════════════════════════════════════════════════════╣\n")
-	sb.WriteString("║ Feature              │ Free │ Starter │ Pro │ Enterprise      ║\n")
+	sb.WriteString("║ Feature              │ Free │ Cloud │ Pro │ Enterprise        ║\n")
 	sb.WriteString("╠═══════════════════════════════════════════════════════════════╣\n")
 	sb.WriteString("║ Network Scanning     │  ✓   │    ✓    │  ✓  │      ✓          ║\n")
 	sb.WriteString("║ Web Scanning         │  ✓   │    ✓    │  ✓  │      ✓          ║\n")
@@ -221,7 +221,7 @@ func PrintFeatureMatrix() string {
 	sb.WriteString("║ Audit Logs           │  ✗   │    ✗    │  ✗  │      ✓          ║\n")
 	sb.WriteString("╠═══════════════════════════════════════════════════════════════╣\n")
 	sb.WriteString("║ Tokens/month         │  0   │   1M    │ 3M  │  15M/user       ║\n")
-	sb.WriteString("║ Price                │ $0   │  $29    │$149 │ $500/seat       ║\n")
+	sb.WriteString("║ Price                │ $0   │  $20  │$149 │ $500/seat         ║\n")
 	sb.WriteString("╚═══════════════════════════════════════════════════════════════╝\n")
 
 	return sb.String()

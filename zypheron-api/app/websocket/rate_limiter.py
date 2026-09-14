@@ -121,6 +121,7 @@ def get_rate_limit_for_tier(tier: str) -> int:
     """
     tier_limits = {
         "free": 100,  # 100 messages/minute for free tier
+        "cli_cloud": 200,  # 200 messages/minute for CLI Cloud
         "starter": 200,  # 200 messages/minute for starter
         "pro": 500,  # 500 messages/minute for pro
         "enterprise": 1000,  # 1000 messages/minute for enterprise

@@ -112,6 +112,21 @@ type DeviceLoginResponse struct {
 	RefreshToken string `json:"refresh_token,omitempty"`
 	UserID       string `json:"user_id,omitempty"`
 	Email        string `json:"email,omitempty"`
+	Tier         string `json:"tier,omitempty"`
+}
+
+type CLITokenVerifyResponse struct {
+	Valid bool `json:"valid"`
+	User  struct {
+		ID    int    `json:"id"`
+		Email string `json:"email"`
+		Tier  string `json:"tier"`
+	} `json:"user"`
+	Plan            string `json:"plan"`
+	Status          string `json:"status"`
+	TokensUsed      int64  `json:"tokens_used"`
+	TokensLimit     int64  `json:"tokens_limit"`
+	TokensRemaining int64  `json:"tokens_remaining"`
 }
 
 // RequestDeviceCode initiates device auth flow and returns full response
@@ -154,7 +169,7 @@ func (c *APIClient) PollDeviceAuth(deviceCode string) (*DeviceLoginResponse, err
 	}
 
 	var resp DeviceLoginResponse
-	if err := c.post("/auth/device/login", req, &resp); err != nil {
+	if err := c.post("/auth/device/token", req, &resp); err != nil {
 		return nil, err
 	}
 
@@ -172,6 +187,30 @@ func (c *APIClient) PollDeviceAuth(deviceCode string) (*DeviceLoginResponse, err
 		// Fetch license
 		c.FetchLicense()
 	}
+
+	return &resp, nil
+}
+
+// StoreVerifiedCLIToken validates and stores a website-generated opaque CLI token.
+func (c *APIClient) StoreVerifiedCLIToken(token string) (*CLITokenVerifyResponse, error) {
+	req := map[string]string{"token": token}
+
+	var resp CLITokenVerifyResponse
+	if err := c.post("/auth/cli-token/verify", req, &resp); err != nil {
+		return nil, err
+	}
+	if !resp.Valid {
+		return nil, fmt.Errorf("token is invalid, expired, or revoked")
+	}
+
+	session := &AuthSession{
+		AccessToken: token,
+		ExpiresAt:   time.Now().Add(365 * 24 * time.Hour),
+		UserID:      fmt.Sprintf("%d", resp.User.ID),
+		Email:       resp.User.Email,
+	}
+	c.manager.SetSession(session)
+	_ = c.FetchLicense()
 
 	return &resp, nil
 }
@@ -208,6 +247,7 @@ func (c *APIClient) RefreshToken() error {
 // LicenseValidationResponse from API
 type LicenseValidationResponse struct {
 	Valid           bool     `json:"valid"`
+	IsValid         bool     `json:"is_valid"`
 	Tier            string   `json:"tier"`
 	Status          string   `json:"status"`
 	TokensRemaining int64    `json:"tokens_remaining"`
@@ -217,6 +257,7 @@ type LicenseValidationResponse struct {
 	DevicesLimit    int      `json:"devices_limit"`
 	Features        []string `json:"features"`
 	ExpiresAt       string   `json:"expires_at"`
+	ValidUntil      string   `json:"valid_until"`
 	OfflineToken    string   `json:"offline_token,omitempty"`
 }
 
@@ -228,12 +269,16 @@ func (c *APIClient) FetchLicense() error {
 		return err
 	}
 
-	if !resp.Valid {
+	if !resp.Valid && !resp.IsValid {
 		return fmt.Errorf("license not valid")
 	}
 
 	// Parse expiry
-	expiresAt, _ := time.Parse(time.RFC3339, resp.ExpiresAt)
+	expiry := resp.ExpiresAt
+	if expiry == "" {
+		expiry = resp.ValidUntil
+	}
+	expiresAt, _ := time.Parse(time.RFC3339, expiry)
 
 	// Convert features
 	features := make([]Feature, len(resp.Features))
@@ -249,10 +294,16 @@ func (c *APIClient) FetchLicense() error {
 		userID = session.UserID
 	}
 
+	tier := Tier(resp.Tier)
+	tierConfig, ok := TierConfigs[tier]
+	if !ok {
+		tierConfig = TierConfigs[TierFree]
+	}
+
 	license := &License{
 		UserID:          userID,
 		Email:           email,
-		Tier:            Tier(resp.Tier),
+		Tier:            tier,
 		Features:        features,
 		TokensRemaining: resp.TokensRemaining,
 		TokensUsed:      resp.TokensUsed,
@@ -260,10 +311,45 @@ func (c *APIClient) FetchLicense() error {
 		ExpiresAt:       expiresAt,
 		IssuedAt:        time.Now(),
 		DeviceID:        c.manager.GetDeviceID(),
-		OfflineDays:     TierConfigs[Tier(resp.Tier)].OfflineDays,
+		OfflineDays:     tierConfig.OfflineDays,
 	}
 
 	c.manager.SetLicense(license)
+	return nil
+}
+
+func (r *LicenseValidationResponse) UnmarshalJSON(data []byte) error {
+	type Alias LicenseValidationResponse
+	aux := struct {
+		Features json.RawMessage `json:"features"`
+		*Alias
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if len(aux.Features) == 0 {
+		return nil
+	}
+
+	var names []string
+	if err := json.Unmarshal(aux.Features, &names); err == nil {
+		r.Features = names
+		return nil
+	}
+
+	var featureResponse struct {
+		Features map[string]bool `json:"features"`
+	}
+	if err := json.Unmarshal(aux.Features, &featureResponse); err != nil {
+		return nil
+	}
+	for name, enabled := range featureResponse.Features {
+		if enabled {
+			r.Features = append(r.Features, name)
+		}
+	}
 	return nil
 }
 
@@ -290,6 +376,40 @@ func (c *APIClient) ReportUsage(tokens int64, provider, action string) error {
 	}
 
 	return c.post("/tokens/usage", req, nil)
+}
+
+type CloudChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type CloudChatRequest struct {
+	Messages    []CloudChatMessage `json:"messages"`
+	Model       string             `json:"model,omitempty"`
+	Temperature float64            `json:"temperature"`
+	MaxTokens   int                `json:"max_tokens,omitempty"`
+	Metadata    map[string]string  `json:"metadata,omitempty"`
+}
+
+type CloudChatResponse struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	Content  string `json:"content"`
+	Usage    struct {
+		PromptTokens     int64 `json:"prompt_tokens"`
+		CompletionTokens int64 `json:"completion_tokens"`
+		TotalTokens      int64 `json:"total_tokens"`
+	} `json:"usage"`
+	LatencyMS int  `json:"latency_ms"`
+	Cached    bool `json:"cached"`
+}
+
+func (c *APIClient) CloudChat(req CloudChatRequest) (*CloudChatResponse, error) {
+	var resp CloudChatResponse
+	if err := c.post("/ai/chat", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // ============ Devices ============

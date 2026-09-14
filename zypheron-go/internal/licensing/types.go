@@ -10,6 +10,7 @@ type Tier string
 
 const (
 	TierFree       Tier = "free"
+	TierCLICloud   Tier = "cli_cloud"
 	TierStarter    Tier = "starter"
 	TierPro        Tier = "pro"
 	TierEnterprise Tier = "enterprise"
@@ -64,11 +65,11 @@ type License struct {
 
 // TierConfig defines token limits and features per tier
 type TierConfig struct {
-	TokenLimit   int64
-	Features     []Feature
-	DeviceLimit  int
-	OfflineDays  int
-	Description  string
+	TokenLimit  int64
+	Features    []Feature
+	DeviceLimit int
+	OfflineDays int
+	Description string
 }
 
 // TierConfigs maps tiers to their configurations
@@ -79,6 +80,13 @@ var TierConfigs = map[Tier]TierConfig{
 		DeviceLimit: 1,
 		OfflineDays: -1, // Unlimited — free tier has no license to expire
 		Description: "Free - Scanning & Self-hosted AI",
+	},
+	TierCLICloud: {
+		TokenLimit:  1_000_000,
+		Features:    []Feature{FeatureCloudAI},
+		DeviceLimit: 2,
+		OfflineDays: 7,
+		Description: "CLI Cloud - Hosted AI",
 	},
 	TierStarter: {
 		TokenLimit:  1_000_000,
@@ -136,10 +144,10 @@ type Device struct {
 
 // FeatureLockedError is returned when accessing a gated feature
 type FeatureLockedError struct {
-	Feature     Feature
+	Feature      Feature
 	RequiredTier Tier
 	CurrentTier  Tier
-	Message     string
+	Message      string
 }
 
 func (e *FeatureLockedError) Error() string {

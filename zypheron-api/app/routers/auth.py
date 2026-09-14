@@ -33,6 +33,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.device_code import DeviceCode
+from app.models.cli_token import CLIToken
 from app.models.license import License
 from app.models.session import Session
 from app.models.user import User
@@ -41,6 +42,10 @@ from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
     RegisterRequest,
+    CLITokenCreateRequest,
+    CLITokenCreateResponse,
+    CLITokenVerifyRequest,
+    CLITokenVerifyResponse,
     TokenResponse,
     UserResponse,
 )
@@ -63,6 +68,7 @@ LOCKOUT_DURATION_MINUTES = 15
 # AUTH-H4: Session limits per tier
 SESSION_LIMITS = {
     "free": 2,
+    "cli_cloud": 5,
     "starter": 5,
     "pro": 10,
     "enterprise": None,  # Unlimited
@@ -138,6 +144,52 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def generate_cli_token() -> str:
+    """Generate a cryptographically random opaque CLI token."""
+    return f"zyp_cli_live_{secrets.token_urlsafe(36)}"
+
+
+async def create_cli_token_for_user(
+    user: User,
+    db: AsyncSession,
+    name: str = "Zypheron CLI",
+) -> str:
+    """Create and persist a hashed opaque CLI token."""
+    for _ in range(10):
+        raw_token = generate_cli_token()
+        token_hash = hash_token(raw_token)
+        stmt = select(CLIToken).where(CLIToken.token_hash == token_hash)
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none() is None:
+            db.add(CLIToken(user_id=user.id, token_hash=token_hash, name=name))
+            return raw_token
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Failed to create CLI token. Please try again.",
+    )
+
+
+async def get_user_for_cli_token(token: str, db: AsyncSession) -> User | None:
+    """Resolve an opaque CLI token to an active user."""
+    token_hash = hash_token(token)
+    stmt = select(CLIToken).where(CLIToken.token_hash == token_hash)
+    result = await db.execute(stmt)
+    cli_token = result.scalar_one_or_none()
+
+    if not cli_token or not cli_token.is_valid():
+        return None
+
+    stmt = select(User).where(User.id == cli_token.user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        return None
+
+    cli_token.mark_used()
+    return user
+
+
 # Dependency to get current user from JWT token
 async def get_current_user(
     request: Request,
@@ -179,6 +231,9 @@ async def get_current_user(
     session = result.scalar_one_or_none()
 
     if not session or not session.is_valid():
+        cli_user = await get_user_for_cli_token(token, db)
+        if cli_user:
+            return cli_user
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -774,6 +829,97 @@ async def get_current_user_info(current_user: CurrentUser) -> UserResponse:
     return UserResponse.model_validate(current_user)
 
 
+@router.post("/cli-token", response_model=CLITokenCreateResponse)
+async def create_cli_token(
+    request: CLITokenCreateRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> CLITokenCreateResponse:
+    """Create a revocable opaque token for CLI cloud access."""
+    token = await create_cli_token_for_user(current_user, db, request.name)
+    return CLITokenCreateResponse(
+        token=token,
+        name=request.name,
+        user=UserResponse.model_validate(current_user),
+    )
+
+
+@router.post("/cli-token/verify", response_model=CLITokenVerifyResponse)
+async def verify_cli_token(
+    request: CLITokenVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+) -> CLITokenVerifyResponse:
+    """Verify a manually supplied opaque CLI token before local storage."""
+    user = await get_user_for_cli_token(request.token, db)
+    if not user:
+        return CLITokenVerifyResponse(valid=False)
+
+    token_service = TokenTrackingService(db)
+    quota_info = await token_service.get_quota_info(user.id)
+
+    return CLITokenVerifyResponse(
+        valid=True,
+        user=UserResponse.model_validate(user),
+        plan=user.tier,
+        status="active" if user.is_active else "inactive",
+        tokens_used=quota_info.get("tokens_used"),
+        tokens_limit=quota_info.get("token_limit"),
+        tokens_remaining=quota_info.get("tokens_remaining"),
+    )
+
+
+@router.get("/cli-token")
+async def list_cli_tokens(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """List CLI tokens for the current account without exposing raw tokens."""
+    stmt = (
+        select(CLIToken)
+        .where(CLIToken.user_id == current_user.id)
+        .order_by(CLIToken.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    tokens = result.scalars().all()
+
+    return {
+        "tokens": [
+            {
+                "id": token.id,
+                "name": token.name,
+                "last_used_at": token.last_used_at,
+                "expires_at": token.expires_at,
+                "revoked_at": token.revoked_at,
+                "created_at": token.created_at,
+            }
+            for token in tokens
+        ]
+    }
+
+
+@router.delete("/cli-token/{token_id}")
+async def revoke_cli_token(
+    token_id: int,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Revoke one CLI token owned by the current account."""
+    stmt = select(CLIToken).where(
+        CLIToken.id == token_id,
+        CLIToken.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    token = result.scalar_one_or_none()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="CLI token not found",
+        )
+
+    token.revoked_at = datetime.now(timezone.utc)
+    return {"revoked": True, "id": token.id}
+
+
 # Helper function for cleanup
 async def cleanup_expired_codes(db: AsyncSession) -> int:
     """Delete expired device codes from the database.
@@ -1022,16 +1168,9 @@ async def poll_device_token(
                 byok_enabled=False,
             )
 
-        # Create JWT token
-        token_data = {"sub": str(user.id), "email": user.email}
-        access_token = create_access_token(token_data)
-
-        # Create session record with hashed token for security
-        new_session = Session(
-            user_id=user.id,
-            token=hash_token(access_token),
-        )
-        db.add(new_session)
+        # Create an opaque CLI token instead of handing a browser/session JWT to
+        # the open-source CLI.
+        access_token = await create_cli_token_for_user(user, db)
 
         # Mark device code as used by deleting it (or you could keep it for audit)
         # For now, we'll keep it for audit trail but could delete it

@@ -77,7 +77,7 @@ func runUpgradeWizard() error {
 	planPrompt := &survey.Select{
 		Message: "Select a plan:",
 		Options: []string{
-			"Starter ($29/mo) - Cloud AI + Exploitation",
+			"CLI Cloud ($20/mo) - Hosted CLI AI",
 			"Pro ($149/mo) - 5M tokens + Priority Support",
 			"Enterprise ($499/user/mo) - Teams + Compliance",
 			"View pricing details",
@@ -91,8 +91,8 @@ func runUpgradeWizard() error {
 	}
 
 	switch {
-	case strings.HasPrefix(selection, "Starter"):
-		return startCheckout("starter")
+	case strings.HasPrefix(selection, "CLI Cloud"):
+		return startCheckout("cli_cloud")
 	case strings.HasPrefix(selection, "Pro"):
 		return startCheckout("pro")
 	case strings.HasPrefix(selection, "Enterprise"):
@@ -161,13 +161,13 @@ func showPricingDetails() error {
 	fmt.Println(ui.Primary.Sprint("║                    PRICING DETAILS                              ║"))
 	fmt.Println(ui.Primary.Sprint("╚═══════════════════════════════════════════════════════════════╝\n"))
 
-	fmt.Println(ui.Accent.Sprint("STARTER - $29/month"))
+	fmt.Println(ui.Accent.Sprint("CLI CLOUD - $20/month"))
 	fmt.Println(ui.Separator(60))
-	fmt.Println("  Perfect for individual security researchers")
+	fmt.Println("  Hosted AI for the open-source CLI")
 	fmt.Println("  • 1,000,000 AI tokens/month")
-	fmt.Println("  • Cloud AI providers (Claude, GPT-4, etc.)")
-	fmt.Println("  • Exploitation and pwn tools")
-	fmt.Println("  • Automated pentesting (autopent)")
+	fmt.Println("  • Managed model routing")
+	fmt.Println("  • No local GPU required")
+	fmt.Println("  • Local and BYOK modes still available")
 	fmt.Println("  • 2 device licenses")
 	fmt.Println("  • Email support")
 	fmt.Println()
@@ -176,7 +176,7 @@ func showPricingDetails() error {
 	fmt.Println(ui.Separator(60))
 	fmt.Println("  For professional penetration testers")
 	fmt.Println("  • 5,000,000 AI tokens/month")
-	fmt.Println("  • Everything in Starter, plus:")
+	fmt.Println("  • Everything in CLI Cloud, plus:")
 	fmt.Println("  • Post-exploitation tools")
 	fmt.Println("  • Advanced reporting")
 	fmt.Println("  • 5 device licenses")
@@ -197,7 +197,6 @@ func showPricingDetails() error {
 	fmt.Println()
 
 	fmt.Println(ui.InfoMsg("Annual billing saves 20%"))
-	fmt.Println(ui.Muted.Sprint("  Starter: $278/year (save $70)"))
 	fmt.Println(ui.Muted.Sprint("  Pro: $1,430/year (save $358)"))
 	fmt.Println()
 
@@ -230,13 +229,13 @@ func upgradeCheckoutCmd() *cobra.Command {
 			plan := strings.ToLower(args[0])
 
 			switch plan {
-			case "starter", "pro", "enterprise":
+			case "cli_cloud", "starter", "pro", "enterprise":
 				if annual {
 					plan += "-annual"
 				}
 				return startCheckout(plan)
 			default:
-				fmt.Println(ui.Error("Invalid plan. Choose: starter, pro, or enterprise"))
+				fmt.Println(ui.Error("Invalid plan. Choose: cli_cloud, starter, pro, or enterprise"))
 				return nil
 			}
 		},

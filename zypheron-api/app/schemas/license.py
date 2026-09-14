@@ -23,7 +23,7 @@ class LicenseResponse(BaseModel):
 
     id: int
     user_id: int
-    tier: Literal["free", "starter", "pro", "enterprise"]
+    tier: Literal["free", "cli_cloud", "starter", "pro", "enterprise"]
     status: str = Field(..., description="Subscription status (active, canceled, etc.)")
     stripe_customer_id: str | None = None
     stripe_subscription_id: str | None = None
@@ -41,11 +41,17 @@ class LicenseValidateResponse(BaseModel):
     """
 
     is_valid: bool = Field(..., description="Whether license is currently valid")
-    tier: Literal["free", "starter", "pro", "enterprise"]
+    tier: Literal["free", "cli_cloud", "starter", "pro", "enterprise"]
     status: str = Field(..., description="Subscription status")
     valid_until: datetime | None = Field(None, description="License expiration date")
     days_remaining: int | None = Field(None, description="Days until expiration")
     features: "LicenseFeatures" = Field(..., description="Available features for tier")
+    tokens_remaining: int = 0
+    tokens_used: int = 0
+    tokens_limit: int = 0
+    devices_used: int = 0
+    devices_limit: int = 0
+    expires_at: datetime | None = None
 
 
 class LicenseFeatures(BaseModel):
@@ -54,7 +60,7 @@ class LicenseFeatures(BaseModel):
     Defines what features are available for each tier.
     """
 
-    tier: Literal["free", "starter", "pro", "enterprise"]
+    tier: Literal["free", "cli_cloud", "starter", "pro", "enterprise"]
 
     # Token limits (monthly)
     token_limit: int = Field(..., description="Monthly token limit")
@@ -142,6 +148,26 @@ def get_tier_features(tier: str) -> LicenseFeatures:
             cache_enabled=True,
             cache_ttl_minutes=15,
         ),
+        "cli_cloud": LicenseFeatures(
+            tier="cli_cloud",
+            token_limit=1_000_000,
+            tokens_included=True,
+            rate_limit=60,
+            max_devices=2,
+            available_providers=["openai", "anthropic", "grok", "deepseek"],
+            features={
+                "byok_required": False,
+                "caching": True,
+                "priority_support": False,
+                "advanced_scanning": False,
+                "websocket_streaming": True,
+                "cli_cloud_ai": True,
+                "ide_workflows": False,
+                "teams": False,
+            },
+            cache_enabled=True,
+            cache_ttl_minutes=15,
+        ),
         "pro": LicenseFeatures(
             tier="pro",
             token_limit=3_000_000,
@@ -196,7 +222,7 @@ class PortalSession(BaseModel):
 
 class SubscriptionCreate(BaseModel):
     """Schema for creating a new subscription."""
-    tier: Literal["starter", "pro", "enterprise"]
+    tier: Literal["cli_cloud", "starter", "pro", "enterprise"]
     billing_interval: BillingInterval = BillingInterval.MONTHLY
     success_url: str
     cancel_url: str

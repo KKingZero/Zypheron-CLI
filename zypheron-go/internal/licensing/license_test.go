@@ -188,7 +188,7 @@ func TestGetMinTierForFeature(t *testing.T) {
 		feature  Feature
 		expected Tier
 	}{
-		{FeatureCloudAI, TierStarter},
+		{FeatureCloudAI, TierCLICloud},
 		{FeatureAutopent, TierStarter},
 		{FeatureExploitation, TierStarter},
 		{FeatureTeams, TierEnterprise},

@@ -24,7 +24,8 @@ class License(Base):
 
     Tiers:
     - free: BYOK only, 1 device, no API keys provided
-    - starter: 1M tokens/month, 2 devices, 60 req/min
+    - cli_cloud: 1M tokens/month, 2 devices, 60 req/min
+    - starter: legacy paid CLI tier
     - pro: 3M tokens/month, 3 devices, 120 req/min
     - enterprise: 15M tokens/5 users, 500 devices, 300 req/min
 
@@ -150,4 +151,4 @@ class License(Base):
 
     def is_paid(self) -> bool:
         """Check if this is a paid tier."""
-        return self.tier in ["starter", "pro", "enterprise"]
+        return self.tier in ["cli_cloud", "starter", "pro", "enterprise"]

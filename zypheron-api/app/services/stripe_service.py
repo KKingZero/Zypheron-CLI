@@ -30,8 +30,9 @@ if settings.stripe_secret_key:
     stripe.api_key = settings.stripe_secret_key
 
 # Price ID to tier mapping (supports both monthly and annual)
-PRICE_TO_TIER: dict[str, Literal["starter", "pro", "enterprise"]] = {}
+PRICE_TO_TIER: dict[str, Literal["cli_cloud", "starter", "pro", "enterprise"]] = {}
 for _price_id, _tier in [
+    (settings.stripe_price_id_cli_cloud_monthly, "cli_cloud"),
     (settings.stripe_price_id_starter_monthly, "starter"),
     (settings.stripe_price_id_starter_annual, "starter"),
     (settings.stripe_price_id_pro_monthly, "pro"),
@@ -45,6 +46,7 @@ for _price_id, _tier in [
 # Price ID to billing interval mapping
 PRICE_TO_INTERVAL: dict[str, str] = {}
 for _price_id, _interval in [
+    (settings.stripe_price_id_cli_cloud_monthly, "monthly"),
     (settings.stripe_price_id_starter_monthly, "monthly"),
     (settings.stripe_price_id_starter_annual, "annual"),
     (settings.stripe_price_id_pro_monthly, "monthly"),
@@ -57,6 +59,7 @@ for _price_id, _interval in [
 
 # Tier + interval to price ID mapping
 TIER_INTERVAL_TO_PRICE: dict[tuple[str, str], str | None] = {
+    ("cli_cloud", "monthly"): settings.stripe_price_id_cli_cloud_monthly,
     ("starter", "monthly"): settings.stripe_price_id_starter_monthly,
     ("starter", "annual"): settings.stripe_price_id_starter_annual,
     ("pro", "monthly"): settings.stripe_price_id_pro_monthly,
@@ -67,6 +70,7 @@ TIER_INTERVAL_TO_PRICE: dict[tuple[str, str], str | None] = {
 
 # Legacy flat mapping (defaults to monthly)
 TIER_TO_PRICE: dict[str, str | None] = {
+    "cli_cloud": settings.stripe_price_id_cli_cloud_monthly,
     "starter": settings.stripe_price_id_starter_monthly,
     "pro": settings.stripe_price_id_pro_monthly,
     "enterprise": settings.stripe_price_id_enterprise_monthly,
@@ -154,7 +158,7 @@ class StripeService:
     async def create_checkout_session(
         self,
         user: User,
-        tier: Literal["starter", "pro", "enterprise"],
+        tier: Literal["cli_cloud", "starter", "pro", "enterprise"],
         success_url: str,
         cancel_url: str,
         billing_interval: str = "monthly",

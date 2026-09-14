@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import async_session_maker
+from app.models.cli_token import CLIToken
 from app.models.session import Session
 from app.models.user import User
 from app.services.token_tracking import TokenTrackingService
@@ -162,11 +163,19 @@ class TokenQuotaMiddleware:
                 result = await db.execute(stmt)
                 session = result.scalar_one_or_none()
 
-                if not session or not session.is_valid():
-                    return None
+                user_id = None
+                if session and session.is_valid():
+                    user_id = session.user_id
+                else:
+                    stmt = select(CLIToken).where(CLIToken.token_hash == token_hash)
+                    result = await db.execute(stmt)
+                    cli_token = result.scalar_one_or_none()
+                    if not cli_token or not cli_token.is_valid():
+                        return None
+                    user_id = cli_token.user_id
 
                 # Get user
-                stmt = select(User).where(User.id == session.user_id)
+                stmt = select(User).where(User.id == user_id)
                 result = await db.execute(stmt)
                 user = result.scalar_one_or_none()
 
@@ -191,8 +200,14 @@ class TokenQuotaMiddleware:
         if tier == "free":
             return (
                 "You've reached your free tier limit. "
-                "Upgrade to Starter ($9/month) for 1,000,000 tokens/month, "
+                "Upgrade to CLI Cloud ($20/month) for hosted AI access, "
                 "or enable BYOK to use your own API keys."
+            )
+        elif tier == "cli_cloud":
+            return (
+                "You've reached your CLI Cloud monthly token limit. "
+                "Your local CLI and BYOK providers still work, or you can upgrade "
+                "for higher hosted AI limits."
             )
         elif tier == "starter":
             return (

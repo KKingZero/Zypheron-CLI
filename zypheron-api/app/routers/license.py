@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.license import License
 from app.models.user import User
+from app.services.token_tracking import TokenTrackingService
 from app.routers.auth import CurrentUser
 from app.schemas.license import (
     BillingInterval,
@@ -143,6 +144,7 @@ async def validate_license(
 
     # Get features for tier
     features = get_tier_features(license.tier)
+    quota_info = await TokenTrackingService(db).get_quota_info(current_user.id)
 
     return LicenseValidateResponse(
         is_valid=is_valid,
@@ -151,6 +153,12 @@ async def validate_license(
         valid_until=license.valid_until,
         days_remaining=days_remaining,
         features=features,
+        tokens_remaining=quota_info.get("tokens_remaining", 0),
+        tokens_used=quota_info.get("tokens_used", 0),
+        tokens_limit=quota_info.get("token_limit", features.token_limit),
+        devices_used=0,
+        devices_limit=features.max_devices,
+        expires_at=license.valid_until,
     )
 
 
@@ -293,6 +301,7 @@ async def get_all_tiers() -> dict[str, LicenseFeatures]:
     """
     return {
         "free": get_tier_features("free"),
+        "cli_cloud": get_tier_features("cli_cloud"),
         "starter": get_tier_features("starter"),
         "pro": get_tier_features("pro"),
         "enterprise": get_tier_features("enterprise"),
@@ -331,7 +340,7 @@ async def initiate_upgrade(
     _validate_redirect_url(cancel_url, "cancel_url")
 
     # Validate tier
-    valid_paid_tiers = ["starter", "pro", "enterprise"]
+    valid_paid_tiers = ["cli_cloud", "starter", "pro", "enterprise"]
     if tier not in valid_paid_tiers:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -532,6 +541,13 @@ async def get_prices() -> dict:
                 "tokens": settings.token_limit_starter,
                 "devices": 2,
                 "features": ["Everything in Free", "Cloud AI", "Exploitation", "PDF Reports"],
+            },
+            "cli_cloud": {
+                "monthly": settings.price_cli_cloud_monthly / 100,
+                "annual": None,
+                "tokens": settings.token_limit_cli_cloud,
+                "devices": 2,
+                "features": ["Hosted CLI AI", "Managed model routing", "Local and BYOK fallback"],
             },
             "pro": {
                 "monthly": settings.price_pro_monthly / 100,

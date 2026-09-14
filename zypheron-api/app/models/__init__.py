@@ -5,6 +5,7 @@ All models use SQLAlchemy 2.0+ async patterns and inherit from Base.
 
 from app.models.device import Device
 from app.models.device_code import DeviceCode
+from app.models.cli_token import CLIToken
 from app.models.license import License
 from app.models.session import Session
 from app.models.token_usage import TokenUsage, UserQuota
@@ -15,6 +16,7 @@ __all__ = [
     "User",
     "Device",
     "DeviceCode",
+    "CLIToken",
     "License",
     "TokenUsage",
     "UserQuota",

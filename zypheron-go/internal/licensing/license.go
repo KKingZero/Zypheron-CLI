@@ -26,12 +26,12 @@ func Init() {
 
 // LicenseManager handles license validation and caching
 type LicenseManager struct {
-	license      *License
-	session      *AuthSession
-	storage      *Storage
-	mu           sync.RWMutex
-	offlineMode  bool
-	lastSync     time.Time
+	license     *License
+	session     *AuthSession
+	storage     *Storage
+	mu          sync.RWMutex
+	offlineMode bool
+	lastSync    time.Time
 }
 
 // GetManager returns the singleton license manager instance
@@ -173,7 +173,7 @@ func (m *LicenseManager) GetTier() Tier {
 // IsPaidTier returns true if user has a paid subscription
 func (m *LicenseManager) IsPaidTier() bool {
 	tier := m.GetTier()
-	return tier == TierStarter || tier == TierPro || tier == TierEnterprise
+	return tier == TierCLICloud || tier == TierStarter || tier == TierPro || tier == TierEnterprise
 }
 
 // IsOffline returns true if operating in offline mode
@@ -420,7 +420,9 @@ func (m *LicenseManager) Refresh() error {
 // getMinTierForFeature returns the minimum tier required for a feature
 func getMinTierForFeature(feature Feature) Tier {
 	switch feature {
-	case FeatureCloudAI, FeatureAutopent, FeatureExploitation, FeaturePostExploit:
+	case FeatureCloudAI:
+		return TierCLICloud
+	case FeatureAutopent, FeatureExploitation, FeaturePostExploit:
 		return TierStarter
 	case FeatureTeams, FeatureCompliance, FeatureAuditLogs, FeatureAPIAccess, FeatureSSO:
 		return TierEnterprise
@@ -461,7 +463,8 @@ func formatFeatureLockedMessage(feature Feature, currentTier Tier) string {
 ║  Required plan: %s or higher
 ║                                                                    ║
 ║  Upgrade options:                                                  ║
-║    Starter     $29/mo       →  1M AI tokens + Exploitation        ║
+║    CLI Cloud   $20/mo       →  hosted AI for the CLI              ║
+║    Starter     $29/mo       →  exploitation workflows             ║
 ║    Pro         $149/mo      →  3M AI tokens + All features        ║
 ║    Enterprise  $500/mo/seat →  15M tokens + Teams (min 5 seats)   ║
 ║                                                                    ║

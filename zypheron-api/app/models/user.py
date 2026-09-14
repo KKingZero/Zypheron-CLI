@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.cli_token import CLIToken
     from app.models.device import Device
     from app.models.device_code import DeviceCode
     from app.models.license import License
@@ -124,6 +125,12 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",  # Eager load API keys (small dataset)
+    )
+    cli_tokens: Mapped[list["CLIToken"]] = relationship(
+        "CLIToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="noload",
     )
 
     def __repr__(self) -> str:
