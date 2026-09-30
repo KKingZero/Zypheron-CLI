@@ -31,12 +31,14 @@ jobs:
       - name: Install dependencies
         run: |
           cd zypheron-go
-          make deps
+          # Locked versions from go.sum; `make deps` upgrades to @latest
+          go mod download
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          # .golangci.yml is v1 format; v2 ("latest") rejects it
+          version: v1.64.8
           working-directory: zypheron-go
 
       - name: Run go vet
