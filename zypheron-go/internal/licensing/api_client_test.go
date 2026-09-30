@@ -150,8 +150,8 @@ func TestPollDeviceAuth_Pending(t *testing.T) {
 	}
 
 	server := newMockServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/auth/device/login" {
-			t.Errorf("Expected /api/v1/auth/device/login, got %s", r.URL.Path)
+		if r.URL.Path != "/api/v1/auth/device/token" {
+			t.Errorf("Expected /api/v1/auth/device/token, got %s", r.URL.Path)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -202,7 +202,7 @@ func TestPollDeviceAuth_Authorized(t *testing.T) {
 	server := newMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		if r.URL.Path == "/api/v1/auth/device/login" {
+		if r.URL.Path == "/api/v1/auth/device/token" {
 			json.NewEncoder(w).Encode(mockResp)
 		} else if r.URL.Path == "/api/v1/license/validate" {
 			licenseFetchCalled = true

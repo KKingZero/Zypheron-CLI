@@ -70,7 +70,9 @@ nfpms:
     package_name: zypheron
     ids:
       - zypheron-linux-package
-    file_name_template: "{{ .ConventionalFileName }}"
+    # Versionless so https://github.com/KKingZero/Zypheron-CLI/releases/latest/download/
+    # zypheron-linux-amd64.{deb,rpm} always points at the newest release.
+    file_name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     vendor: Zypheron
     homepage: https://github.com/KKingZero/Zypheron-CLI
     maintainer: Zypheron Maintainers <maintainers@zypheron.net>
@@ -112,6 +114,6 @@ changelog:
 release:
   github:
     owner: KKingZero
-    name: Cobra-AI
+    name: Zypheron-CLI
   draft: false
   prerelease: auto
