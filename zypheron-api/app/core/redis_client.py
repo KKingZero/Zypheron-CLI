@@ -77,7 +77,8 @@ class RedisClient:
                     socket_timeout=5,
                     retry_on_timeout=True,
                     health_check_interval=30,
-                    ssl=settings.redis_ssl if hasattr(settings, 'redis_ssl') else False,
+                    # ConnectionPool rejects ssl=; TLS is selected by connection class.
+                    **({"connection_class": aioredis.SSLConnection} if settings.redis_ssl else {}),
                 )
 
             self._client = aioredis.Redis(connection_pool=self._pool)

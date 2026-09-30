@@ -8,24 +8,87 @@ These tests verify:
 """
 
 import pytest
-from fastapi import HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.device import Device
+from app.core.security import create_access_token, hash_password
+from app.dependencies import OptionalDevice, ValidatedDevice
+from app.main import app
+from app.models.session import Session
 from app.models.user import User
+from app.routers.auth import hash_token
+
+
+# No production route uses the device dependencies yet; mount two probes so the
+# dependencies themselves are exercised through the real request pipeline.
+_probe = APIRouter()
+
+
+@_probe.get("/protected-endpoint")
+async def _protected(device: ValidatedDevice) -> dict:
+    return {"device_uuid": device.device_uuid}
+
+
+@_probe.get("/hybrid-endpoint")
+async def _hybrid(device: OptionalDevice) -> dict:
+    return {"device_uuid": device.device_uuid if device else None}
+
+
+app.include_router(_probe)
+
+
+async def _headers_for(db: AsyncSession, email: str, tier: str) -> dict[str, str]:
+    user = User(email=email, password_hash=hash_password("testpass123"), tier=tier, is_active=True)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    token = create_access_token({"sub": str(user.id), "email": user.email})
+    db.add(Session(user_id=user.id, token=hash_token(token)))
+    await db.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+async def free_user_headers(test_db):
+    return await _headers_for(test_db, "free@example.com", "free")
+
+
+@pytest.fixture
+async def starter_user_headers(test_db):
+    return await _headers_for(test_db, "starter@example.com", "starter")
+
+
+@pytest.fixture
+async def pro_user_headers(test_db):
+    return await _headers_for(test_db, "pro@example.com", "pro")
+
+
+@pytest.fixture
+async def enterprise_user_headers(test_db):
+    return await _headers_for(test_db, "enterprise@example.com", "enterprise")
+
+
+@pytest.fixture
+async def user1_headers(test_db):
+    return await _headers_for(test_db, "user1@example.com", "pro")
+
+
+@pytest.fixture
+async def user2_headers(test_db):
+    return await _headers_for(test_db, "user2@example.com", "pro")
 
 
 class TestDeviceRegistration:
     """Test device registration with tier-based limits."""
 
     @pytest.mark.asyncio
-    async def test_register_first_device_success(self, client, auth_headers, db_session):
+    async def test_register_first_device_success(self, client, auth_headers):
         """Test registering first device succeeds for all tiers."""
         response = await client.post(
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "device-uuid-1",
+                "device_uuid": "uuid-0000-device-uuid-1",
                 "device_name": "Test Device",
                 "platform": "linux",
                 "hostname": "test-machine",
@@ -39,14 +102,14 @@ class TestDeviceRegistration:
         assert data["is_active"] is True
 
     @pytest.mark.asyncio
-    async def test_free_tier_device_limit(self, client, free_user_headers, db_session):
+    async def test_free_tier_device_limit(self, client, free_user_headers):
         """Test free tier is limited to 1 device."""
         # Register first device - should succeed
         response = await client.post(
             "/devices/register",
             headers=free_user_headers,
             json={
-                "device_uuid": "free-device-1",
+                "device_uuid": "uuid-0000-free-device-1",
                 "device_name": "Device 1",
                 "platform": "linux",
             },
@@ -58,7 +121,7 @@ class TestDeviceRegistration:
             "/devices/register",
             headers=free_user_headers,
             json={
-                "device_uuid": "free-device-2",
+                "device_uuid": "uuid-0000-free-device-2",
                 "device_name": "Device 2",
                 "platform": "darwin",
             },
@@ -74,7 +137,7 @@ class TestDeviceRegistration:
         assert "Upgrade to Starter" in error["message"]
 
     @pytest.mark.asyncio
-    async def test_starter_tier_device_limit(self, client, starter_user_headers, db_session):
+    async def test_starter_tier_device_limit(self, client, starter_user_headers):
         """Test starter tier is limited to 2 devices."""
         # Register 2 devices - should succeed
         for i in range(2):
@@ -82,7 +145,7 @@ class TestDeviceRegistration:
                 "/devices/register",
                 headers=starter_user_headers,
                 json={
-                    "device_uuid": f"starter-device-{i}",
+                    "device_uuid": f"uuid-0000-starter-device-{i}",
                     "device_name": f"Device {i}",
                     "platform": "linux",
                 },
@@ -94,7 +157,7 @@ class TestDeviceRegistration:
             "/devices/register",
             headers=starter_user_headers,
             json={
-                "device_uuid": "starter-device-3",
+                "device_uuid": "uuid-0000-starter-device-3",
                 "device_name": "Device 3",
                 "platform": "win32",
             },
@@ -108,7 +171,7 @@ class TestDeviceRegistration:
         assert "Upgrade to Pro" in error["message"]
 
     @pytest.mark.asyncio
-    async def test_pro_tier_device_limit(self, client, pro_user_headers, db_session):
+    async def test_pro_tier_device_limit(self, client, pro_user_headers):
         """Test pro tier is limited to 3 devices."""
         # Register 3 devices - should succeed
         for i in range(3):
@@ -116,7 +179,7 @@ class TestDeviceRegistration:
                 "/devices/register",
                 headers=pro_user_headers,
                 json={
-                    "device_uuid": f"pro-device-{i}",
+                    "device_uuid": f"uuid-0000-pro-device-{i}",
                     "device_name": f"Device {i}",
                     "platform": "linux",
                 },
@@ -128,7 +191,7 @@ class TestDeviceRegistration:
             "/devices/register",
             headers=pro_user_headers,
             json={
-                "device_uuid": "pro-device-4",
+                "device_uuid": "uuid-0000-pro-device-4",
                 "device_name": "Device 4",
                 "platform": "darwin",
             },
@@ -142,7 +205,7 @@ class TestDeviceRegistration:
         assert "Upgrade to Enterprise" in error["message"]
 
     @pytest.mark.asyncio
-    async def test_enterprise_unlimited_devices(self, client, enterprise_user_headers, db_session):
+    async def test_enterprise_unlimited_devices(self, client, enterprise_user_headers):
         """Test enterprise tier has unlimited devices."""
         # Register 10 devices - all should succeed
         for i in range(10):
@@ -150,7 +213,7 @@ class TestDeviceRegistration:
                 "/devices/register",
                 headers=enterprise_user_headers,
                 json={
-                    "device_uuid": f"enterprise-device-{i}",
+                    "device_uuid": f"uuid-0000-enterprise-device-{i}",
                     "device_name": f"Device {i}",
                     "platform": "linux",
                 },
@@ -158,14 +221,14 @@ class TestDeviceRegistration:
             assert response.status_code == status.HTTP_201_CREATED
 
     @pytest.mark.asyncio
-    async def test_device_reactivation(self, client, auth_headers, db_session):
+    async def test_device_reactivation(self, client, auth_headers):
         """Test re-registering a deactivated device reactivates it."""
         # Register device
         response = await client.post(
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "reactivate-test",
+                "device_uuid": "uuid-0000-reactivate-test",
                 "device_name": "Test Device",
                 "platform": "linux",
             },
@@ -181,7 +244,7 @@ class TestDeviceRegistration:
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "reactivate-test",
+                "device_uuid": "uuid-0000-reactivate-test",
                 "device_name": "Reactivated Device",
                 "platform": "darwin",
             },
@@ -194,9 +257,9 @@ class TestDeviceRegistration:
         assert data["device_name"] == "Reactivated Device"
 
     @pytest.mark.asyncio
-    async def test_device_conflict_different_user(self, client, user1_headers, user2_headers, db_session):
+    async def test_device_conflict_different_user(self, client, user1_headers, user2_headers):
         """Test device UUID cannot be registered to multiple users."""
-        device_uuid = "shared-uuid-test"
+        device_uuid = "uuid-0000-shared-uuid-test"
 
         # User 1 registers device
         response = await client.post(
@@ -229,22 +292,22 @@ class TestDeviceManagement:
     """Test device management endpoints."""
 
     @pytest.mark.asyncio
-    async def test_list_devices(self, client, auth_headers, db_session):
-        """Test listing user's devices."""
+    async def test_list_devices(self, client, starter_user_headers):
+        """Test listing user's devices (starter tier allows 2)."""
         # Register 2 devices
         for i in range(2):
             await client.post(
                 "/devices/register",
-                headers=auth_headers,
+                headers=starter_user_headers,
                 json={
-                    "device_uuid": f"list-test-{i}",
+                    "device_uuid": f"uuid-0000-list-test-{i}",
                     "device_name": f"Device {i}",
                     "platform": "linux",
                 },
             )
 
         # List devices
-        response = await client.get("/devices", headers=auth_headers)
+        response = await client.get("/devices", headers=starter_user_headers)
         assert response.status_code == status.HTTP_200_OK
 
         data = response.json()
@@ -253,14 +316,14 @@ class TestDeviceManagement:
         assert len(data["devices"]) == 2
 
     @pytest.mark.asyncio
-    async def test_get_device_limit_info(self, client, auth_headers, db_session):
+    async def test_get_device_limit_info(self, client, auth_headers):
         """Test getting device limit information."""
-        # Register 1 device (assuming starter tier with limit 2)
+        # Register 1 device
         await client.post(
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "limit-test",
+                "device_uuid": "uuid-0000-limit-test",
                 "device_name": "Test Device",
                 "platform": "linux",
             },
@@ -279,14 +342,14 @@ class TestDeviceManagement:
         assert data["current"] == 1
 
     @pytest.mark.asyncio
-    async def test_deactivate_device(self, client, auth_headers, db_session):
+    async def test_deactivate_device(self, client, auth_headers):
         """Test deactivating a device."""
         # Register device
         response = await client.post(
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "deactivate-test",
+                "device_uuid": "uuid-0000-deactivate-test",
                 "device_name": "Test Device",
                 "platform": "linux",
             },
@@ -304,7 +367,7 @@ class TestDeviceManagement:
 
     @pytest.mark.asyncio
     async def test_cannot_deactivate_other_user_device(
-        self, client, user1_headers, user2_headers, db_session
+        self, client, user1_headers, user2_headers
     ):
         """Test users cannot deactivate other users' devices."""
         # User 1 registers device
@@ -312,7 +375,7 @@ class TestDeviceManagement:
             "/devices/register",
             headers=user1_headers,
             json={
-                "device_uuid": "user1-device",
+                "device_uuid": "uuid-0000-user1-device",
                 "device_name": "User 1 Device",
                 "platform": "linux",
             },
@@ -328,14 +391,14 @@ class TestDeviceValidation:
     """Test device validation dependencies."""
 
     @pytest.mark.asyncio
-    async def test_validated_device_success(self, client, auth_headers, db_session):
+    async def test_validated_device_success(self, client, auth_headers):
         """Test accessing protected endpoint with valid device."""
         # Register device
         response = await client.post(
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "valid-device",
+                "device_uuid": "uuid-0000-valid-device",
                 "device_name": "Valid Device",
                 "platform": "linux",
             },
@@ -344,13 +407,13 @@ class TestDeviceValidation:
         # Access protected endpoint with device header
         headers_with_device = {
             **auth_headers,
-            "X-Device-UUID": "valid-device",
+            "X-Device-UUID": "uuid-0000-valid-device",
         }
         response = await client.get("/protected-endpoint", headers=headers_with_device)
         # Should succeed (endpoint-specific assertions)
 
     @pytest.mark.asyncio
-    async def test_validated_device_missing_header(self, client, auth_headers, db_session):
+    async def test_validated_device_missing_header(self, client, auth_headers):
         """Test accessing protected endpoint without device header fails."""
         response = await client.get("/protected-endpoint", headers=auth_headers)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -359,11 +422,11 @@ class TestDeviceValidation:
         assert error["error"] == "missing_device_header"
 
     @pytest.mark.asyncio
-    async def test_validated_device_not_registered(self, client, auth_headers, db_session):
+    async def test_validated_device_not_registered(self, client, auth_headers):
         """Test accessing with unregistered device UUID fails."""
         headers_with_device = {
             **auth_headers,
-            "X-Device-UUID": "unregistered-device",
+            "X-Device-UUID": "uuid-0000-unregistered-device",
         }
         response = await client.get("/protected-endpoint", headers=headers_with_device)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -372,14 +435,14 @@ class TestDeviceValidation:
         assert error["error"] == "device_not_registered"
 
     @pytest.mark.asyncio
-    async def test_validated_device_deactivated(self, client, auth_headers, db_session):
+    async def test_validated_device_deactivated(self, client, auth_headers):
         """Test accessing with deactivated device fails."""
         # Register and deactivate device
         response = await client.post(
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "deactivated-device",
+                "device_uuid": "uuid-0000-deactivated-device",
                 "device_name": "Deactivated Device",
                 "platform": "linux",
             },
@@ -390,7 +453,7 @@ class TestDeviceValidation:
         # Try to access with deactivated device
         headers_with_device = {
             **auth_headers,
-            "X-Device-UUID": "deactivated-device",
+            "X-Device-UUID": "uuid-0000-deactivated-device",
         }
         response = await client.get("/protected-endpoint", headers=headers_with_device)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -400,7 +463,7 @@ class TestDeviceValidation:
 
     @pytest.mark.asyncio
     async def test_validated_device_wrong_user(
-        self, client, user1_headers, user2_headers, db_session
+        self, client, user1_headers, user2_headers
     ):
         """Test accessing with another user's device UUID fails."""
         # User 1 registers device
@@ -408,7 +471,7 @@ class TestDeviceValidation:
             "/devices/register",
             headers=user1_headers,
             json={
-                "device_uuid": "user1-device",
+                "device_uuid": "uuid-0000-user1-device",
                 "device_name": "User 1 Device",
                 "platform": "linux",
             },
@@ -417,7 +480,7 @@ class TestDeviceValidation:
         # User 2 tries to access with User 1's device UUID
         headers_with_device = {
             **user2_headers,
-            "X-Device-UUID": "user1-device",
+            "X-Device-UUID": "uuid-0000-user1-device",
         }
         response = await client.get("/protected-endpoint", headers=headers_with_device)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -426,14 +489,14 @@ class TestDeviceValidation:
         assert error["error"] == "device_not_authorized"
 
     @pytest.mark.asyncio
-    async def test_optional_device_with_header(self, client, auth_headers, db_session):
+    async def test_optional_device_with_header(self, client, auth_headers):
         """Test optional device validation succeeds with valid device."""
         # Register device
         await client.post(
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "optional-device",
+                "device_uuid": "uuid-0000-optional-device",
                 "device_name": "Optional Device",
                 "platform": "linux",
             },
@@ -442,27 +505,27 @@ class TestDeviceValidation:
         # Access hybrid endpoint with device
         headers_with_device = {
             **auth_headers,
-            "X-Device-UUID": "optional-device",
+            "X-Device-UUID": "uuid-0000-optional-device",
         }
         response = await client.get("/hybrid-endpoint", headers=headers_with_device)
         # Should succeed with device context
 
     @pytest.mark.asyncio
-    async def test_optional_device_without_header(self, client, auth_headers, db_session):
+    async def test_optional_device_without_header(self, client, auth_headers):
         """Test optional device validation succeeds without device header."""
         # Access hybrid endpoint without device header
         response = await client.get("/hybrid-endpoint", headers=auth_headers)
         # Should succeed without device context
 
     @pytest.mark.asyncio
-    async def test_last_seen_updated(self, client, auth_headers, db_session):
+    async def test_last_seen_updated(self, client, auth_headers):
         """Test that last_seen is updated on device validation."""
         # Register device
         response = await client.post(
             "/devices/register",
             headers=auth_headers,
             json={
-                "device_uuid": "last-seen-test",
+                "device_uuid": "uuid-0000-last-seen-test",
                 "device_name": "Last Seen Test",
                 "platform": "linux",
             },
@@ -477,7 +540,7 @@ class TestDeviceValidation:
         # Access endpoint with device (triggers validation)
         headers_with_device = {
             **auth_headers,
-            "X-Device-UUID": "last-seen-test",
+            "X-Device-UUID": "uuid-0000-last-seen-test",
         }
         await client.get("/protected-endpoint", headers=headers_with_device)
 
@@ -485,38 +548,3 @@ class TestDeviceValidation:
         response = await client.get(f"/devices/{device_id}", headers=auth_headers)
         new_last_seen = response.json()["last_seen"]
         assert new_last_seen > original_last_seen
-
-
-# Fixtures for testing (add to conftest.py)
-"""
-@pytest.fixture
-async def free_user_headers(client):
-    # Create user with free tier
-    response = await client.post("/auth/register", json={
-        "email": "free@example.com",
-        "password": "password123"
-    })
-    token = response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-@pytest.fixture
-async def starter_user_headers(client, db_session):
-    # Create user and upgrade to starter
-    response = await client.post("/auth/register", json={
-        "email": "starter@example.com",
-        "password": "password123"
-    })
-    token = response.json()["access_token"]
-
-    # Update user tier in database
-    user_id = response.json()["user"]["id"]
-    stmt = select(User).where(User.id == user_id)
-    result = await db_session.execute(stmt)
-    user = result.scalar_one()
-    user.tier = "starter"
-    await db_session.commit()
-
-    return {"Authorization": f"Bearer {token}"}
-
-# Similar fixtures for pro_user_headers, enterprise_user_headers
-"""

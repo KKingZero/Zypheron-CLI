@@ -149,6 +149,11 @@ def generate_cli_token() -> str:
     return f"zyp_cli_live_{secrets.token_urlsafe(36)}"
 
 
+# Real hash with production cost settings: unknown-email logins run the same
+# bcrypt work as wrong-password logins (a malformed literal raised -> 500).
+_DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(16))
+
+
 async def create_cli_token_for_user(
     user: User,
     db: AsyncSession,
@@ -380,7 +385,7 @@ async def login(
     # Use constant-time-ish check to prevent timing attacks
     if not user:
         # Still hash something to prevent timing attacks
-        verify_password(request.password, "$2b$12$dummyhashtopreventtimingattacks")
+        verify_password(request.password, _DUMMY_PASSWORD_HASH)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",

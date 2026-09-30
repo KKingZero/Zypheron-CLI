@@ -106,43 +106,22 @@ async def _register_device_impl(
 
             return DeviceResponse.model_validate(existing_device)
 
-        # Check for inactive device with same UUID (also lock it)
-        inactive_stmt = (
+        # Any other row with this UUID (also lock it). Active or not: device_uuid
+        # is globally unique, so another user's active device must be a 409 too,
+        # not an IntegrityError on insert.
+        uuid_stmt = (
             select(Device)
-            .where(
-                Device.device_uuid == request.device_uuid,
-                Device.is_active == False,
-            )
+            .where(Device.device_uuid == request.device_uuid)
             .with_for_update()
         )
-        inactive_result = await db.execute(inactive_stmt)
-        inactive_device = inactive_result.scalar_one_or_none()
+        uuid_result = await db.execute(uuid_stmt)
+        uuid_device = uuid_result.scalar_one_or_none()
 
-        if inactive_device:
-            # Device exists but belongs to different user
-            if inactive_device.user_id != current_user.id:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Device already registered to another user",
-                )
-
-            # Reactivate user's own inactive device
-            inactive_device.is_active = True
-            inactive_device.device_name = request.device_name
-            inactive_device.platform = request.platform
-            inactive_device.hostname = request.hostname
-            inactive_device.update_last_seen()
-            await db.flush()
-            await db.refresh(inactive_device)
-
-            logger.info(
-                "device_reactivated",
-                user_id=current_user.id,
-                device_id=inactive_device.id,
-                device_uuid=request.device_uuid,
+        if uuid_device and uuid_device.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Device already registered to another user",
             )
-
-            return DeviceResponse.model_validate(inactive_device)
 
         # Check device limit (within the lock, so count is guaranteed accurate)
         device_limit = get_device_limit(current_user.tier)
@@ -199,6 +178,26 @@ async def _register_device_impl(
                     },
                 },
             )
+
+        if uuid_device:
+            # Reactivate user's own inactive device (after the limit check, so
+            # reactivation can't exceed the tier's device limit)
+            uuid_device.is_active = True
+            uuid_device.device_name = request.device_name
+            uuid_device.platform = request.platform
+            uuid_device.hostname = request.hostname
+            uuid_device.update_last_seen()
+            await db.flush()
+            await db.refresh(uuid_device)
+
+            logger.info(
+                "device_reactivated",
+                user_id=current_user.id,
+                device_id=uuid_device.id,
+                device_uuid=request.device_uuid,
+            )
+
+            return DeviceResponse.model_validate(uuid_device)
 
         # Create new device (within the lock, so count check is still valid)
         new_device = Device(
@@ -340,6 +339,47 @@ async def list_devices(
         total=len(devices),
         active_count=active_count,
         device_limit=device_limit,
+    )
+
+
+# Declared before /{device_id}, which would otherwise capture "limit" (422).
+@router.get("/limit", response_model=DeviceLimitInfo)
+async def get_device_limit_info(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> DeviceLimitInfo:
+    """Get device limit information for the current user's tier.
+
+    Shows current active device count versus the tier limit.
+
+    Args:
+        current_user: Currently authenticated user
+        db: Database session
+
+    Returns:
+        DeviceLimitInfo with limit and usage information
+    """
+    # Count active devices for user
+    stmt = select(func.count()).select_from(Device).where(
+        Device.user_id == current_user.id,
+        Device.is_active == True,
+    )
+    result = await db.execute(stmt)
+    active_count = result.scalar_one()
+
+    # Get device limit for user's tier
+    limit = get_device_limit(current_user.tier)
+
+    # Calculate remaining slots
+    remaining = max(0, limit - active_count)
+    can_add = active_count < limit
+
+    return DeviceLimitInfo(
+        tier=current_user.tier,  # type: ignore
+        limit=limit,
+        current=active_count,
+        remaining=remaining,
+        can_add=can_add,
     )
 
 
@@ -501,43 +541,3 @@ async def ping_device(
     await db.refresh(device)
 
     return DeviceResponse.model_validate(device)
-
-
-@router.get("/limit", response_model=DeviceLimitInfo)
-async def get_device_limit_info(
-    current_user: CurrentUser,
-    db: AsyncSession = Depends(get_db),
-) -> DeviceLimitInfo:
-    """Get device limit information for the current user's tier.
-
-    Shows current active device count versus the tier limit.
-
-    Args:
-        current_user: Currently authenticated user
-        db: Database session
-
-    Returns:
-        DeviceLimitInfo with limit and usage information
-    """
-    # Count active devices for user
-    stmt = select(func.count()).select_from(Device).where(
-        Device.user_id == current_user.id,
-        Device.is_active == True,
-    )
-    result = await db.execute(stmt)
-    active_count = result.scalar_one()
-
-    # Get device limit for user's tier
-    limit = get_device_limit(current_user.tier)
-
-    # Calculate remaining slots
-    remaining = max(0, limit - active_count)
-    can_add = active_count < limit
-
-    return DeviceLimitInfo(
-        tier=current_user.tier,  # type: ignore
-        limit=limit,
-        current=active_count,
-        remaining=remaining,
-        can_add=can_add,
-    )

@@ -17,8 +17,8 @@ from app.routers.auth import CurrentUser
 
 
 async def get_device_from_header(
+    current_user: CurrentUser,
     x_device_uuid: str | None = Header(None, description="Device UUID from CLI"),
-    current_user: CurrentUser = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> Device:
     """Validate that the request comes from a registered, active device.
@@ -104,8 +104,8 @@ async def get_device_from_header(
 
 
 async def get_optional_device(
+    current_user: CurrentUser,
     x_device_uuid: str | None = Header(None, description="Device UUID from CLI"),
-    current_user: CurrentUser = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> Device | None:
     """Optional device validation - returns None if header is missing.

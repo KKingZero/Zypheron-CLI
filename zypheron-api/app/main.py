@@ -475,6 +475,12 @@ async def not_found_handler(request, exc) -> JSONResponse:
     Returns:
         JSON response with error details
     """
+    # Routes raise 404 with specific details ("Invalid device code...") that
+    # clients rely on; only unmatched routes get the generic body.
+    detail = getattr(exc, "detail", None)
+    if detail and detail != "Not Found":
+        return JSONResponse(status_code=404, content={"detail": detail})
+
     return JSONResponse(
         status_code=404,
         content={

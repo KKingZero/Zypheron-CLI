@@ -49,7 +49,7 @@ class TestPortalSession:
 
         response = await client.post(
             "/license/portal",
-            params={"return_url": "https://app.example.com/account"},
+            params={"return_url": "https://localhost/account"},
             headers=paid_user_headers,
         )
 
@@ -61,7 +61,7 @@ class TestPortalSession:
         # Verify Stripe was called with correct customer ID
         stripe.billing_portal.Session.create.assert_called_once_with(
             customer=license.stripe_customer_id,
-            return_url="https://app.example.com/account",
+            return_url="https://localhost/account",
         )
 
     async def test_portal_session_error_no_customer_id(
@@ -80,7 +80,7 @@ class TestPortalSession:
 
         response = await client.post(
             "/license/portal",
-            params={"return_url": "https://app.example.com/account"},
+            params={"return_url": "https://localhost/account"},
             headers=auth_headers,
         )
 
@@ -265,8 +265,8 @@ class TestAnnualUpgrade:
         response = await client.post(
             "/license/upgrade/pro",
             params={
-                "success_url": "https://app.example.com/success",
-                "cancel_url": "https://app.example.com/cancel",
+                "success_url": "https://localhost/success",
+                "cancel_url": "https://localhost/cancel",
                 "billing_interval": "annual",
             },
             headers=auth_headers,

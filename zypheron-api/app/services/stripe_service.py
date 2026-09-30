@@ -295,6 +295,9 @@ class StripeService:
 
             await self.db.commit()
             logger.info(f"Reactivated subscription {license.stripe_subscription_id}")
+            # Reload server-generated columns (updated_at) now, while we can await;
+            # serializing an expired attribute later raises MissingGreenlet.
+            await self.db.refresh(license)
             return license
         except stripe.error.StripeError as e:
             logger.error(f"Failed to reactivate subscription: {e}")
@@ -353,6 +356,9 @@ class StripeService:
                 )
 
             await self.db.commit()
+            # Reload server-generated columns (updated_at) now, while we can await;
+            # serializing an expired attribute later raises MissingGreenlet.
+            await self.db.refresh(license)
             return license
 
         except stripe.error.StripeError as e:
@@ -400,6 +406,9 @@ class StripeService:
             logger.info(f"Refreshed subscription {license.stripe_subscription_id}")
 
             await self.db.commit()
+            # Reload server-generated columns (updated_at) now, while we can await;
+            # serializing an expired attribute later raises MissingGreenlet.
+            await self.db.refresh(license)
             return license
 
         except stripe.error.StripeError as e:

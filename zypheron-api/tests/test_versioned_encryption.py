@@ -1,338 +1,251 @@
 """Tests for versioned encryption key rotation functionality.
 
+New data is encrypted with AES-256-GCM ("gcm:v{n}:{nonce}:{ct}"); legacy Fernet
+data ("v{n}:{token}" or a bare token) stays readable.
+
 Tests cover:
 - Versioned encryption/decryption
-- Legacy format backward compatibility
+- Legacy Fernet backward compatibility
 - Key rotation simulation
 - Multi-version support
 - Error handling
 """
 
-import pytest
-from unittest.mock import Mock, patch
+import base64
+import secrets
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import pytest
+from cryptography.fernet import Fernet
+
+from app.core import encryption
 from app.core.encryption import (
     VersionedEncryptionService,
     EncryptionError,
     encrypt_api_key,
     decrypt_api_key,
-    get_encryption_service,
     MAX_KEY_VERSIONS,
 )
+
+
+def _settings(**overrides):
+    """Settings stub with every key slot unset unless overridden."""
+    values = {"byok_encryption_key": None, "byok_encryption_key_current": None}
+    for v in range(1, MAX_KEY_VERSIONS + 1):
+        values[f"byok_encryption_key_gcm_v{v}"] = None
+        values[f"byok_encryption_key_v{v}"] = None
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+@pytest.fixture
+def use_settings():
+    """Patch get_settings and reset both singletons so each test builds a fresh service."""
+    patchers = []
+
+    def _apply(**overrides):
+        p = patch("app.core.encryption.get_settings", return_value=_settings(**overrides))
+        p.start()
+        patchers.append(p)
+        VersionedEncryptionService._instance = None
+        encryption._encryption_service = None
+
+    yield _apply
+    for p in patchers:
+        p.stop()
+    VersionedEncryptionService._instance = None
+    encryption._encryption_service = None
+
+
+def _gcm_key() -> str:
+    return secrets.token_hex(32)
+
+
+def _gcm_encrypt(service: VersionedEncryptionService, version: int, plaintext: str) -> str:
+    """Encrypt with a specific (possibly non-current) GCM key version."""
+    nonce = secrets.token_bytes(12)
+    ct = service._gcm_keys[version].encrypt(nonce, plaintext.encode(), None)
+    b64 = lambda b: base64.urlsafe_b64encode(b).decode()
+    return f"gcm:v{version}:{b64(nonce)}:{b64(ct)}"
+
+
+@pytest.fixture
+def gcm_v1(use_settings):
+    use_settings(byok_encryption_key_gcm_v1=_gcm_key())
+
+
+@pytest.fixture
+def gcm_multi(use_settings):
+    use_settings(
+        byok_encryption_key_gcm_v1=_gcm_key(),
+        byok_encryption_key_gcm_v2=_gcm_key(),
+        byok_encryption_key_gcm_v3=_gcm_key(),
+    )
+
+
+@pytest.fixture
+def fernet_v1_key(use_settings):
+    """GCM V1 for new writes plus a legacy Fernet V1 key for old data."""
+    key = Fernet.generate_key().decode()
+    use_settings(byok_encryption_key_gcm_v1=_gcm_key(), byok_encryption_key_v1=key)
+    return Fernet(key.encode())
 
 
 class TestVersionedEncryption:
     """Test versioned encryption service."""
 
-    def test_single_version_encryption_decryption(self, mock_settings_v1):
-        """Test basic encryption/decryption with single version."""
+    def test_single_version_encryption_decryption(self, gcm_v1):
         service = VersionedEncryptionService()
 
-        plaintext = "sk-1234567890abcdef"
-        encrypted = service.encrypt(plaintext)
+        encrypted = service.encrypt("sk-1234567890abcdef")
 
-        # Should have version prefix
-        assert encrypted.startswith("v1:")
+        assert encrypted.startswith("gcm:v1:")
+        assert service.decrypt(encrypted) == "sk-1234567890abcdef"
 
-        # Should decrypt correctly
-        decrypted = service.decrypt(encrypted)
-        assert decrypted == plaintext
-
-    def test_multiple_version_support(self, mock_settings_multi_version):
-        """Test encryption with multiple key versions."""
+    def test_multiple_version_support(self, gcm_multi):
         service = VersionedEncryptionService()
 
-        # Should use V3 as current (highest)
+        # Highest configured version is current
         assert service.current_version == 3
         assert service.available_versions == [1, 2, 3]
 
-    def test_explicit_current_version(self, mock_settings_explicit_current):
-        """Test explicit current version setting."""
+    def test_explicit_current_version(self, use_settings):
+        use_settings(
+            byok_encryption_key_gcm_v1=_gcm_key(),
+            byok_encryption_key_gcm_v2=_gcm_key(),
+            byok_encryption_key_gcm_v3=_gcm_key(),
+            byok_encryption_key_current=2,
+        )
         service = VersionedEncryptionService()
 
-        # Should use V2 as explicitly set
         assert service.current_version == 2
-        assert 2 in service.available_versions
+        assert service.encrypt("x").startswith("gcm:v2:")
 
-    def test_decrypt_old_version(self, mock_settings_multi_version):
-        """Test decrypting data encrypted with older version."""
+    def test_decrypt_old_version(self, gcm_multi):
         service = VersionedEncryptionService()
 
-        # Manually create V1 encrypted data
-        from cryptography.fernet import Fernet
+        assert service.decrypt(_gcm_encrypt(service, 1, "test-api-key")) == "test-api-key"
 
-        v1_fernet = service._keys[1]
-        v1_ciphertext = v1_fernet.encrypt(b"test-api-key").decode()
-        v1_encrypted = f"v1:{v1_ciphertext}"
-
-        # Should decrypt with V1 key
-        decrypted = service.decrypt(v1_encrypted)
-        assert decrypted == "test-api-key"
-
-    def test_legacy_format_backward_compatibility(self, mock_settings_v1):
-        """Test decryption of legacy unversioned format."""
+    def test_versioned_fernet_backward_compatibility(self, fernet_v1_key):
         service = VersionedEncryptionService()
 
-        # Create legacy format (no version prefix)
-        from cryptography.fernet import Fernet
+        legacy = f"v1:{fernet_v1_key.encrypt(b'legacy-api-key').decode()}"
+        assert service.decrypt(legacy) == "legacy-api-key"
 
-        plaintext = "legacy-api-key"
-        fernet = service._keys[1]
-        legacy_encrypted = fernet.encrypt(plaintext.encode()).decode()
-
-        # Should decrypt as V1
-        decrypted = service.decrypt(legacy_encrypted)
-        assert decrypted == plaintext
-
-    def test_needs_re_encryption_detection(self, mock_settings_multi_version):
-        """Test detection of data needing re-encryption."""
+    def test_unprefixed_fernet_backward_compatibility(self, fernet_v1_key):
         service = VersionedEncryptionService()
 
-        # V1 data needs re-encryption (current is V3)
-        assert service.needs_re_encryption("v1:gAAAAABh...")
+        legacy = fernet_v1_key.encrypt(b"legacy-api-key").decode()
+        assert service.decrypt(legacy) == "legacy-api-key"
 
-        # V2 data needs re-encryption
-        assert service.needs_re_encryption("v2:gAAAAABh...")
+    def test_needs_re_encryption_detection(self, gcm_multi):
+        service = VersionedEncryptionService()
 
-        # V3 data (current) doesn't need re-encryption
-        assert not service.needs_re_encryption("v3:gAAAAABh...")
-
-        # Legacy format needs re-encryption
+        assert service.needs_re_encryption("gcm:v1:n:c")
+        assert service.needs_re_encryption("gcm:v2:n:c")
+        assert not service.needs_re_encryption("gcm:v3:n:c")
+        # Any Fernet data should migrate to GCM
+        assert service.needs_re_encryption("v3:gAAAAABh...")
         assert service.needs_re_encryption("gAAAAABh...")
 
-    def test_re_encryption(self, mock_settings_multi_version):
-        """Test re-encrypting data with current version."""
+    def test_re_encryption_rotates_gcm_version(self, gcm_multi):
         service = VersionedEncryptionService()
 
-        # Create V1 encrypted data
-        plaintext = "test-key"
-        from cryptography.fernet import Fernet
+        re_encrypted = service.re_encrypt(_gcm_encrypt(service, 1, "test-key"))
 
-        v1_fernet = service._keys[1]
-        v1_ciphertext = v1_fernet.encrypt(plaintext.encode()).decode()
-        v1_encrypted = f"v1:{v1_ciphertext}"
+        assert re_encrypted.startswith("gcm:v3:")
+        assert service.decrypt(re_encrypted) == "test-key"
 
-        # Re-encrypt to current version (V3)
-        re_encrypted = service.re_encrypt(v1_encrypted)
-
-        # Should now be V3
-        assert re_encrypted.startswith("v3:")
-
-        # Should still decrypt to same plaintext
-        decrypted = service.decrypt(re_encrypted)
-        assert decrypted == plaintext
-
-    def test_missing_key_version_error(self, mock_settings_v1):
-        """Test error when trying to decrypt with missing key version."""
+    def test_re_encryption_migrates_fernet_to_gcm(self, fernet_v1_key):
         service = VersionedEncryptionService()
 
-        # Try to decrypt V5 data when only V1 is available
+        legacy = f"v1:{fernet_v1_key.encrypt(b'test-key').decode()}"
+        re_encrypted = service.re_encrypt(legacy)
+
+        assert re_encrypted.startswith("gcm:v1:")
+        assert service.decrypt(re_encrypted) == "test-key"
+
+    def test_missing_gcm_version_error(self, gcm_v1):
+        service = VersionedEncryptionService()
+
+        with pytest.raises(EncryptionError) as exc_info:
+            service.decrypt("gcm:v5:AAAA:AAAA")
+
+        assert "version 5 not available" in str(exc_info.value).lower()
+
+    def test_missing_fernet_version_error(self, fernet_v1_key):
+        service = VersionedEncryptionService()
+
         with pytest.raises(EncryptionError) as exc_info:
             service.decrypt("v5:gAAAAABh...")
 
         assert "version 5 not available" in str(exc_info.value).lower()
 
-    def test_empty_plaintext_error(self, mock_settings_v1):
-        """Test error when encrypting empty string."""
-        service = VersionedEncryptionService()
-
+    def test_empty_plaintext_error(self, gcm_v1):
         with pytest.raises(EncryptionError) as exc_info:
-            service.encrypt("")
+            VersionedEncryptionService().encrypt("")
 
         assert "empty string" in str(exc_info.value).lower()
 
-    def test_empty_ciphertext_error(self, mock_settings_v1):
-        """Test error when decrypting empty string."""
-        service = VersionedEncryptionService()
-
+    def test_empty_ciphertext_error(self, gcm_v1):
         with pytest.raises(EncryptionError) as exc_info:
-            service.decrypt("")
+            VersionedEncryptionService().decrypt("")
 
         assert "empty string" in str(exc_info.value).lower()
 
-    def test_invalid_ciphertext_error(self, mock_settings_v1):
-        """Test error when decrypting invalid ciphertext."""
+    def test_tampered_ciphertext_error(self, gcm_v1):
         service = VersionedEncryptionService()
+        prefix, version, nonce, ct = service.encrypt("secret").split(":")
+        raw = bytearray(base64.urlsafe_b64decode(ct))
+        raw[0] ^= 1
+        tampered = ":".join([prefix, version, nonce, base64.urlsafe_b64encode(bytes(raw)).decode()])
 
         with pytest.raises(EncryptionError) as exc_info:
-            service.decrypt("v1:invalid-ciphertext")
+            service.decrypt(tampered)
 
         assert "failed" in str(exc_info.value).lower()
 
-    def test_no_keys_configured_error(self, mock_settings_no_keys):
-        """Test error when no encryption keys are configured."""
+    def test_no_keys_configured_error(self, use_settings):
+        use_settings()
         with pytest.raises(EncryptionError) as exc_info:
             VersionedEncryptionService()
 
         assert "no encryption keys" in str(exc_info.value).lower()
 
-    def test_invalid_key_format_error(self, mock_settings_invalid_key):
-        """Test error when key format is invalid."""
+    def test_invalid_key_format_error(self, use_settings):
+        use_settings(byok_encryption_key_gcm_v1="invalid-key-format")
         with pytest.raises(EncryptionError) as exc_info:
             VersionedEncryptionService()
 
         assert "invalid" in str(exc_info.value).lower()
 
-    def test_malformed_version_prefix(self, mock_settings_v1):
-        """Test handling of malformed version prefix."""
+    def test_malformed_version_prefix(self, fernet_v1_key):
         service = VersionedEncryptionService()
 
-        # Create valid legacy encrypted data
-        from cryptography.fernet import Fernet
+        malformed = f"vXX:{fernet_v1_key.encrypt(b'test-key').decode()}"
 
-        plaintext = "test-key"
-        fernet = service._keys[1]
-        ciphertext = fernet.encrypt(plaintext.encode()).decode()
+        # Corrupt prefix: rejected with EncryptionError, not an unhandled crash
+        with pytest.raises(EncryptionError):
+            service.decrypt(malformed)
 
-        # Add malformed prefix
-        malformed = f"vXX:{ciphertext}"
-
-        # Should fall back to V1 and decrypt
-        decrypted = service.decrypt(malformed)
-        assert decrypted == plaintext
-
-    def test_legacy_key_as_v1(self, mock_settings_legacy):
-        """Test that legacy BYOK_ENCRYPTION_KEY is treated as V1."""
+    def test_legacy_key_as_v1(self, use_settings):
+        """A lone legacy BYOK_ENCRYPTION_KEY becomes Fernet V1 and seeds GCM V1."""
+        use_settings(byok_encryption_key=Fernet.generate_key().decode())
         service = VersionedEncryptionService()
 
         assert service.current_version == 1
         assert service.available_versions == [1]
+        assert service.encrypt("test-key").startswith("gcm:v1:")
 
-        # Should encrypt with V1
-        encrypted = service.encrypt("test-key")
-        assert encrypted.startswith("v1:")
+    def test_convenience_functions(self, gcm_v1):
+        encrypted = encrypt_api_key("sk-test-key-123")
 
-    def test_convenience_functions(self, mock_settings_v1):
-        """Test convenience functions encrypt_api_key and decrypt_api_key."""
-        plaintext = "sk-test-key-123"
+        assert encrypted.startswith("gcm:v1:")
+        assert decrypt_api_key(encrypted) == "sk-test-key-123"
 
-        # Encrypt
-        encrypted = encrypt_api_key(plaintext)
-        assert encrypted.startswith("v1:")
-
-        # Decrypt
-        decrypted = decrypt_api_key(encrypted)
-        assert decrypted == plaintext
-
-    def test_singleton_pattern(self, mock_settings_v1):
-        """Test that VersionedEncryptionService is a singleton."""
-        service1 = VersionedEncryptionService()
-        service2 = VersionedEncryptionService()
-
-        assert service1 is service2
+    def test_singleton_pattern(self, gcm_v1):
+        assert VersionedEncryptionService() is VersionedEncryptionService()
 
     def test_max_key_versions_limit(self):
-        """Test that MAX_KEY_VERSIONS is set correctly."""
         assert MAX_KEY_VERSIONS == 5
-
-
-# Pytest fixtures
-@pytest.fixture
-def mock_settings_v1():
-    """Mock settings with single key version."""
-    from cryptography.fernet import Fernet
-
-    mock = Mock()
-    mock.byok_encryption_key = None
-    mock.byok_encryption_key_v1 = Fernet.generate_key().decode()
-    mock.byok_encryption_key_v2 = None
-    mock.byok_encryption_key_v3 = None
-    mock.byok_encryption_key_v4 = None
-    mock.byok_encryption_key_v5 = None
-    mock.byok_encryption_key_current = None
-
-    with patch("app.core.encryption.get_settings", return_value=mock):
-        # Reset singleton for each test
-        VersionedEncryptionService._instance = None
-        yield mock
-
-
-@pytest.fixture
-def mock_settings_multi_version():
-    """Mock settings with multiple key versions."""
-    from cryptography.fernet import Fernet
-
-    mock = Mock()
-    mock.byok_encryption_key = None
-    mock.byok_encryption_key_v1 = Fernet.generate_key().decode()
-    mock.byok_encryption_key_v2 = Fernet.generate_key().decode()
-    mock.byok_encryption_key_v3 = Fernet.generate_key().decode()
-    mock.byok_encryption_key_v4 = None
-    mock.byok_encryption_key_v5 = None
-    mock.byok_encryption_key_current = None
-
-    with patch("app.core.encryption.get_settings", return_value=mock):
-        VersionedEncryptionService._instance = None
-        yield mock
-
-
-@pytest.fixture
-def mock_settings_explicit_current():
-    """Mock settings with explicit current version."""
-    from cryptography.fernet import Fernet
-
-    mock = Mock()
-    mock.byok_encryption_key = None
-    mock.byok_encryption_key_v1 = Fernet.generate_key().decode()
-    mock.byok_encryption_key_v2 = Fernet.generate_key().decode()
-    mock.byok_encryption_key_v3 = Fernet.generate_key().decode()
-    mock.byok_encryption_key_v4 = None
-    mock.byok_encryption_key_v5 = None
-    mock.byok_encryption_key_current = 2  # Explicit V2
-
-    with patch("app.core.encryption.get_settings", return_value=mock):
-        VersionedEncryptionService._instance = None
-        yield mock
-
-
-@pytest.fixture
-def mock_settings_legacy():
-    """Mock settings with legacy single key."""
-    from cryptography.fernet import Fernet
-
-    mock = Mock()
-    mock.byok_encryption_key = Fernet.generate_key().decode()
-    mock.byok_encryption_key_v1 = None
-    mock.byok_encryption_key_v2 = None
-    mock.byok_encryption_key_v3 = None
-    mock.byok_encryption_key_v4 = None
-    mock.byok_encryption_key_v5 = None
-    mock.byok_encryption_key_current = None
-
-    with patch("app.core.encryption.get_settings", return_value=mock):
-        VersionedEncryptionService._instance = None
-        yield mock
-
-
-@pytest.fixture
-def mock_settings_no_keys():
-    """Mock settings with no keys configured."""
-    mock = Mock()
-    mock.byok_encryption_key = None
-    mock.byok_encryption_key_v1 = None
-    mock.byok_encryption_key_v2 = None
-    mock.byok_encryption_key_v3 = None
-    mock.byok_encryption_key_v4 = None
-    mock.byok_encryption_key_v5 = None
-    mock.byok_encryption_key_current = None
-
-    with patch("app.core.encryption.get_settings", return_value=mock):
-        VersionedEncryptionService._instance = None
-        yield mock
-
-
-@pytest.fixture
-def mock_settings_invalid_key():
-    """Mock settings with invalid key format."""
-    mock = Mock()
-    mock.byok_encryption_key = None
-    mock.byok_encryption_key_v1 = "invalid-key-format"
-    mock.byok_encryption_key_v2 = None
-    mock.byok_encryption_key_v3 = None
-    mock.byok_encryption_key_v4 = None
-    mock.byok_encryption_key_v5 = None
-    mock.byok_encryption_key_current = None
-
-    with patch("app.core.encryption.get_settings", return_value=mock):
-        VersionedEncryptionService._instance = None
-        yield mock

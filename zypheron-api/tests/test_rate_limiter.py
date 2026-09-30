@@ -292,17 +292,39 @@ class TestRateLimitMiddlewareIntegration:
 class TestClientIPExtraction:
     """Test _get_client_ip logic."""
 
-    def test_x_forwarded_for(self):
-        middleware = RateLimitMiddleware.__new__(RateLimitMiddleware)
-        request = MagicMock()
-        request.headers = {"X-Forwarded-For": "1.2.3.4, 5.6.7.8"}
-        assert middleware._get_client_ip(request) == "1.2.3.4"
+    @staticmethod
+    def _trusting(cidrs):
+        return patch(
+            "app.middleware.rate_limiter.get_settings",
+            return_value=MagicMock(trusted_proxy_cidrs=cidrs),
+        )
 
-    def test_x_real_ip(self):
+    def test_x_forwarded_for_from_trusted_proxy(self):
         middleware = RateLimitMiddleware.__new__(RateLimitMiddleware)
         request = MagicMock()
+        request.client.host = "10.0.0.5"
+        request.headers = {"X-Forwarded-For": "1.2.3.4, 5.6.7.8"}
+        with self._trusting(["10.0.0.0/8"]):
+            assert middleware._get_client_ip(request) == "1.2.3.4"
+
+    def test_x_real_ip_from_trusted_proxy(self):
+        middleware = RateLimitMiddleware.__new__(RateLimitMiddleware)
+        request = MagicMock()
+        request.client.host = "10.0.0.5"
         request.headers = {"X-Real-IP": "9.8.7.6"}
-        assert middleware._get_client_ip(request) == "9.8.7.6"
+        with self._trusting(["10.0.0.0/8"]):
+            assert middleware._get_client_ip(request) == "9.8.7.6"
+
+    def test_forwarded_headers_ignored_from_untrusted_peer(self):
+        """H-02: spoofed X-Forwarded-For must not pick the rate-limit bucket."""
+        middleware = RateLimitMiddleware.__new__(RateLimitMiddleware)
+        request = MagicMock()
+        request.client.host = "203.0.113.9"
+        request.headers = {"X-Forwarded-For": "1.2.3.4", "X-Real-IP": "9.8.7.6"}
+        with self._trusting(["10.0.0.0/8"]):
+            assert middleware._get_client_ip(request) == "203.0.113.9"
+        with self._trusting([]):
+            assert middleware._get_client_ip(request) == "203.0.113.9"
 
     def test_direct_client(self):
         middleware = RateLimitMiddleware.__new__(RateLimitMiddleware)

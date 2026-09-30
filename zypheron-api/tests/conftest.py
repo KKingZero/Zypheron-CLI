@@ -38,6 +38,16 @@ def event_loop():
     loop.close()
 
 
+@pytest.fixture(autouse=True)
+def _reset_emergency_rate_limits():
+    """Redis is absent in tests, so the fail-closed in-memory limiter is active.
+    Its counters are module-global; clear them so earlier tests don't push later
+    ones over the 10 req/min limit."""
+    from app.middleware import rate_limiter
+    rate_limiter._emergency_rate_limits.clear()
+    yield
+
+
 # Test database engine (SQLite in-memory for speed)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -334,7 +344,7 @@ def mock_stripe_client(mocker, mock_stripe_customer, mock_stripe_checkout_sessio
     - stripe.checkout.Session.create
     - stripe.Subscription.retrieve
     - stripe.Subscription.modify
-    - stripe.Subscription.delete
+    - stripe.Subscription.cancel
     - stripe.Webhook.construct_event
 
     Returns:
@@ -379,7 +389,7 @@ def mock_stripe_client(mocker, mock_stripe_customer, mock_stripe_checkout_sessio
             current_period_end=int(datetime(2025, 2, 1, tzinfo=timezone.utc).timestamp()),
         )
     )
-    mock_sub_delete = mocker.patch("stripe.Subscription.delete")
+    mock_sub_cancel = mocker.patch("stripe.Subscription.cancel")
 
     # Mock Webhook verification
     mock_webhook_construct = mocker.patch(
@@ -397,7 +407,7 @@ def mock_stripe_client(mocker, mock_stripe_customer, mock_stripe_checkout_sessio
         "checkout_create": mock_checkout_create,
         "subscription_retrieve": mock_sub_retrieve,
         "subscription_modify": mock_sub_modify,
-        "subscription_delete": mock_sub_delete,
+        "subscription_cancel": mock_sub_cancel,
         "webhook_construct": mock_webhook_construct,
     }
 
@@ -410,7 +420,7 @@ async def test_device_code(test_db: AsyncSession) -> DeviceCode:
         DeviceCode with status='pending'
     """
     device_code = DeviceCode(
-        device_code="test_device_code_123456",
+        device_code="test_device_code_000000000000001",
         user_code="TEST-1234",
         device_info={
             "os": "Linux",
@@ -436,7 +446,7 @@ async def expired_device_code(test_db: AsyncSession) -> DeviceCode:
     from datetime import timedelta
 
     device_code = DeviceCode(
-        device_code="expired_device_code_123",
+        device_code="expired_device_code_000000000001",
         user_code="EXPR-5678",
         device_info={"os": "Linux"},
         status="pending",

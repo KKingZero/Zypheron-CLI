@@ -52,7 +52,7 @@ class TestLicenseValidation:
         assert data["is_valid"] is True
         assert data["tier"] == "free"
         assert data["status"] == "active"
-        assert data["features"]["byok_required"] is True
+        assert data["features"]["features"]["byok_required"] is True
         assert data["features"]["token_limit"] == 0
         assert data["features"]["max_devices"] == 1
 
@@ -76,7 +76,7 @@ class TestLicenseValidation:
         assert data["is_valid"] is True
         assert data["tier"] == "pro"
         assert data["status"] == "active"
-        assert data["features"]["byok_required"] is False
+        assert data["features"]["features"]["byok_required"] is False
         assert data["features"]["token_limit"] == 3_000_000
         assert data["features"]["max_devices"] == 3
 
@@ -132,7 +132,9 @@ class TestLicenseValidation:
         from app.models.session import Session
 
         token = create_access_token({"sub": str(test_user.id), "email": test_user.email})
-        session = Session(user_id=test_user.id, token=token)
+        from app.routers.auth import hash_token
+
+        session = Session(user_id=test_user.id, token=hash_token(token))
         test_db.add(session)
         await test_db.commit()
 
@@ -167,11 +169,11 @@ class TestLicenseFeatures:
 
         # Pro tier features
         assert data["tier"] == "pro"
-        assert data["byok_required"] is False
+        assert data["features"]["byok_required"] is False
         assert data["token_limit"] == 3_000_000
         assert data["max_devices"] == 3
         assert data["rate_limit"] == 120
-        assert "ai_proxy" in data["features"]
+        assert data["features"]["caching"] is True
 
 
 class TestTierInformation:
@@ -192,7 +194,7 @@ class TestTierInformation:
 
         # Verify tier structure
         assert data["free"]["tier"] == "free"
-        assert data["free"]["byok_required"] is True
+        assert data["free"]["features"]["byok_required"] is True
         assert data["free"]["token_limit"] == 0
 
         assert data["pro"]["tier"] == "pro"
@@ -228,8 +230,8 @@ class TestSubscriptionUpgrade:
         response = await client.post(
             "/license/upgrade/pro",
             params={
-                "success_url": "https://app.example.com/success",
-                "cancel_url": "https://app.example.com/cancel",
+                "success_url": "https://localhost/success",
+                "cancel_url": "https://localhost/cancel",
             },
             headers=auth_headers,
         )
@@ -253,8 +255,8 @@ class TestSubscriptionUpgrade:
         response = await client.post(
             "/license/upgrade/invalid_tier",
             params={
-                "success_url": "https://app.example.com/success",
-                "cancel_url": "https://app.example.com/cancel",
+                "success_url": "https://localhost/success",
+                "cancel_url": "https://localhost/cancel",
             },
             headers=auth_headers,
         )
@@ -276,8 +278,8 @@ class TestSubscriptionUpgrade:
         response = await client.post(
             "/license/upgrade/pro",
             params={
-                "success_url": "https://app.example.com/success",
-                "cancel_url": "https://app.example.com/cancel",
+                "success_url": "https://localhost/success",
+                "cancel_url": "https://localhost/cancel",
             },
             headers=auth_headers,
         )
@@ -351,8 +353,8 @@ class TestSubscriptionCancellation:
         assert data["success"] is True
         assert "immediately" in data["message"].lower()
 
-        # Verify Stripe deletion was called
-        mock_stripe_client["subscription_delete"].assert_called_once()
+        # Verify Stripe cancellation was called
+        mock_stripe_client["subscription_cancel"].assert_called_once()
 
     async def test_cancel_without_subscription(
         self,

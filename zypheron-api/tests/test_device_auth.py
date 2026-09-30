@@ -16,7 +16,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.device_code import DeviceCode
-from app.models.session import Session
 from app.models.user import User
 
 
@@ -135,7 +134,7 @@ class TestDeviceAuthorization:
         """Test authorization with invalid user_code."""
         response = await client.post(
             "/auth/device/authorize",
-            json={"user_code": "INVALID-CODE"},
+            json={"user_code": "ZZZZ-9999"},
             headers=auth_headers,
         )
 
@@ -220,7 +219,7 @@ class TestDeviceTokenPolling:
         """Test polling before user has authorized (pending state)."""
         response = await client.post(
             "/auth/device/token",
-            json={"device_code": test_device_code.device_code},
+            json={"device_code": test_device_code.device_code, "device_info": {"os": "Linux"}},
         )
 
         assert response.status_code == 200
@@ -244,7 +243,7 @@ class TestDeviceTokenPolling:
         # Poll for token
         response = await client.post(
             "/auth/device/token",
-            json={"device_code": test_device_code.device_code},
+            json={"device_code": test_device_code.device_code, "device_info": {"os": "Linux"}},
         )
 
         assert response.status_code == 200
@@ -254,16 +253,18 @@ class TestDeviceTokenPolling:
         assert "access_token" in data
         assert data["access_token"] is not None
         assert data["token_type"] == "bearer"
-        assert data["user_id"] == test_user.id
+        assert data["user_id"] == str(test_user.id)
         assert data["email"] == test_user.email
         assert data["tier"] == test_user.tier
 
-        # Verify session was created
-        stmt = select(Session).where(Session.user_id == test_user.id)
-        result = await test_db.execute(stmt)
-        session = result.scalar_one_or_none()
-        assert session is not None
-        assert session.token == data["access_token"]
+        # Device flow issues an opaque CLI token, stored only as a hash
+        from app.models.cli_token import CLIToken
+        from app.routers.auth import hash_token
+
+        stmt = select(CLIToken).where(CLIToken.user_id == test_user.id)
+        cli_token = (await test_db.execute(stmt)).scalar_one_or_none()
+        assert cli_token is not None
+        assert cli_token.token_hash == hash_token(data["access_token"])
 
     async def test_poll_device_token_expired(
         self,
@@ -273,7 +274,7 @@ class TestDeviceTokenPolling:
         """Test polling an expired device code."""
         response = await client.post(
             "/auth/device/token",
-            json={"device_code": expired_device_code.device_code},
+            json={"device_code": expired_device_code.device_code, "device_info": {"os": "Linux"}},
         )
 
         assert response.status_code == 200
@@ -293,7 +294,7 @@ class TestDeviceTokenPolling:
 
         response = await client.post(
             "/auth/device/token",
-            json={"device_code": test_device_code.device_code},
+            json={"device_code": test_device_code.device_code, "device_info": {"os": "Linux"}},
         )
 
         assert response.status_code == 200
@@ -307,7 +308,7 @@ class TestDeviceTokenPolling:
         """Test polling with invalid device code."""
         response = await client.post(
             "/auth/device/token",
-            json={"device_code": "invalid_device_code_123"},
+            json={"device_code": "invalid_device_code_000000000001", "device_info": {"os": "Linux"}},
         )
 
         assert response.status_code == 404
@@ -331,7 +332,7 @@ class TestDeviceTokenPolling:
 
         response = await client.post(
             "/auth/device/token",
-            json={"device_code": test_device_code.device_code},
+            json={"device_code": test_device_code.device_code, "device_info": {"os": "Linux"}},
         )
 
         assert response.status_code == 200

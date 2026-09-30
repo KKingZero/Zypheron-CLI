@@ -11,7 +11,7 @@ Tests cover:
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import stripe
@@ -22,6 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.license import License
 from app.models.token_usage import UserQuota
 from app.models.user import User
+
+
+def _utc(dt: datetime) -> datetime:
+    """SQLite returns naive datetimes even for timezone=True columns."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 class TestWebhookSignatureVerification:
@@ -289,6 +294,8 @@ class TestSubscriptionUpdatedWebhook:
         quota = UserQuota(
             user_id=user.id,
             tier="pro",
+            period_start=datetime(2024, 12, 1, tzinfo=timezone.utc),
+            period_end=old_period_end,
             tokens_used_period=500000,
             token_limit=3000000,
         )
@@ -332,7 +339,7 @@ class TestSubscriptionUpdatedWebhook:
 
         # Verify period updated
         await test_db.refresh(license)
-        assert license.valid_until == new_period_end
+        assert _utc(license.valid_until) == new_period_end
 
         # Verify token usage was reset
         await test_db.refresh(quota)
@@ -439,8 +446,8 @@ class TestInvoiceWebhooks:
         assert license.status == "past_due"
         assert license.valid_until is not None
         # Should be approximately 3 days from now
-        time_until_expiry = license.valid_until - datetime.now(timezone.utc)
-        assert 2.9 <= time_until_expiry.days <= 3.1
+        time_until_expiry = _utc(license.valid_until) - datetime.now(timezone.utc)
+        assert 2.9 <= time_until_expiry.total_seconds() / 86400 <= 3.1
 
     async def test_invoice_payment_succeeded_clears_past_due(
         self,
@@ -779,9 +786,10 @@ class TestWebhookIdempotency:
         mocker.patch("app.routers.webhooks.settings.stripe_webhook_secret", "whsec_test")
 
         # Mock Redis to indicate the event was already processed
-        mock_redis_client._client.get = MagicMock(return_value="1")
+        mock_redis_client._client.get = AsyncMock(return_value="1")
         mocker.patch(
             "app.routers.webhooks.get_redis_client",
+            new_callable=AsyncMock,
             return_value=mock_redis_client,
         )
 
@@ -817,8 +825,8 @@ class TestWebhookIdempotency:
 
         event_id = "evt_inmemory_test456"
 
-        # Pre-populate the in-memory set to simulate a previously processed event
-        _processed_events.add(event_id)
+        # Pre-populate the in-memory store to simulate a previously processed event
+        _processed_events[event_id] = True
 
         mock_event = {
             "id": event_id,
@@ -869,5 +877,5 @@ class TestWebhookIdempotency:
         license = result.scalar_one_or_none()
         assert license is None
 
-        # Cleanup: remove the event from in-memory set
-        _processed_events.discard(event_id)
+        # Cleanup: remove the event from the in-memory store
+        _processed_events.pop(event_id, None)

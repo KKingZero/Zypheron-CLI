@@ -34,6 +34,10 @@ nltk~=3.9.0
 
 # IPC & Communication
 pyzmq~=27.0  # 26.2.x has no cp314 wheel
+psutil~=6.1  # distributed/agent.py
+websockets~=14.1  # distributed/network.py
+httpx~=0.28.1
+jinja2~=3.1.5
 
 # Utilities
 python-dotenv~=1.0.0

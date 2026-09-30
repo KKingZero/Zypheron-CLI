@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.license import License
 from app.models.session import Session
+from app.routers.auth import hash_token
 from app.models.user import User
 
 
@@ -108,7 +109,7 @@ class TestUserRegistration:
         # Verify session created
         stmt = select(Session).where(
             Session.user_id == user_id,
-            Session.token == token,
+            Session.token == hash_token(token),
         )
         result = await test_db.execute(stmt)
         session = result.scalar_one_or_none()
@@ -132,7 +133,8 @@ class TestUserRegistration:
 
         assert response.status_code == 400
         data = response.json()
-        assert "already registered" in data["detail"].lower()
+        # Deliberately generic: must not reveal that the email exists
+        assert "registration failed" in data["detail"].lower()
 
     async def test_register_invalid_email(
         self,
@@ -266,7 +268,7 @@ class TestUserLogout:
         # Verify session invalidated
         token = auth_headers["Authorization"].replace("Bearer ", "")
         stmt = select(Session).where(
-            Session.token == token,
+            Session.token == hash_token(token),
             Session.user_id == test_user.id,
         )
         result = await test_db.execute(stmt)

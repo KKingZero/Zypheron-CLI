@@ -12,6 +12,7 @@ Tests cover:
 
 import json
 import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,11 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
+from app.routers.ai_proxy import get_load_balancer
 from app.models.license import License
 from app.models.session import Session
 from app.models.token_usage import UserQuota
 from app.models.user import User
 from app.models.user_api_key import UserAPIKey
+from app.routers.auth import hash_token
 from app.services.ai_providers import (
     AIProviderError,
     AIResponse,
@@ -82,7 +85,7 @@ async def _create_pro_user_with_quota(
 
     token_data = {"sub": str(user.id), "email": user.email}
     token = create_access_token(token_data)
-    session = Session(user_id=user.id, token=token)
+    session = Session(user_id=user.id, token=hash_token(token))
     db.add(session)
 
     await db.commit()
@@ -110,7 +113,7 @@ async def _create_free_user(
 
     token_data = {"sub": str(user.id), "email": user.email}
     token = create_access_token(token_data)
-    session = Session(user_id=user.id, token=token)
+    session = Session(user_id=user.id, token=hash_token(token))
     db.add(session)
 
     await db.commit()
@@ -118,6 +121,17 @@ async def _create_free_user(
 
     headers = {"Authorization": f"Bearer {token}"}
     return user, token, headers
+
+
+@contextmanager
+def _override_load_balancer(lb):
+    """Swap the load balancer dependency (patching the module attribute does not
+    affect Depends(), which holds the original function)."""
+    app.dependency_overrides[get_load_balancer] = lambda: lb
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_load_balancer, None)
 
 
 def _mock_ai_response(provider: ProviderType = ProviderType.OPENAI) -> AIResponse:
@@ -177,7 +191,7 @@ class TestAuthAndAuthorization:
         mock_lb.get_provider = AsyncMock(return_value=mock_provider_obj)
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
         ):
             transport = ASGITransport(app=app)
@@ -204,7 +218,7 @@ class TestAuthAndAuthorization:
         mock_lb.get_provider = AsyncMock(return_value=mock_prov)
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, -1, 0, "ollama")),
             patch("app.routers.ai_proxy.update_token_usage", new_callable=AsyncMock),
             patch("app.routers.ai_proxy.TokenReservationService") as mock_trs_cls,
@@ -247,7 +261,7 @@ class TestAuthAndAuthorization:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
             patch("app.routers.ai_proxy.update_token_usage", new_callable=AsyncMock),
             patch("app.routers.ai_proxy.TokenReservationService") as mock_trs_cls,
@@ -288,7 +302,7 @@ class TestChatCompletion:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
             patch("app.routers.ai_proxy.update_token_usage", new_callable=AsyncMock),
             patch("app.routers.ai_proxy.TokenReservationService") as mock_trs_cls,
@@ -326,7 +340,7 @@ class TestChatCompletion:
         mock_lb.get_provider = AsyncMock(return_value=mock_prov)
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
         ):
             transport = ASGITransport(app=app)
@@ -368,7 +382,7 @@ class TestStreamingSSE:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
             patch("app.routers.ai_proxy.update_token_usage", new_callable=AsyncMock),
             patch("app.routers.ai_proxy.update_byok_last_used", new_callable=AsyncMock),
@@ -414,7 +428,7 @@ class TestTokenQuotaEnforcement:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
         ):
             transport = ASGITransport(app=app)
@@ -445,7 +459,7 @@ class TestRateLimiting:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch(
                 "app.routers.ai_proxy.check_provider_rate_limit",
                 new_callable=AsyncMock,
@@ -491,7 +505,7 @@ class TestBYOKHandling:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
             patch("app.routers.ai_proxy.decrypt_api_key", return_value="sk-decrypted-key"),
             patch("app.routers.ai_proxy.update_byok_last_used", new_callable=AsyncMock),
@@ -535,7 +549,7 @@ class TestErrorResponses:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
             patch("app.routers.ai_proxy.TokenReservationService") as mock_trs_cls,
             patch("app.routers.ai_proxy._check_cache", new_callable=AsyncMock, return_value=None),
@@ -570,7 +584,7 @@ class TestErrorResponses:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
             patch("app.routers.ai_proxy.TokenReservationService") as mock_trs_cls,
             patch("app.routers.ai_proxy._check_cache", new_callable=AsyncMock, return_value=None),
@@ -605,7 +619,7 @@ class TestErrorResponses:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
             patch("app.routers.ai_proxy.TokenReservationService") as mock_trs_cls,
             patch("app.routers.ai_proxy._check_cache", new_callable=AsyncMock, return_value=None),
@@ -640,7 +654,7 @@ class TestErrorResponses:
         mock_lb.get_available_providers.return_value = ["openai"]
 
         with (
-            patch("app.routers.ai_proxy.get_load_balancer", return_value=mock_lb),
+            _override_load_balancer(mock_lb),
             patch("app.routers.ai_proxy.check_provider_rate_limit", new_callable=AsyncMock, return_value=(True, 59, int(time.time()) + 60, "openai_gpt4")),
             patch("app.routers.ai_proxy.TokenReservationService") as mock_trs_cls,
             patch("app.routers.ai_proxy._check_cache", new_callable=AsyncMock, return_value=None),

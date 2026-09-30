@@ -658,8 +658,8 @@ class TestConfigSettings:
 
     def test_allowed_redirect_domains_default(self):
         settings = get_settings()
-        assert "zypheron.com" in settings.allowed_redirect_domains
-        assert "localhost" in settings.allowed_redirect_domains
+        # Narrow by default; hosted deployments opt in via ALLOWED_REDIRECT_DOMAINS
+        assert settings.allowed_redirect_domains == ["localhost"]
 
     def test_jwt_expiry_default(self):
         settings = get_settings()
