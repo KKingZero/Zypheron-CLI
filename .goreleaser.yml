@@ -2,10 +2,6 @@ version: 2
 
 project_name: zypheron
 
-before:
-  hooks:
-    - cd zypheron-go && go mod tidy
-
 builds:
   - id: zypheron
     dir: zypheron-go
