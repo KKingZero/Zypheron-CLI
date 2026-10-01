@@ -45,42 +45,6 @@ func NewOrchestrator() *Orchestrator {
 // ExecuteTools executes multiple tools based on intent
 func (o *Orchestrator) ExecuteTools(ctx context.Context, intent *Intent, progressCallback func(string)) (*OrchestrationResult, error) {
 	return nil, fmt.Errorf("legacy Go tool orchestration is disabled; route tool execution through the Python query engine policy layer")
-
-	if len(intent.Tools) == 0 {
-		return nil, fmt.Errorf("no tools specified in intent")
-	}
-
-	if intent.Target == "" {
-		return nil, fmt.Errorf("no target specified in intent")
-	}
-
-	orchestrationResult := &OrchestrationResult{
-		Target:  intent.Target,
-		Tools:   intent.Tools,
-		Results: []ToolResult{},
-	}
-
-	startTime := time.Now()
-
-	// Execute tools sequentially (can be parallelized later if needed)
-	for _, tool := range intent.Tools {
-		if progressCallback != nil {
-			progressCallback(fmt.Sprintf("performing %s...", getToolDisplayName(tool)))
-		}
-
-		result := o.executeTool(ctx, tool, intent.Target)
-		orchestrationResult.Results = append(orchestrationResult.Results, result)
-
-		if result.Success {
-			orchestrationResult.SuccessCount++
-		} else {
-			orchestrationResult.FailureCount++
-		}
-	}
-
-	orchestrationResult.TotalTime = time.Since(startTime)
-
-	return orchestrationResult, nil
 }
 
 // executeTool executes a single tool command
