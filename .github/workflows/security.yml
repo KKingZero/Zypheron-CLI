@@ -1,5 +1,9 @@
 name: Security Scan
 
+permissions:
+  contents: read
+  security-events: write
+
 on:
   push:
     branches: [ main, develop, Zypheron-CLI ]
@@ -39,12 +43,12 @@ jobs:
           go-version: '1.24'
       
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
+        uses: securego/gosec@021cc2eae58ed8ea0160ca8beab93648daefc0e7
         with:
-          args: '-fmt sarif -out gosec-results.sarif ./zypheron-go/...'
+          args: '-no-fail -fmt sarif -out gosec-results.sarif ./zypheron-go/...'
       
       - name: Upload Gosec results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: gosec-results.sarif

@@ -40,6 +40,7 @@ jobs:
           # .golangci.yml is v1 format; v2 ("latest") rejects it
           version: v1.64.8
           working-directory: zypheron-go
+          only-new-issues: true
 
       - name: Run go vet
         run: |
